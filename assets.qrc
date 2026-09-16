@@ -3,6 +3,10 @@
         <file alias="main.qml">qml/main.qml</file>
         <file alias="ImageLoadNode.qml">qml/node/ImageLoadNode.qml</file>
         <file alias="ImageShowNode.qml">qml/node/ImageShowNode.qml</file>
+        <file alias="ResizeNode.qml">qml/node/ResizeNode.qml</file>
+        <file alias="BlurNode.qml">qml/node/BlurNode.qml</file>
+        <file alias="ThresholdNode.qml">qml/node/ThresholdNode.qml</file>
+        <file alias="ConvNode.qml">qml/node/ConvNode.qml</file>
         <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>
         <file alias="TopBar.qml">qml/chrome/TopBar.qml</file>
         <file alias="StatusBar.qml">qml/chrome/StatusBar.qml</file>

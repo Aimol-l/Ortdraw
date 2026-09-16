@@ -9,6 +9,8 @@ Item {
 
     property var node
     property var coordItem
+    // 节点自定义内容（参数控件）注入点，位于端口行下方
+    default property alias extraContent: extraHost.data
 
     readonly property color accent: node && node.category === "input"  ? Theme.catInput
                                   : node && node.category === "math"   ? Theme.catMath
@@ -197,17 +199,22 @@ Item {
             anchors.right: parent.right
 
             Repeater {
-                model: card.node ? card.node.inputPorts.length : 0
+                model: card.node ? Math.max(card.node.inputPorts.length, card.node.outputPorts.length) : 0
 
                 delegate: Item {
-                    id: inRow
+                    id: rowItem
                     required property int index
                     width: rows.width
                     height: card.rowHeight
-                    property var port: card.node ? card.node.inputPorts[inRow.index] : null
+                    readonly property var inPort: (card.node && index < card.node.inputPorts.length)
+                                                  ? card.node.inputPorts[index] : null
+                    readonly property var outPort: (card.node && index < card.node.outputPorts.length)
+                                                   ? card.node.outputPorts[index] : null
 
+                    // ---- 输入（左） ----
                     Rectangle {
                         id: inDot
+                        visible: rowItem.inPort !== null
                         x: -7
                         anchors.verticalCenter: parent.verticalCenter
                         width: 12
@@ -237,22 +244,23 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.CrossCursor
                             onClicked: {
-                                if (inRow.port && card.coordItem) {
+                                if (rowItem.inPort && card.coordItem) {
                                     var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
-                                    NodeManager.setInputPort(inRow.port.self, p.x, p.y)
+                                    NodeManager.setInputPort(rowItem.inPort.self, p.x, p.y)
                                 }
                             }
                         }
 
                         Component.onCompleted: {
-                            if (inRow.port && card.coordItem) {
+                            if (rowItem.inPort && card.coordItem) {
                                 var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
-                                card.node.setInputPortPosition(inRow.index, p.x, p.y)
+                                card.node.setInputPortPosition(rowItem.index, p.x, p.y)
                             }
                         }
                     }
 
                     Row {
+                        visible: rowItem.inPort !== null
                         anchors.left: parent.left
                         anchors.leftMargin: 20
                         anchors.verticalCenter: parent.verticalCenter
@@ -260,7 +268,7 @@ Item {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: inRow.port ? inRow.port.name : ""
+                            text: rowItem.inPort ? rowItem.inPort.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
                             renderType: Text.CurveRendering
@@ -278,7 +286,7 @@ Item {
                             Text {
                                 id: inTag
                                 anchors.centerIn: parent
-                                text: inRow.port ? inRow.port.dataTypeName : ""
+                                text: rowItem.inPort ? rowItem.inPort.dataTypeName : ""
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
@@ -286,20 +294,10 @@ Item {
                             }
                         }
                     }
-                }
-            }
 
-            Repeater {
-                model: card.node ? card.node.outputPorts.length : 0
-
-                delegate: Item {
-                    id: outRow
-                    required property int index
-                    width: rows.width
-                    height: card.rowHeight
-                    property var port: card.node ? card.node.outputPorts[outRow.index] : null
-
+                    // ---- 输出（右，与输入同一行） ----
                     Row {
+                        visible: rowItem.outPort !== null
                         anchors.right: parent.right
                         anchors.rightMargin: 20
                         anchors.verticalCenter: parent.verticalCenter
@@ -317,7 +315,7 @@ Item {
                             Text {
                                 id: outTag
                                 anchors.centerIn: parent
-                                text: outRow.port ? outRow.port.dataTypeName : ""
+                                text: rowItem.outPort ? rowItem.outPort.dataTypeName : ""
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
@@ -327,7 +325,7 @@ Item {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: outRow.port ? outRow.port.name : ""
+                            text: rowItem.outPort ? rowItem.outPort.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
                             renderType: Text.CurveRendering
@@ -336,7 +334,8 @@ Item {
 
                     Rectangle {
                         id: outDot
-                        x: outRow.width - 5
+                        visible: rowItem.outPort !== null
+                        x: rowItem.width - 5
                         anchors.verticalCenter: parent.verticalCenter
                         width: 12
                         height: 12
@@ -365,22 +364,33 @@ Item {
                             hoverEnabled: true
                             cursorShape: Qt.CrossCursor
                             onClicked: {
-                                if (outRow.port && card.coordItem) {
+                                if (rowItem.outPort && card.coordItem) {
                                     var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
-                                    NodeManager.setOutputPort(outRow.port.self, p.x, p.y)
+                                    NodeManager.setOutputPort(rowItem.outPort.self, p.x, p.y)
                                 }
                             }
                         }
 
                         Component.onCompleted: {
-                            if (outRow.port && card.coordItem) {
+                            if (rowItem.outPort && card.coordItem) {
                                 var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
-                                card.node.setOutputPortPosition(outRow.index, p.x, p.y)
+                                card.node.setOutputPortPosition(rowItem.index, p.x, p.y)
                             }
                         }
                     }
                 }
             }
+        }
+
+        Item {
+            id: extraHost
+            anchors.top: rows.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            anchors.topMargin: 8
+            height: childrenRect.height
         }
 
         MouseArea {

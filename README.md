@@ -83,7 +83,13 @@ ctest --test-dir build --output-on-failure
 
 ## 已知限制
 
-- 仅实现了 ImageLoad / ImageShow 两种节点，其余目录条目仅作占位。
+- 已实现 6 种节点，均未执行实际运算；参数在节点内编辑：
+  - 加载图片 ImageLoad：输出 图像(Image)
+  - 图片显示 ImageShow：输入 图像(Image)
+  - 缩放 Resize：输入 图像(Image)；输出 图像(Image)；节点内显示输入尺寸，可按尺寸(宽/高)或百分比设定输出
+  - 高斯模糊 Blur：输入 图像(Image)；输出 图像(Image)；节点内填核大小
+  - 阈值二值化 Threshold：输入 图像(Image)；输出 图像(Image)；节点内拖动条设定阈值(0-255)
+  - 卷积 Conv：输入 图像(Image)、卷积核(Tensor)；输出 图像(Image)
 - 无执行引擎：节点不会真正处理图像。
 - 删除的节点对象会保留在内存中直到画布销毁（撤销所需，编辑器规模下可忽略）。
 - Windows 构建配置未验证。

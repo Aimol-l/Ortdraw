@@ -18,6 +18,10 @@ QtObject {
     function componentUrl(type) {
         if (type === "ImageLoad") return "qrc:/ImageLoadNode.qml"
         if (type === "ImageShow") return "qrc:/ImageShowNode.qml"
+        if (type === "Resize")    return "qrc:/ResizeNode.qml"
+        if (type === "Blur")      return "qrc:/BlurNode.qml"
+        if (type === "Threshold") return "qrc:/ThresholdNode.qml"
+        if (type === "Conv")      return "qrc:/ConvNode.qml"
         return ""
     }
 

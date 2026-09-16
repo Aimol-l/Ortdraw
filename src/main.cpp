@@ -3,6 +3,10 @@
 #include "Theme.h"
 #include "node/ImageLoad.hpp"
 #include "node/ImageShow.hpp"
+#include "node/Resize.hpp"
+#include "node/Blur.hpp"
+#include "node/Threshold.hpp"
+#include "node/Conv.hpp"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlEngine>
@@ -27,6 +31,10 @@ int main(int argc, char *argv[]){
     qmlRegisterType<PaintBoard>("PaintBoard", 1, 0, "PaintBoard");
     qmlRegisterType<ImageLoadNode>("ImageLoadNode", 1, 0, "ImageLoadNode");
     qmlRegisterType<ImageShowNode>("ImageShowNode", 1, 0, "ImageShowNode");
+    qmlRegisterType<ResizeNode>("ResizeNode", 1, 0, "ResizeNode");
+    qmlRegisterType<BlurNode>("BlurNode", 1, 0, "BlurNode");
+    qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");
+    qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
     qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());
     qmlRegisterSingletonType(QUrl("qrc:/NodeCatalog.qml"), "NodeCatalog", 1, 0, "NodeCatalog");

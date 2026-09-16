@@ -11,7 +11,8 @@ enum class DataType{
     Image,
     Float,
     Int,
-    Bool
+    Bool,
+    Tensor
 };
 // using NodeData = 
 //     std::variant<int16_t,int32_t,int64_t,float,std::string,bool,
@@ -63,6 +64,7 @@ public:
         case DataType::Float: return "Float";
         case DataType::Int:   return "Int";
         case DataType::Bool:  return "Bool";
+        case DataType::Tensor:return "Tensor";
         }
         return "?";
     }
