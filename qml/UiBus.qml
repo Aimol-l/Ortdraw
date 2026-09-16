@@ -6,4 +6,5 @@ QtObject {
     property bool spaceHeld: false
 
     signal contextMenuRequested(real x, real y, string kind, var data)
+    signal previewRequested(url src)
 }

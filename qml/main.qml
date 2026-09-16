@@ -177,6 +177,8 @@ Controls.ApplicationWindow {
         onFitRequested: canvas.fitView()
     }
 
+    ImageViewer { id: viewer }
+
     Shortcut {
         sequence: "Delete"
         onActivated: {

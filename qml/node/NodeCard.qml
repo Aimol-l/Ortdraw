@@ -9,6 +9,8 @@ Item {
 
     property var node
     property var coordItem
+    // 输出预览图（空则隐藏）；暂无执行引擎，先用占位图
+    property url previewSource: ""
     // 节点自定义内容（参数控件）注入点，位于端口行下方
     default property alias extraContent: extraHost.data
 
@@ -18,6 +20,14 @@ Item {
                                   : Theme.catProcess
 
     readonly property bool selected: node ? node.selected : false
+
+    readonly property int portRows: node ? Math.max(node.inputPorts.length, node.outputPorts.length) : 0
+    // 内容自适应高度：头部 + 端口行 + 参数 + 预览 + 底部留白
+    readonly property real contentHeight: headHeight + bodyPadding
+        + portRows * rowHeight
+        + (extraHost.height > 0 ? extraHost.height + 8 : 0)
+        + (previewBox.visible ? previewBox.height + 8 : 0)
+        + 12
 
     readonly property int headHeight: 46
     readonly property int rowHeight: 30
@@ -382,6 +392,7 @@ Item {
             }
         }
 
+        // 参数控件槽（在端口行下方，缩略图之上）
         Item {
             id: extraHost
             anchors.top: rows.bottom
@@ -391,6 +402,38 @@ Item {
             anchors.rightMargin: 12
             anchors.topMargin: 8
             height: childrenRect.height
+        }
+
+        // 输出预览缩略图（暂时用占位图）；点击放大查看
+        Rectangle {
+            id: previewBox
+            visible: card.previewSource != ""
+            anchors.top: extraHost.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 10
+            anchors.rightMargin: 10
+            anchors.topMargin: 8
+            height: 88
+            radius: 6
+            color: Theme.bg
+            border.width: 1
+            border.color: Theme.borderSoft
+            clip: true
+
+            Image {
+                anchors.fill: parent
+                anchors.margins: 1
+                source: card.previewSource
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: UiBus.previewRequested(card.previewSource)
+            }
         }
 
         MouseArea {

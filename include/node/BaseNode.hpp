@@ -38,7 +38,7 @@ protected:
     bool is_selected;
     QPointF m_start_pos;
     qreal min_width = 220;
-    qreal min_height = 300;
+    qreal min_height = 120;
     QList<Port*> m_input_ports; 
     QList<Port*> m_output_ports; 
 public:
