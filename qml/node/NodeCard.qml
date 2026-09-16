@@ -17,9 +17,9 @@ Item {
 
     readonly property bool selected: node ? node.selected : false
 
-    readonly property int headHeight: 40
-    readonly property int rowHeight: 28
-    readonly property int bodyPadding: 6
+    readonly property int headHeight: 46
+    readonly property int rowHeight: 30
+    readonly property int bodyPadding: 8
 
     Rectangle {
         id: glow
@@ -103,13 +103,13 @@ Item {
 
             Text {
                 anchors.left: parent.left
-                anchors.leftMargin: 27
+                anchors.leftMargin: 30
                 anchors.right: kindText.left
                 anchors.rightMargin: 6
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.node ? card.node.name : ""
                 color: Theme.fgBright
-                font.pixelSize: 13
+                font.pixelSize: 14
                 font.bold: true
                 renderType: Text.CurveRendering
                 elide: Text.ElideRight
@@ -118,12 +118,12 @@ Item {
             Text {
                 id: kindText
                 anchors.right: parent.right
-                anchors.rightMargin: 11
+                anchors.rightMargin: 12
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.node ? card.node.typeName : ""
                 color: Theme.fgDim
                 font.family: "monospace"
-                font.pixelSize: 10
+                font.pixelSize: 11
                 renderType: Text.CurveRendering
             }
 

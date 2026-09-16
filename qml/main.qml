@@ -161,8 +161,13 @@ Controls.ApplicationWindow {
             nodeCount: NodeManager.nodeCount
             edgeCount: NodeManager.edgeCount
             selectedName: NodeManager.selectedNode ? NodeManager.selectedNode.name : "无"
+            selectedPos: NodeManager.selectedNode
+                         ? (Math.round(NodeManager.selectedNode.x) + "," + Math.round(NodeManager.selectedNode.y))
+                         : "-"
             onZoomInRequested: canvas.zoomIn()
             onZoomOutRequested: canvas.zoomOut()
+            onZoomSetRequested: (z) => canvas.setZoom(z)
+            onFitRequested: canvas.fitView()
         }
     }
 

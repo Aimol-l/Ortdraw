@@ -133,6 +133,15 @@ Item {
         }
     }
 
+    // 连线画板：与视口同尺寸，内部按 pan/zoom 变换绘制世界坐标
+    PaintBoard {
+        id: board
+        anchors.fill: parent
+        zoom: area.zoom
+        panX: area.panX
+        panY: area.panY
+    }
+
     Item {
         id: world
 
@@ -140,12 +149,6 @@ Item {
             Scale { origin.x: 0; origin.y: 0; xScale: area.zoom; yScale: area.zoom },
             Translate { x: area.panX; y: area.panY }
         ]
-
-        PaintBoard {
-            id: board
-            width: 8000
-            height: 8000
-        }
 
         Item {
             id: nodes
@@ -189,6 +192,10 @@ Item {
 
     function zoomOut() {
         area.applyZoom(area.zoom / 1.15, area.width / 2, area.height / 2)
+    }
+
+    function setZoom(z) {
+        area.applyZoom(z, area.width / 2, area.height / 2)
     }
 
     function fitView() {
