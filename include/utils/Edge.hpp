@@ -7,6 +7,7 @@
 #include <QPainterPath>
 #include <QLineF>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include "port/Port.hpp"
 
@@ -23,6 +24,7 @@ struct Edge {
         this->stop_port = stop;
         this->calculateBezierPoint();
     }
+
     static qreal distanceToSegment(const QPointF& p, const QPointF& a, const QPointF& b){
         QPointF ab = b - a;
         qreal len2 = ab.x()*ab.x() + ab.y()*ab.y();
@@ -32,56 +34,74 @@ struct Edge {
         QPointF proj = a + t * ab;
         return QLineF(p, proj).length();
     }
+
+    // 与 ComfyUI / LiteGraph 的 Spline 一致：
+    // 控制点水平偏移量 = 两端欧氏距离 * 0.25
+    static void controlPoints(const QPointF& p0, const QPointF& p3, QPointF& c1, QPointF& c2){
+        const qreal dx = p3.x() - p0.x();
+        const qreal dy = p3.y() - p0.y();
+        const qreal dist = std::sqrt(dx*dx + dy*dy) * 0.25;
+        c1 = QPointF(p0.x() + dist, p0.y());
+        c2 = QPointF(p3.x() - dist, p3.y());
+    }
+
+    static QPointF bezierPoint(const QPointF& p0, const QPointF& c1, const QPointF& c2,
+                               const QPointF& p3, qreal t){
+        const qreal u = 1 - t;
+        return u*u*u*p0 + 3*u*u*t*c1 + 3*u*t*t*c2 + t*t*t*p3;
+    }
+
     bool isPointOnCurve(const QPointF& point) const {
         if(!start_port || !stop_port) return false;
         const QPointF P0 = start_port->position();
-        const QPointF P1 = P0 + QPointF{200, 0};
-        const QPointF P2 = stop_port->position() - QPointF{200, 0};
         const QPointF P3 = stop_port->position();
+        QPointF P1, P2;
+        controlPoints(P0, P3, P1, P2);
         const int samples = 24;
         qreal best = std::numeric_limits<qreal>::max();
         QPointF prev = P0;
         for(int i = 1; i <= samples; ++i){
-            qreal t = static_cast<qreal>(i) / samples;
-            qreal u = 1 - t;
-            QPointF cur = u*u*u*P0 + 3*u*u*t*P1 + 3*u*t*t*P2 + t*t*t*P3;
+            const qreal t = static_cast<qreal>(i) / samples;
+            const QPointF cur = bezierPoint(P0, P1, P2, P3, t);
             best = std::min(best, distanceToSegment(point, prev, cur));
             prev = cur;
         }
         return best < 8.0;
     }
+
     void drawCurve(QPainter* painter, const QColor& wireColor, const QColor& selColor) const {
+        const QPointF P0 = start_port->position();
+        const QPointF P3 = stop_port->position();
+        QPointF P1, P2;
+        controlPoints(P0, P3, P1, P2);
+
         QPainterPath path;
-        QPen pen(seleected ? selColor : wireColor, 2);
+        QPen pen(seleected ? selColor : wireColor, 2, Qt::SolidLine, Qt::RoundCap);
         painter->setPen(pen);
-        path.moveTo(start_port->position());
-        QPointF controlPoint1 = start_port->position() + QPointF{200, 0};
-        QPointF controlPoint2 = stop_port->position()  - QPointF{200, 0};
-        path.cubicTo(controlPoint1, controlPoint2, stop_port->position());
+        path.moveTo(P0);
+        path.cubicTo(P1, P2, P3);
         painter->drawPath(path);
-        painter->save();
-        painter->setBrush(seleected ? selColor : wireColor);
-        painter->drawEllipse(midPoint, 4, 4);
-        painter->restore();
+
+        // 中点仅在选中时显示（ComfyUI 平时不画，悬停/选中才提示）
+        if(seleected){
+            painter->save();
+            painter->setBrush(selColor);
+            painter->setPen(Qt::NoPen);
+            painter->drawEllipse(midPoint, 4, 4);
+            painter->restore();
+        }
     }
+
     // 计算贝塞尔曲线的中点
     void calculateBezierPoint() {
-        auto P0 = start_port->position();
-        auto P1 = start_port->position() + QPointF{200, 0};
-        auto P2 = stop_port->position()  - QPointF{200, 0};
-        auto P3 = stop_port->position();
-        double t = 0.5;
-        double u = 1 - t;
-        double tt = t * t;
-        double uu = u * u;
-        double uuu = uu * u;
-        double ttt = tt * t;
-        QPointF point = uuu * P0; // (1-t)^3 * P0
-        point += 3 * uu * t * P1; // 3 * (1-t)^2 * t * P1
-        point += 3 * u * tt * P2; // 3 * (1-t) * t^2 * P2
-        point += ttt * P3; // t^3 * P3
-        this->midPoint = point;
+        if(!start_port || !stop_port) return;
+        const QPointF P0 = start_port->position();
+        const QPointF P3 = stop_port->position();
+        QPointF P1, P2;
+        controlPoints(P0, P3, P1, P2);
+        this->midPoint = bezierPoint(P0, P1, P2, P3, 0.5);
     }
+
     // 定义相等运算符
     bool operator==(const Edge& other) const {
         return (start_port == other.start_port) && (stop_port == other.stop_port);
