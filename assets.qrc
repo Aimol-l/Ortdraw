@@ -1,0 +1,11 @@
+﻿<RCC>
+    <qresource prefix="/">
+        <file alias="main.qml">qml/main.qml</file>
+		<file alias="IconButton.qml">qml/button/IconButton.qml</file>
+        <file alias="ImageLoadNode.qml">qml/node/ImageLoadNode.qml</file>
+        <file alias="ImageShowNode.qml">qml/node/ImageShowNode.qml</file>
+
+        <file alias="setting.png">assets/icons/setting.png</file>
+        <file alias="grid_texture_white.png">assets/images/grid_texture_white.png</file>
+    </qresource>
+</RCC>
