@@ -1,16 +1,15 @@
 #pragma once
 
 #include <QQuickItem>
-#include <QSGGeometryNode>
-#include <QPainterPath>
-#include <QSGFlatColorMaterial>
 #include "node/BaseNode.hpp"
-#include <print>
 
 class ImageShowNode : public BaseNode {
     Q_OBJECT
 
 public:
+    QString typeName() const override { return "ImageShow"; }
+    QString category() const override { return "output"; }
+
     ImageShowNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "图片显示";
         m_input_ports.push_back(new Port("输入",PortType::Input,DataType::Image,QPointF(0,0),this));

@@ -1,194 +1,206 @@
 import QtQuick
 import QtQuick.Window
-import QtQuick.Controls 
-import PaintBoard
+import QtQuick.Controls as Controls
+import Theme
 import NodeManager
 
-ApplicationWindow {
+Controls.ApplicationWindow {
+    id: win
+
     width: 1600
     height: 900
-    x: (Screen.width - width) / 2
-    y: (Screen.height - height) / 2
     visible: true
-    minimumWidth: 1280
-    minimumHeight: 720
+    minimumWidth: 900
+    minimumHeight: 600
+    color: Theme.bg
     title: "Ortdraw"
-    // 节点绘制区域
-    Rectangle{
-        id: nodeArea
-        height: parent.height
-        width:  parent.width - left_side_bar.width
-        anchors.left:left_side_bar.right
-        focus: true // 确保这个矩形可以接收焦点
-        property int maxVal: 4096
-        property int currValX: Screen.width
-        property int currValY: Screen.height
-        // 画布
-        Flickable {
-            id: flickview
-            clip: true
-            anchors.fill: parent
-            contentWidth:  nodeArea.currValX
-            contentHeight: nodeArea.currValY
-            boundsBehavior: Flickable.StopAtBounds
-            // 动态改变画布大小
-            onContentXChanged: checkBoundaries()
-            onContentYChanged: checkBoundaries()
-            function checkBoundaries() {
-                const margin = 100 // 边界扩展阈值
-                if (contentX + width > contentWidth - margin && flickview.contentWidth < nodeArea.maxVal) {
-                    flickview.contentWidth += 200
-                }
-                if (contentY + height > contentHeight - margin &&  flickview.contentHeight < nodeArea.maxVal) {
-                    flickview.contentHeight += 200
-                }
-            }
-            // 需要绘制背景网格
-            Canvas {
-                width: flickview.contentWidth
-                height: flickview.contentHeight
-                onPaint: {
-                    var ctx = getContext("2d")
-                    ctx.clearRect(0, 0, width, height)
-                    ctx.strokeStyle = "#ccc"
-                    ctx.lineWidth = 1
-                    for (var x = 0; x < width; x += 50) {
-                        ctx.beginPath()
-                        ctx.moveTo(x, 0)
-                        ctx.lineTo(x, height)
-                        ctx.stroke()
-                    }
-                    for (var y = 0; y < height; y += 50) {
-                        ctx.beginPath()
-                        ctx.moveTo(0, y)
-                        ctx.lineTo(width, y)
-                        ctx.stroke()
-                    }
-                }
-            }
-            MouseArea {
-                id:mouseArea
-                anchors.fill: parent
-                hoverEnabled: true
-                // 缩放控制参数
-                property real scaleFactor: 1.0
-                property real minScale: 0.3
-                property real maxScale: 5.0
-                onClicked: (event)=>{
-                    var pos = Qt.point(event.x, event.y);
-                    var ctrl = (event.modifiers & Qt.ControlModifier) !== 0
-                    NodeManager.mousePressEvent(pos, ctrl)
-                }
-                onPressed:(event)=>{
-                    cursorShape = Qt.SizeAllCursor
-                }
-                onReleased:(event)=>{
-                    cursorShape = Qt.ArrowCursor
-                }
-                onPositionChanged: (event)=>{
-                    NodeManager.mouseMoveEvent(event.x, event.y)
-                }
-                onWheel: (wheel)=>{
-                    wheel.accepted = true
-                }
-            }
-            // 绘制节点之间的连线
-            PaintBoard {
-                id: paint_board
-                anchors.fill: parent
-            }
-            // 绘制节点
-            Item {
-                id: canvas
-                anchors.fill: parent
-                function close_dragging(){
-                    flickview.interactive = false
-                    // console.log("close")
-                }
-                function open_dragging(){
-                    flickview.interactive = true
-                    // console.log("open")
-                }
-            }
-            Component.onCompleted: {
-                NodeManager.setPaintBoard(paint_board)
-            }
-            onMovementStarted:{
-                console.log("start")
-            }
-            onMovementEnded:{
-                mouseArea.cursorShape = Qt.ArrowCursor
-                console.log("stop")
-            }
-           
+
+    property bool leftCollapsed: false
+    property bool rightCollapsed: false
+
+    property real leftPanelWidth: leftCollapsed ? 0 : 250
+    property real rightPanelWidth: rightCollapsed ? 0 : 286
+
+    Behavior on leftPanelWidth { NumberAnimation { duration: 200 } }
+    Behavior on rightPanelWidth { NumberAnimation { duration: 200 } }
+
+    // Dev aid (not a product feature): when launched with --demo, create two
+    // sample nodes so the UI can be verified/screenshotted without a mouse.
+    function demoPopulate() {
+        palette.addNodeAt("ImageLoad", 80, 120)
+        palette.addNodeAt("ImageShow", 720, 200)
+    }
+
+    Component.onCompleted: {
+        leftCollapsed = width < 960
+        rightCollapsed = width < 1180
+        if (Qt.application.arguments.indexOf("--demo") >= 0)
+            Qt.callLater(demoPopulate)
+    }
+
+    onWidthChanged: {
+        leftCollapsed = width < 960
+        rightCollapsed = width < 1180
+    }
+
+    Column {
+        anchors.fill: parent
+
+        TopBar {
+            id: topbar
+            width: parent.width
+            gridVisible: canvas.gridVisible
+            onUndoRequested: NodeManager.undo()
+            onRedoRequested: NodeManager.redo()
+            onFitRequested: canvas.fitView()
+            onClearRequested: NodeManager.clearGraph()
+            onGridToggled: canvas.gridVisible = !canvas.gridVisible
         }
-        Keys.onPressed: (event)=> {
-            if (event.key == Qt.Key_Delete) {
-                NodeManager.removeNode()
-                NodeManager.removeEdge()
-                event.accepted = true
-            } else if (event.key == Qt.Key_Z && (event.modifiers & Qt.ControlModifier)) {
-                NodeManager.undo()
-                event.accepted = true
-            } else if (event.key == Qt.Key_Y && (event.modifiers & Qt.ControlModifier)) {
-                NodeManager.redo()
-                event.accepted = true
+
+        Item {
+            id: mid
+            width: parent.width
+            height: win.height - topbar.height - statusbar.height
+            clip: true
+
+            Row {
+                id: middleRow
+                anchors.fill: parent
+                spacing: 0
+
+                NodePalette {
+                    id: palette
+                    width: win.leftPanelWidth
+                    height: middleRow.height
+                    visible: win.leftPanelWidth > 0
+                    nodeLayer: canvas.nodeLayer
+                    onCollapseRequested: win.leftCollapsed = true
+                }
+
+                CanvasArea {
+                    id: canvas
+                    width: middleRow.width - win.leftPanelWidth - win.rightPanelWidth
+                    height: middleRow.height
+                }
+
+                Inspector {
+                    width: win.rightPanelWidth
+                    height: middleRow.height
+                    visible: win.rightPanelWidth > 0
+                    onCollapseRequested: win.rightCollapsed = true
+                }
             }
+
+            Rectangle {
+                id: leftRail
+                visible: win.leftCollapsed
+                z: 20
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 48
+                topRightRadius: 8
+                bottomRightRadius: 8
+                color: leftRailArea.containsMouse ? Theme.bgHover : Theme.bgPanel
+                border.width: 1
+                border.color: leftRailArea.containsMouse ? Theme.blue : Theme.border
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "›"
+                    color: leftRailArea.containsMouse ? Theme.blue : Theme.fgDim
+                    font.pixelSize: 14
+                }
+
+                MouseArea {
+                    id: leftRailArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: win.leftCollapsed = false
+                }
+            }
+
+            Rectangle {
+                id: rightRail
+                visible: win.rightCollapsed
+                z: 20
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20
+                height: 48
+                topLeftRadius: 8
+                bottomLeftRadius: 8
+                color: rightRailArea.containsMouse ? Theme.bgHover : Theme.bgPanel
+                border.width: 1
+                border.color: rightRailArea.containsMouse ? Theme.blue : Theme.border
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "‹"
+                    color: rightRailArea.containsMouse ? Theme.blue : Theme.fgDim
+                    font.pixelSize: 14
+                }
+
+                MouseArea {
+                    id: rightRailArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: win.rightCollapsed = false
+                }
+            }
+        }
+
+        StatusBar {
+            id: statusbar
+            width: parent.width
+            zoom: canvas.zoom
+            nodeCount: NodeManager.nodeCount
+            edgeCount: NodeManager.edgeCount
+            selectedName: NodeManager.selectedNode ? NodeManager.selectedNode.name : "无"
+            onZoomInRequested: canvas.zoomIn()
+            onZoomOutRequested: canvas.zoomOut()
         }
     }
-    // 侧边按钮栏
-    Rectangle{
-        id: left_side_bar
-        width: Screen.width * 0.02
-        height: parent.height
-        border.width: 1  
-        anchors.top: parent.top
-        anchors.left: parent.left
-        border.color: "lightgray" 
-        Column {
-            y:5
-            spacing: 18
-            anchors.horizontalCenter: parent.horizontalCenter
-            IconButton {
-                tip_info: "+"
-                width:left_side_bar.width*0.9
-                height:left_side_bar.width*0.9
-                img_src: "qrc:/setting.png";
-                onClickedLeft:(event) => {
-                    // 使用 Qt.createComponent 动态加载 ImageLoadNode.qml
-                    var component = Qt.createComponent("ImageLoadNode.qml");
-                    if (component.status === Component.Ready) {
-                        var imageNode = component.createObject(canvas);
-                        if (imageNode === null) {
-                            console.log("Failed to create object");
-                        }else{
-                            NodeManager.createNode(imageNode)
-                        }
-                    } else if (component.status === Component.Error) {
-                        console.log("Error loading component:", component.errorString());
-                    }
-                }
-            }
-            IconButton {
-                tip_info: "+"
-                width:left_side_bar.width*0.9
-                height:left_side_bar.width*0.9
-                img_src: "qrc:/setting.png";
-                onClickedLeft:(event) => {
-                    // 使用 Qt.createComponent 动态加载 ImageInNode.qml
-                    var component = Qt.createComponent("ImageShowNode.qml");
-                    if (component.status === Component.Ready) {
-                        var imageNode = component.createObject(canvas);
-                        if (imageNode === null) {
-                            console.log("Failed to create object");
-                        }else{
-                            NodeManager.createNode(imageNode)
-                        }
-                    } else if (component.status === Component.Error) {
-                        console.log("Error loading component:", component.errorString());
-                    }
-                }
-            }
+
+    ContextMenu {
+        id: ctx
+        nodeLayer: canvas.nodeLayer
+        onFitRequested: canvas.fitView()
+    }
+
+    Shortcut {
+        sequence: "Delete"
+        onActivated: {
+            NodeManager.removeNode()
+            NodeManager.removeEdge()
         }
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Z"
+        onActivated: NodeManager.undo()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Y"
+        onActivated: NodeManager.redo()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+D"
+        enabled: NodeManager.selectedNode !== null
+        onActivated: ctx.cloneNode(NodeManager.selectedNode.uuid)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+0"
+        onActivated: canvas.fitView()
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        onActivated: NodeManager.mousePressEvent(Qt.point(-100000, -100000), false)
     }
 }

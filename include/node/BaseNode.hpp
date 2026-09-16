@@ -11,10 +11,6 @@
 #include <QUuid>
 #include <QString>
 #include <QColor>
-#include <QSGGeometry>
-#include <QSGGeometryNode>
-#include <QSGFlatColorMaterial>
-#include <QSGSimpleRectNode>
 #include <opencv2/opencv.hpp>
 
 #include "port/Port.hpp"
@@ -27,7 +23,10 @@ class BaseNode:public QQuickItem{
     Q_PROPERTY(QUuid uuid READ uuid)
     Q_PROPERTY(QColor color READ color WRITE setColor)   // 背景颜色
 
-    Q_PROPERTY(bool selected READ selected  WRITE setSelected)
+    Q_PROPERTY(bool selected READ selected  WRITE setSelected NOTIFY selectedChanged)
+    Q_PROPERTY(QString typeName READ typeName CONSTANT)
+    Q_PROPERTY(QString category READ category CONSTANT)
+    Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)     // 节点名称
     Q_PROPERTY(QQmlListProperty<Port> inputPorts READ inputPorts NOTIFY inputPortsChanged)
     Q_PROPERTY(QQmlListProperty<Port> outputPorts READ outputPorts  NOTIFY outputPortsChanged)
@@ -43,6 +42,8 @@ protected:
     QList<Port*> m_input_ports; 
     QList<Port*> m_output_ports; 
 public:
+    virtual QString typeName() const { return "Base"; }
+    virtual QString category() const { return "process"; }
     Q_INVOKABLE qreal getMinWidth(){return min_width;}
     Q_INVOKABLE qreal getMinHeight(){return min_height;}
     Q_INVOKABLE void setInputPortPosition(int index, qreal x, qreal y){
@@ -77,9 +78,7 @@ public:
           m_bg_color(Qt::gray),
           is_selected(false)
     {
-        this->setFlag(QQuickItem::ItemHasContents, true); // 启用自定义绘制
         this->setFlag(QQuickItem::ItemIsFocusScope, true); // 允许管理子组件的焦点
-        this->setAcceptedMouseButtons(Qt::LeftButton); // 在构造函数中添加
         qDebug()<<this->m_id;
         }
     ~BaseNode() {
@@ -102,46 +101,28 @@ public:
     }
     // Setters
     void setSelected(const bool val){
+        if(this->is_selected == val) return;
         this->is_selected = val;
         this->update();
+        emit selectedChanged();
     }
     void setName(const QString &name) {
+        if(m_name == name) return;
         m_name = name;
+        emit nameChanged();
     }
-    void setDescription(const QString &description) {
-        m_description = description;
+    void setDescription(const QString& d) {
+        if(m_description == d) return;
+        m_description = d;
+        emit descriptionChanged();
     }
     void setColor(const QColor &bgColor) {
         m_bg_color = bgColor;
     }
-    void mousePressEvent(QMouseEvent* event){
-        std::println("mousePressEvent");
-        // this->update();
-    }
-    void mouseMoveEvent(QMouseEvent* event){
-        this->update();
-        std::println("mouseMoveEvent");
-    }
-    void mouseReleaseEvent(QMouseEvent* event) {
-        // this->update();
-    }
-    QSGNode *updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *data) override {
-        QSGSimpleRectNode* backgroundNode = static_cast<QSGSimpleRectNode*>(oldNode);
-        if (!backgroundNode) 
-            backgroundNode = new QSGSimpleRectNode();
-        QRectF bounds = this->boundingRect();
-        backgroundNode->setRect(bounds);
-        if(this->is_selected){
-            this->m_bg_color = QColor("#77b3fe");
-        }else{
-            this->m_bg_color = Qt::gray;
-        }
-        backgroundNode->setColor(m_bg_color);
-        return backgroundNode;
-    }
-
 signals:
     void nameChanged();
+    void descriptionChanged();
+    void selectedChanged();
     void inputPortsChanged();
     void outputPortsChanged();
 };

@@ -1,11 +1,18 @@
 ﻿<RCC>
     <qresource prefix="/">
         <file alias="main.qml">qml/main.qml</file>
-		<file alias="IconButton.qml">qml/button/IconButton.qml</file>
         <file alias="ImageLoadNode.qml">qml/node/ImageLoadNode.qml</file>
         <file alias="ImageShowNode.qml">qml/node/ImageShowNode.qml</file>
-
-        <file alias="setting.png">assets/icons/setting.png</file>
-        <file alias="grid_texture_white.png">assets/images/grid_texture_white.png</file>
+        <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>
+        <file alias="TopBar.qml">qml/chrome/TopBar.qml</file>
+        <file alias="StatusBar.qml">qml/chrome/StatusBar.qml</file>
+        <file alias="CanvasArea.qml">qml/canvas/CanvasArea.qml</file>
+        <file alias="Minimap.qml">qml/canvas/Minimap.qml</file>
+        <file alias="UiBus.qml">qml/UiBus.qml</file>
+        <file alias="ContextMenu.qml">qml/chrome/ContextMenu.qml</file>
+        <file alias="NodeCatalog.qml">qml/palette/NodeCatalog.qml</file>
+        <file alias="NodePalette.qml">qml/palette/NodePalette.qml</file>
+        <file alias="PaletteItem.qml">qml/palette/PaletteItem.qml</file>
+        <file alias="Inspector.qml">qml/inspector/Inspector.qml</file>
     </qresource>
 </RCC>
