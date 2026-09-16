@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QPointF>
+#include <QColor>
+#include <QPen>
 #include <QPainter>
 #include <QPainterPath>
 #include <QLineF>
@@ -48,20 +50,18 @@ struct Edge {
         }
         return best < 8.0;
     }
-    void drawCurve(QPainter* painter){
+    void drawCurve(QPainter* painter, const QColor& wireColor, const QColor& selColor) const {
         QPainterPath path;
-        QPen pen(seleected ? Qt::red : Qt::green,2); // 根据选中状态设置颜色
-        painter->setPen(pen);  // 设置画笔颜色和宽度
-        path.moveTo(start_port->position()); // 移动到起点
-        // 计算控制点，确保它们在水平线上
+        QPen pen(seleected ? selColor : wireColor, 2);
+        painter->setPen(pen);
+        path.moveTo(start_port->position());
         QPointF controlPoint1 = start_port->position() + QPointF{200, 0};
         QPointF controlPoint2 = stop_port->position()  - QPointF{200, 0};
-        path.cubicTo(controlPoint1, controlPoint2, stop_port->position()); // 绘制三次贝塞尔曲线
-        painter->drawPath(path); // 绘制路径
+        path.cubicTo(controlPoint1, controlPoint2, stop_port->position());
+        painter->drawPath(path);
         painter->save();
-        // 绘制中间点
-        painter->setBrush(seleected ? Qt::red : Qt::green);
-        painter->drawEllipse(midPoint, 4, 4); // 绘制一个半径为5的点
+        painter->setBrush(seleected ? selColor : wireColor);
+        painter->drawEllipse(midPoint, 4, 4);
         painter->restore();
     }
     // 计算贝塞尔曲线的中点

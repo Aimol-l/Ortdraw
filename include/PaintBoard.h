@@ -8,6 +8,7 @@
 #include "port/Port.hpp"
 #include "utils/DAGraph.hpp"
 #include "utils/Edge.hpp"
+#include "Theme.h"
 
 
 class PaintBoard : public QQuickPaintedItem {
@@ -18,7 +19,9 @@ public:
     Edge m_drawing_edge;
     bool m_drawing_line = false;
 
-    explicit PaintBoard(QQuickItem* parent = nullptr) : QQuickPaintedItem(parent) {}
+    explicit PaintBoard(QQuickItem* parent = nullptr) : QQuickPaintedItem(parent) {
+        connect(Theme::theme(), &Theme::changed, this, [this]{ update(); });
+    }
 
     void startDrawing(Port* start, QPointF pos) {
         if(!start) return;
@@ -44,13 +47,14 @@ public:
     void finishDrawing() { cancelDrawing(); }
 
     void paint(QPainter* painter) override {
+        Theme* theme = Theme::theme();
         painter->setRenderHint(QPainter::Antialiasing, true);
         for(Edge& edge : m_graph.getAllEdges()){
             edge.calculateBezierPoint();
-            edge.drawCurve(painter);
+            edge.drawCurve(painter, theme->wire(), theme->blue());
         }
         if(m_drawing_line){
-            m_drawing_edge.drawCurve(painter);
+            m_drawing_edge.drawCurve(painter, theme->wire(), theme->blue());
         }
     }
 private:

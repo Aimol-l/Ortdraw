@@ -1,4 +1,5 @@
 set(TEST_HEADERS
+    ${PROJECT_SOURCE_DIR}/include/Theme.h
     ${PROJECT_SOURCE_DIR}/include/NodeManager.h
     ${PROJECT_SOURCE_DIR}/include/PaintBoard.h
     ${PROJECT_SOURCE_DIR}/include/node/BaseNode.hpp
@@ -7,6 +8,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/port/Port.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/DAGraph.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Edge.hpp
+    ${PROJECT_SOURCE_DIR}/include/utils/Snapshot.hpp
     ${PROJECT_SOURCE_DIR}/include/command/Command.h
     ${PROJECT_SOURCE_DIR}/include/command/AddNode.hpp
     ${PROJECT_SOURCE_DIR}/include/command/AddEdge.hpp

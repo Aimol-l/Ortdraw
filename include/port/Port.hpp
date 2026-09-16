@@ -24,6 +24,7 @@ class Port : public QObject{
     Q_OBJECT
 public:
     Q_PROPERTY(int type READ type CONSTANT)
+    Q_PROPERTY(QString dataTypeName READ dataTypeName CONSTANT)
     Q_PROPERTY(QUuid uuid READ uuid CONSTANT)
     Q_PROPERTY(Port* self READ self CONSTANT)
     Q_PROPERTY(QString name READ name NOTIFY nameChanged) 
@@ -56,6 +57,15 @@ public:
     QString name() const { return m_name; }
     int type() const { return static_cast<int>(m_type); }
     DataType dataType() const { return m_data_type;}
+    QString dataTypeName() const {
+        switch(m_data_type){
+        case DataType::Image: return "Image";
+        case DataType::Float: return "Float";
+        case DataType::Int:   return "Int";
+        case DataType::Bool:  return "Bool";
+        }
+        return "?";
+    }
     QPointF position() const { return m_position; }
     BaseNode* father() const { return m_father; }
     bool isConnected() const { return m_connected; }

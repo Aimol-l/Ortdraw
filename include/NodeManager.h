@@ -10,6 +10,7 @@
 #include "command/RemoveEdge.hpp"
 #include "command/RemoveNode.hpp"
 #include "command/CmdManager.hpp"
+#include "utils/Snapshot.hpp"
 
 
 class NodeManager : public QObject {
@@ -19,11 +20,46 @@ class NodeManager : public QObject {
 private:
     CmdManager m_cmd_manager;
     QPointer<PaintBoard> m_paint_board;
+    BaseNode* m_selected_node = nullptr;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {}
 
-    void refresh() { if(m_paint_board) m_paint_board->update(); }
+    void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    void setSelectedNode(BaseNode* n){
+        if(m_selected_node == n) return;
+        m_selected_node = n; emit selectionChanged();
+    }
 
 public:
+    Q_PROPERTY(int nodeCount READ nodeCount NOTIFY graphChanged)
+    Q_PROPERTY(int edgeCount READ edgeCount NOTIFY graphChanged)
+    Q_PROPERTY(BaseNode* selectedNode READ selectedNode NOTIFY selectionChanged)
+    Q_PROPERTY(QVariantMap selectedEdge READ selectedEdge NOTIFY selectionChanged)
+
+    int nodeCount() const { return m_paint_board ? int(m_paint_board->m_graph.getAllNodes().size()) : 0; }
+    int edgeCount() const { return m_paint_board ? int(m_paint_board->m_graph.getAllEdges().size()) : 0; }
+    BaseNode* selectedNode() const { return m_selected_node; }
+    QVariantMap selectedEdge() const {
+        QVariantMap m;
+        if(!m_paint_board) return m;
+        for(const Edge& e : m_paint_board->m_graph.getSelectedEdges()){
+            if(!e.start_port || !e.stop_port) continue;
+            m["from"]     = e.start_port->father()->uuid().toString();
+            m["fromPort"] = e.start_port->father()->getOutPorts().indexOf(e.start_port);
+            m["to"]       = e.stop_port->father()->uuid().toString();
+            m["toPort"]   = e.stop_port->father()->getInPorts().indexOf(e.stop_port);
+            break;
+        }
+        return m;
+    }
+    Q_INVOKABLE QVariantList nodeSnapshots() {
+        if(!m_paint_board) return {};
+        return nodeSnapshotsOf(m_paint_board->m_graph);
+    }
+    Q_INVOKABLE QVariantList edgeSnapshots() {
+        if(!m_paint_board) return {};
+        return edgeSnapshotsOf(m_paint_board->m_graph);
+    }
+
     Q_INVOKABLE bool createNode(BaseNode *node){
         if(!node || !m_paint_board) return false;
         auto command = std::make_unique<AddNodeCMD>(node, m_paint_board);
@@ -59,20 +95,53 @@ public:
     Q_INVOKABLE bool undo() { bool ok = m_cmd_manager.undo(); refresh(); return ok; }
     Q_INVOKABLE bool redo() { bool ok = m_cmd_manager.redo(); refresh(); return ok; }
 
+    Q_INVOKABLE void bringToFront(QUuid uid){
+        if(!m_paint_board) return;
+        for(auto* n : m_paint_board->m_graph.getAllNodes())
+            if(n->uuid() == uid) n->setZ(1);
+        refresh();
+    }
+    Q_INVOKABLE void disconnectNode(QUuid uid){
+        if(!m_paint_board) return;
+        BaseNode* target = nullptr;
+        for(auto* n : m_paint_board->m_graph.getAllNodes())
+            if(n->uuid() == uid){ target = n; break; }
+        if(!target) return;
+        const auto incident = m_paint_board->m_graph.edgesOf(target);
+        for(const Edge& e : incident){
+            auto cmd = std::make_unique<RemoveEdgeCMD>(e.start_port, e.stop_port, m_paint_board);
+            m_cmd_manager.executeCommand(std::move(cmd));
+        }
+        refresh();
+    }
+    Q_INVOKABLE void clearGraph(){
+        if(!m_paint_board) return;
+        const auto all = m_paint_board->m_graph.getAllNodes();
+        for(auto* n : all){
+            auto cmd = std::make_unique<RemoveNodeCMD>(n, m_paint_board);
+            m_cmd_manager.executeCommand(std::move(cmd));
+        }
+        setSelectedNode(nullptr);
+        refresh();
+    }
+
     Q_INVOKABLE void clickNodeEvent(QUuid node_uid, bool ctrl = false) {
         if(!m_paint_board) return;
         for(Edge& edge : m_paint_board->m_graph.getAllEdges())
             edge.seleected = false;
+        BaseNode* hit_node = nullptr;
         for(auto* node : m_paint_board->m_graph.getAllNodes()){
             bool hit = (node->uuid() == node_uid);
             if(hit){
                 node->setZ(1);
                 node->setSelected(ctrl ? !node->selected() : true);
+                hit_node = node->selected() ? node : nullptr;
             }else{
                 node->setZ(0);
                 if(!ctrl) node->setSelected(false);
             }
         }
+        setSelectedNode(hit_node);
         refresh();
     }
     Q_INVOKABLE void setPaintBoard(PaintBoard *board) { m_paint_board = board; }
@@ -108,17 +177,20 @@ public:
     Q_INVOKABLE void mousePressEvent(const QPointF& pos, bool ctrl = false){
         if(!m_paint_board) return;
         bool node_hit = false;
+        BaseNode* hit_node = nullptr;
         for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
             QPointF local = node->mapFromItem(m_paint_board, pos);
             if(node->contains(local)){
                 node_hit = true;
                 node->setSelected(ctrl ? !node->selected() : true);
+                hit_node = node->selected() ? node : nullptr;
             }else if(!ctrl){
                 node->setSelected(false);
             }
         }
         for(Edge& edge : m_paint_board->m_graph.getAllEdges())
             edge.seleected = node_hit ? false : edge.isPointOnCurve(pos);
+        setSelectedNode(hit_node);
         refresh();
     }
     Q_INVOKABLE void setOutputPort(Port* port, qreal x, qreal y){
@@ -160,6 +232,10 @@ public:
         m_paint_board->finishDrawing();
         refresh();
     }
+
+signals:
+    void graphChanged();
+    void selectionChanged();
 
 public:
     NodeManager(const NodeManager&) = delete;

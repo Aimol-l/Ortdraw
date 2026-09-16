@@ -1,9 +1,12 @@
 #include "NodeManager.h"
 #include "PaintBoard.h"
+#include "Theme.h"
 #include "node/ImageLoad.hpp"
 #include "node/ImageShow.hpp"
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include <QQmlEngine>
+#include <QUrl>
 
 int main(int argc, char *argv[]){
     QGuiApplication app(argc, argv);
@@ -22,6 +25,9 @@ int main(int argc, char *argv[]){
     qmlRegisterType<ImageLoadNode>("ImageLoadNode", 1, 0, "ImageLoadNode");
     qmlRegisterType<ImageShowNode>("ImageShowNode", 1, 0, "ImageShowNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
+    qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());
+    qmlRegisterSingletonType(QUrl("qrc:/NodeCatalog.qml"), "NodeCatalog", 1, 0, "NodeCatalog");
+    qmlRegisterSingletonType(QUrl("qrc:/UiBus.qml"), "UiBus", 1, 0, "UiBus");
     engine.load(url);
     return app.exec();
 }
