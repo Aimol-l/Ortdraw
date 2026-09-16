@@ -73,6 +73,7 @@ Controls.ApplicationWindow {
                     width: win.leftPanelWidth
                     height: middleRow.height
                     visible: win.leftPanelWidth > 0
+                    z: 1
                     nodeLayer: canvas.nodeLayer
                     onCollapseRequested: win.leftCollapsed = true
                 }
@@ -87,6 +88,7 @@ Controls.ApplicationWindow {
                     width: win.rightPanelWidth
                     height: middleRow.height
                     visible: win.rightPanelWidth > 0
+                    z: 1
                     onCollapseRequested: win.rightCollapsed = true
                 }
             }

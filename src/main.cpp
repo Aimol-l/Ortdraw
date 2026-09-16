@@ -9,6 +9,9 @@
 #include <QUrl>
 
 int main(int argc, char *argv[]){
+    // 高 DPI 下按真实缩放因子渲染，避免文字被合成器二次缩放而发虚
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QGuiApplication app(argc, argv);
     QQmlApplicationEngine engine;
     const QUrl url("qrc:/main.qml");

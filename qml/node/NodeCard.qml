@@ -1,6 +1,5 @@
 pragma ComponentBehavior: Bound
 import QtQuick
-import QtQuick.Effects
 import Theme
 import NodeManager
 import UiBus
@@ -36,19 +35,26 @@ Item {
         opacity: 0.45
     }
 
+    // 轻量分层阴影：不使用 layer/MultiEffect，避免离屏纹理导致文字发虚
+    Rectangle {
+        z: -2
+        x: 2
+        y: 5
+        width: card.width
+        height: card.height
+        radius: 12
+        color: Qt.rgba(0, 0, 0, Theme.dark ? 0.20 : 0.055)
+    }
+
     Rectangle {
         id: shadow
         z: -1
-        anchors.fill: bg
-        radius: 10
-        color: Theme.bgElev
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: "#55000000"
-            shadowBlur: 0.6
-            shadowVerticalOffset: 4
-        }
+        x: 1
+        y: 3
+        width: card.width
+        height: card.height
+        radius: 11
+        color: Qt.rgba(0, 0, 0, Theme.dark ? 0.30 : 0.08)
     }
 
     Rectangle {
@@ -105,6 +111,7 @@ Item {
                 color: Theme.fgBright
                 font.pixelSize: 13
                 font.bold: true
+                renderType: Text.CurveRendering
                 elide: Text.ElideRight
             }
 
@@ -117,6 +124,7 @@ Item {
                 color: Theme.fgDim
                 font.family: "monospace"
                 font.pixelSize: 10
+                renderType: Text.CurveRendering
             }
 
             Rectangle {
@@ -255,6 +263,7 @@ Item {
                             text: inRow.port ? inRow.port.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
+                            renderType: Text.CurveRendering
                         }
 
                         Rectangle {
@@ -273,6 +282,7 @@ Item {
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
+                                renderType: Text.CurveRendering
                             }
                         }
                     }
@@ -311,6 +321,7 @@ Item {
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
+                                renderType: Text.CurveRendering
                             }
                         }
 
@@ -319,6 +330,7 @@ Item {
                             text: outRow.port ? outRow.port.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
+                            renderType: Text.CurveRendering
                         }
                     }
 

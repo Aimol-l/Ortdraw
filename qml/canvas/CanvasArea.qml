@@ -6,7 +6,6 @@ import UiBus
 
 Item {
     id: area
-    clip: true
     focus: true
 
     property alias paintBoard: board
