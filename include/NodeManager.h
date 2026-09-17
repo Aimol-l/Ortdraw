@@ -133,6 +133,12 @@ public:
         return doc;
     }
 
+    // 当前图的紧凑 JSON 字符串，用于比较是否有未保存的修改
+    Q_INVOKABLE QString graphJsonString() const {
+        return QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(graphToMap()))
+                                     .toJson(QJsonDocument::Compact));
+    }
+
     Q_INVOKABLE bool saveGraph(const QString& path) {
         const QJsonDocument doc(QJsonObject::fromVariantMap(graphToMap()));
         QFile f(path);

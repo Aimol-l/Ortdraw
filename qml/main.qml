@@ -6,6 +6,7 @@ import NodeManager
 import NodeCatalog
 import FileDialogs
 import "settings"
+import "settings/controls"
 
 Controls.ApplicationWindow {
     id: win
@@ -21,6 +22,8 @@ Controls.ApplicationWindow {
     property bool leftCollapsed: false
     property bool rightCollapsed: false
     property string currentPath: ""
+    property string savedSnapshot: ""
+    property bool allowClose: false
 
     property real leftPanelWidth: leftCollapsed ? 0 : 250
     property real rightPanelWidth: rightCollapsed ? 0 : 286
@@ -33,19 +36,40 @@ Controls.ApplicationWindow {
     function demoPopulate() {
         palette.addNodeAt("ImageLoad", 80, 120)
         palette.addNodeAt("ImageShow", 720, 200)
+        savedSnapshot = NodeManager.graphJsonString()
+    }
+
+    // 与上次保存 / 打开 / 新建时的快照比较，判断是否有未保存的修改
+    function graphDirty() { return NodeManager.graphJsonString() !== savedSnapshot }
+    // 画布为空时不提示保存
+    function needsSave() { return NodeManager.nodeCount > 0 && graphDirty() }
+
+    // 关闭窗口前询问是否保存未保存的更改
+    onClosing: (close) => {
+        if (allowClose || !needsSave()) {
+            close.accepted = true
+            return
+        }
+        close.accepted = false
+        closePrompt.open()
     }
 
     // ---- 图文件：新建 / 打开 / 保存 ----
     function newGraph() {
         NodeManager.clearGraph()
         currentPath = ""
+        savedSnapshot = NodeManager.graphJsonString()
     }
     function openGraph() { var p = FileDialogs.openGraph(currentPath); if (p !== "") doLoad(p) }
     function saveGraph() { if (currentPath === "") saveGraphAs(); else doSave(currentPath) }
     function saveGraphAs() { var p = FileDialogs.saveGraph(currentPath); if (p !== "") doSave(p) }
     function doSave(path) {
-        if (NodeManager.saveGraph(path))
+        if (NodeManager.saveGraph(path)) {
             currentPath = path
+            savedSnapshot = NodeManager.graphJsonString()
+            return true
+        }
+        return false
     }
     function doLoad(path) {
         var g = NodeManager.readGraph(path)
@@ -81,11 +105,13 @@ Controls.ApplicationWindow {
             NodeManager.addEdgeByUuid(e.fromNode, e.fromPort, e.toNode, e.toPort)
         }
         currentPath = path
+        savedSnapshot = NodeManager.graphJsonString()
     }
 
     Component.onCompleted: {
         leftCollapsed = width < 960
         rightCollapsed = width < 1180
+        savedSnapshot = NodeManager.graphJsonString()
         if (Qt.application.arguments.indexOf("--demo") >= 0)
             Qt.callLater(demoPopulate)
     }
@@ -234,6 +260,89 @@ Controls.ApplicationWindow {
     ImageViewer { id: viewer }
 
     SettingsDialog { id: settingsDialog }
+
+    // 关闭窗口前的未保存提示
+    Controls.Popup {
+        id: closePrompt
+        width: 380
+        height: 170
+        padding: 0
+        modal: true
+        focus: true
+        closePolicy: Controls.Popup.CloseOnEscape
+        x: Math.round((win.width - width) / 2)
+        y: Math.round((win.height - height) / 2)
+
+        background: Rectangle {
+            color: Theme.bgPanel
+            border.width: 1
+            border.color: Theme.border
+            radius: 12
+        }
+
+        Item {
+            anchors.fill: parent
+            anchors.margins: 20
+
+            Column {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                spacing: 10
+
+                Text {
+                    text: "未保存的更改"
+                    color: Theme.fgBright
+                    font.pixelSize: 15
+                    font.bold: true
+                }
+
+                Text {
+                    width: parent.width
+                    text: "当前节点图尚未保存，是否保存？"
+                    color: Theme.fg
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            Row {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                spacing: 10
+
+                GhostButton {
+                    label: "取消"
+                    onClicked: closePrompt.close()
+                }
+
+                GhostButton {
+                    label: "不保存"
+                    onClicked: {
+                        allowClose = true
+                        closePrompt.close()
+                        win.close()
+                    }
+                }
+
+                PrimaryButton {
+                    label: "保存"
+                    onClicked: {
+                        var p = currentPath
+                        if (p === "")
+                            p = FileDialogs.saveGraph(currentPath)
+                        if (p === "")
+                            return
+                        if (doSave(p)) {
+                            allowClose = true
+                            closePrompt.close()
+                            win.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     Shortcut {
         sequence: "Ctrl+N"

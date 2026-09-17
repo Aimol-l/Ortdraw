@@ -224,27 +224,11 @@ Rectangle {
     Controls.Menu {
         id: fileMenu
 
-        Controls.MenuItem {
-            text: "新建"
-            onTriggered: root.newRequested()
-        }
-
-        Controls.MenuItem {
-            text: "打开…"
-            onTriggered: root.openRequested()
-        }
-
-        Controls.MenuSeparator {}
-
-        Controls.MenuItem {
-            text: "保存"
-            onTriggered: root.saveRequested()
-        }
-
-        Controls.MenuItem {
-            text: "另存为…"
-            onTriggered: root.saveAsRequested()
-        }
+        MenuRow { text: "新建"; onTriggered: root.newRequested() }
+        MenuRow { text: "打开…"; onTriggered: root.openRequested() }
+        MenuSep {}
+        MenuRow { text: "保存"; onTriggered: root.saveRequested() }
+        MenuRow { text: "另存为…"; onTriggered: root.saveAsRequested() }
 
         background: Rectangle {
             implicitWidth: 170
@@ -258,10 +242,7 @@ Rectangle {
     Controls.Menu {
         id: editMenu
 
-        Controls.MenuItem {
-            text: "设置…"
-            onTriggered: UiBus.settingsRequested()
-        }
+        MenuRow { text: "设置…"; onTriggered: UiBus.settingsRequested() }
 
         background: Rectangle {
             implicitWidth: 170
@@ -332,6 +313,37 @@ Rectangle {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
+        }
+    }
+
+    component MenuRow: Controls.MenuItem {
+        id: mr
+        implicitWidth: 170
+        implicitHeight: 30
+        padding: 0
+        contentItem: Text {
+            text: mr.text
+            color: mr.hovered ? Theme.fgBright : Theme.fg
+            font.pixelSize: 12
+            leftPadding: 12
+            verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
+        }
+        background: Rectangle {
+            radius: 6
+            color: mr.hovered ? Theme.bgHover : "transparent"
+        }
+    }
+
+    component MenuSep: Controls.MenuSeparator {
+        implicitWidth: 170
+        padding: 0
+        topPadding: 4
+        bottomPadding: 4
+        contentItem: Rectangle {
+            implicitWidth: 158
+            implicitHeight: 1
+            color: Theme.borderSoft
         }
     }
 
