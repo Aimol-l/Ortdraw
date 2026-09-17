@@ -155,8 +155,12 @@ Rectangle {
 
                 TbButton {
                     glyph: "▦"
-                    active: Settings.showGrid
-                    onActivated: Settings.showGrid = !Settings.showGrid
+                    active: Settings.backgroundMode !== "none"
+                    onActivated: {
+                        // 循环：空白 → 点阵 → 网格 → 空白
+                        Settings.backgroundMode = Settings.backgroundMode === "none" ? "dots"
+                                                : Settings.backgroundMode === "dots" ? "grid" : "none"
+                    }
                 }
 
                 TbButton {
@@ -175,7 +179,6 @@ Rectangle {
 
                 TbButton {
                     glyph: "⚙"
-                    tooltip: "设置"
                     onActivated: UiBus.settingsRequested()
                 }
             }

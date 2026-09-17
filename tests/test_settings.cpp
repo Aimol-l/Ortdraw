@@ -21,7 +21,7 @@ private slots:
         Settings s(f.fileName());
         QCOMPARE(s.theme(), QString("light"));
         QVERIFY(!s.accentCustom());
-        QVERIFY(s.showGrid());
+        QCOMPARE(s.backgroundMode(), QString("dots"));
         QCOMPARE(s.gridSpacing(), 26);
         QCOMPARE(s.renderMode(), QString("spline"));
         QCOMPARE(s.midpointMode(), QString("selected"));
@@ -53,11 +53,11 @@ private slots:
     void resetDefaultsRestoresAndSignals() {
         QTemporaryFile f; QVERIFY(f.open());
         Settings s(f.fileName());
-        s.setTheme("dark"); s.setShowGrid(false);
+        s.setTheme("dark"); s.setBackgroundMode("none");
         QSignalSpy spy(&s, &Settings::themeChanged);
         s.resetDefaults();
         QCOMPARE(s.theme(), QString("light"));
-        QVERIFY(s.showGrid());
+        QCOMPARE(s.backgroundMode(), QString("dots"));
         QVERIFY(spy.count() >= 1);
     }
     void clearAccentCustomResetsFlagAndDefault() {

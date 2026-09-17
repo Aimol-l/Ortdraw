@@ -15,7 +15,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool accentCustom READ accentCustom NOTIFY accentColorChanged)
     Q_PROPERTY(QString density READ density WRITE setDensity NOTIFY densityChanged)
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
-    Q_PROPERTY(bool showGrid READ showGrid WRITE setShowGrid NOTIFY showGridChanged)
+    Q_PROPERTY(QString backgroundMode READ backgroundMode WRITE setBackgroundMode NOTIFY backgroundModeChanged)
     Q_PROPERTY(bool snapToGrid READ snapToGrid WRITE setSnapToGrid NOTIFY snapToGridChanged)
     Q_PROPERTY(int gridSpacing READ gridSpacing WRITE setGridSpacing NOTIFY gridSpacingChanged)
     Q_PROPERTY(bool spaceToPan READ spaceToPan WRITE setSpaceToPan NOTIFY spaceToPanChanged)
@@ -71,7 +71,7 @@ public:
     bool accentCustom() const { return m_accentCustom; }
     QString density() const { return m_density; }
     QString language() const { return m_language; }
-    bool showGrid() const { return m_showGrid; }
+    QString backgroundMode() const { return m_backgroundMode; }
     bool snapToGrid() const { return m_snapToGrid; }
     int gridSpacing() const { return m_gridSpacing; }
     bool spaceToPan() const { return m_spaceToPan; }
@@ -117,9 +117,10 @@ public:
         if (m_language == v) return;
         m_language = v; m_store->setValue("appearance/language", v); emit languageChanged();
     }
-    void setShowGrid(bool v) {
-        if (m_showGrid == v) return;
-        m_showGrid = v; m_store->setValue("canvas/showGrid", v); emit showGridChanged();
+    void setBackgroundMode(const QString& v) {
+        const QString n = (v == "none" || v == "dots" || v == "grid") ? v : "dots";
+        if (m_backgroundMode == n) return;
+        m_backgroundMode = n; m_store->setValue("canvas/background", n); emit backgroundModeChanged();
     }
     void setSnapToGrid(bool v) {
         if (m_snapToGrid == v) return;
@@ -245,7 +246,7 @@ public:
         m_store->setValue("appearance/accentCustom", false);
         m_density = "standard"; m_store->setValue("appearance/density", m_density);
         m_language = "zh_CN"; m_store->setValue("appearance/language", m_language);
-        m_showGrid = true; m_store->setValue("canvas/showGrid", m_showGrid);
+        m_backgroundMode = "dots"; m_store->setValue("canvas/background", m_backgroundMode);
         m_snapToGrid = false; m_store->setValue("canvas/snapToGrid", m_snapToGrid);
         m_gridSpacing = 26; m_store->setValue("canvas/gridSpacing", m_gridSpacing);
         m_spaceToPan = true; m_store->setValue("canvas/spaceToPan", m_spaceToPan);
@@ -275,7 +276,7 @@ public:
         emit accentColorChanged();
         emit densityChanged();
         emit languageChanged();
-        emit showGridChanged();
+        emit backgroundModeChanged();
         emit snapToGridChanged();
         emit gridSpacingChanged();
         emit spaceToPanChanged();
@@ -318,7 +319,7 @@ signals:
     void accentColorChanged();
     void densityChanged();
     void languageChanged();
-    void showGridChanged();
+    void backgroundModeChanged();
     void snapToGridChanged();
     void gridSpacingChanged();
     void spaceToPanChanged();
@@ -356,7 +357,8 @@ private:
         m_accentCustom = m_store->value("appearance/accentCustom", false).toBool();
         m_density = m_store->value("appearance/density", "standard").toString();
         m_language = m_store->value("appearance/language", "zh_CN").toString();
-        m_showGrid = m_store->value("canvas/showGrid", true).toBool();
+        { const QString bm = m_store->value("canvas/background", "dots").toString();
+          m_backgroundMode = (bm == "none" || bm == "dots" || bm == "grid") ? bm : "dots"; }
         m_snapToGrid = m_store->value("canvas/snapToGrid", false).toBool();
         m_gridSpacing = qBound(10, m_store->value("canvas/gridSpacing", 26).toInt(), 60);
         m_spaceToPan = m_store->value("canvas/spaceToPan", true).toBool();
@@ -396,7 +398,7 @@ private:
     bool m_accentCustom = false;
     QString m_density = "standard";
     QString m_language = "zh_CN";
-    bool m_showGrid = true;
+    QString m_backgroundMode = "dots";
     bool m_snapToGrid = false;
     int m_gridSpacing = 26;
     bool m_spaceToPan = true;

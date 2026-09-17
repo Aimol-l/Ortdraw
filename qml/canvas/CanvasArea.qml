@@ -45,20 +45,34 @@ Item {
     Canvas {
         id: grid
         anchors.fill: parent
-        visible: Settings.showGrid
+        visible: Settings.backgroundMode !== "none"
 
         onPaint: {
             var ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
+            var mode = Settings.backgroundMode
+            if (mode === "none")
+                return
             var spacing = Settings.gridSpacing
             var ox = ((area.panX % spacing) + spacing) % spacing
             var oy = ((area.panY % spacing) + spacing) % spacing
-            ctx.fillStyle = Theme.grid
-            for (var x = ox; x < width; x += spacing) {
-                for (var y = oy; y < height; y += spacing) {
-                    ctx.beginPath()
-                    ctx.arc(x, y, 1.2, 0, Math.PI * 2)
-                    ctx.fill()
+            if (mode === "dots") {
+                ctx.fillStyle = Theme.grid
+                for (var x = ox; x < width; x += spacing) {
+                    for (var y = oy; y < height; y += spacing) {
+                        ctx.beginPath()
+                        ctx.arc(x, y, 1.2, 0, Math.PI * 2)
+                        ctx.fill()
+                    }
+                }
+            } else { // grid lines
+                ctx.strokeStyle = Theme.grid
+                ctx.lineWidth = 1
+                for (var gx = ox; gx < width; gx += spacing) {
+                    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, height); ctx.stroke()
+                }
+                for (var gy = oy; gy < height; gy += spacing) {
+                    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(width, gy); ctx.stroke()
                 }
             }
         }
@@ -70,7 +84,7 @@ Item {
 
         Connections {
             target: Settings
-            function onShowGridChanged() { grid.requestPaint() }
+            function onBackgroundModeChanged() { grid.requestPaint() }
             function onGridSpacingChanged() { grid.requestPaint() }
         }
 

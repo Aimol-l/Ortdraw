@@ -41,7 +41,7 @@ Item {
             accentCustom: Settings.accentCustom,
             density: Settings.density,
             language: Settings.language,
-            showGrid: Settings.showGrid,
+            backgroundMode: Settings.backgroundMode,
             snapToGrid: Settings.snapToGrid,
             gridSpacing: Settings.gridSpacing,
             spaceToPan: Settings.spaceToPan,
@@ -78,7 +78,7 @@ Item {
             Settings.clearAccentCustom()
         Settings.density = s.density
         Settings.language = s.language
-        Settings.showGrid = s.showGrid
+        Settings.backgroundMode = s.backgroundMode
         Settings.snapToGrid = s.snapToGrid
         Settings.gridSpacing = s.gridSpacing
         Settings.spaceToPan = s.spaceToPan
@@ -395,7 +395,7 @@ Item {
                         Column {
                             id: contentCol
                             y: 8
-                            width: flick.width
+                            width: flick.width - 14
 
                             // ===== 外观 =====
                             Column {
@@ -463,12 +463,17 @@ Item {
                                 GroupTitle { text: "网格" }
 
                                 SettingRow {
-                                    title: "显示网格"
-                                    desc: "在画布上绘制点阵背景"
-                                    keywords: "grid 网格 显示"
-                                    SwitchControl {
-                                        checked: Settings.showGrid
-                                        onToggled: (v) => Settings.showGrid = v
+                                    title: "画布背景"
+                                    desc: "空白 / 点阵 / 网格"
+                                    keywords: "background grid 背景 网格 点阵 空白"
+                                    SegControl {
+                                        options: [
+                                            { value: "none", label: "空白" },
+                                            { value: "dots", label: "点阵" },
+                                            { value: "grid", label: "网格" }
+                                        ]
+                                        value: Settings.backgroundMode
+                                        onPicked: (v) => Settings.backgroundMode = v
                                     }
                                 }
 
