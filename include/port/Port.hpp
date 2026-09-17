@@ -30,6 +30,7 @@ public:
     Q_PROPERTY(Port* self READ self CONSTANT)
     Q_PROPERTY(QString name READ name NOTIFY nameChanged) 
     Q_PROPERTY(QPointF position READ position WRITE setPosition)
+    Q_PROPERTY(bool highlighted READ highlighted WRITE setHighlighted NOTIFY highlightedChanged)
 private:
     QUuid m_uid;
     QString m_name;
@@ -38,6 +39,7 @@ private:
     QPointF m_position;
     BaseNode* m_father= nullptr;
     bool m_connected = false;
+    bool m_highlighted = false;
 public:
     explicit Port( QObject *parent = nullptr): QObject(parent){}
     explicit Port(QString name, PortType type, DataType data_type, QPointF position,BaseNode* father, QObject *parent = nullptr)
@@ -72,6 +74,11 @@ public:
     BaseNode* father() const { return m_father; }
     bool isConnected() const { return m_connected; }
     void setConnected(bool connected) { m_connected = connected; }
+    bool highlighted() const { return m_highlighted; }
+    void setHighlighted(bool v) {
+        if(m_highlighted == v) return;
+        m_highlighted = v; emit highlightedChanged();
+    }
     void setPosition(QPointF pos){
         this->m_position = pos;
     }
@@ -80,4 +87,5 @@ public:
     }
 signals:
     void nameChanged();
+    void highlightedChanged();
 };

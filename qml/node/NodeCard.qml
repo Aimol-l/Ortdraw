@@ -34,6 +34,18 @@ Item {
     readonly property int rowHeight: 30
     readonly property int bodyPadding: 8
 
+    // 端口世界坐标必须在布局完成后同步（否则会少算头部/内边距偏移）
+    function syncPorts() {
+        for (var i = 0; i < portRepeater.count; ++i) {
+            var it = portRepeater.itemAt(i)
+            if (it && it.syncPorts)
+                it.syncPorts()
+        }
+    }
+    onWidthChanged: Qt.callLater(syncPorts)
+    onHeightChanged: Qt.callLater(syncPorts)
+    Component.onCompleted: Qt.callLater(syncPorts)
+
     Rectangle {
         id: glow
         visible: card.selected
@@ -212,6 +224,7 @@ Item {
             anchors.right: parent.right
 
             Repeater {
+                id: portRepeater
                 model: card.node ? Math.max(card.node.inputPorts.length, card.node.outputPorts.length) : 0
 
                 delegate: Item {
@@ -224,6 +237,17 @@ Item {
                     readonly property var outPort: (card.node && index < card.node.outputPorts.length)
                                                    ? card.node.outputPorts[index] : null
 
+                    function syncPorts() {
+                        if (rowItem.inPort && card.coordItem) {
+                            var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
+                            card.node.setInputPortPosition(rowItem.index, p.x, p.y)
+                        }
+                        if (rowItem.outPort && card.coordItem) {
+                            var q = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
+                            card.node.setOutputPortPosition(rowItem.index, q.x, q.y)
+                        }
+                    }
+
                     // ---- 输入（左） ----
                     Rectangle {
                         id: inDot
@@ -233,10 +257,10 @@ Item {
                         width: 12
                         height: 12
                         radius: 6
-                        color: Theme.portIn
+                        color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
                         border.width: 2
                         border.color: Theme.bgElev
-                        scale: inArea.containsMouse ? 1.45 : 1.0
+                        scale: (inArea.containsMouse || (rowItem.inPort && rowItem.inPort.highlighted)) ? 1.45 : 1.0
                         Behavior on scale { NumberAnimation { duration: 120 } }
 
                         Rectangle {
@@ -244,8 +268,8 @@ Item {
                             width: parent.width + 8
                             height: parent.height + 8
                             radius: width / 2
-                            color: Theme.portIn
-                            opacity: inArea.containsMouse ? 0.3 : 0.0
+                            color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
+                            opacity: (inArea.containsMouse || (rowItem.inPort && rowItem.inPort.highlighted)) ? 0.35 : 0.0
                             z: -1
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
@@ -256,7 +280,32 @@ Item {
                             anchors.margins: -6
                             hoverEnabled: true
                             cursorShape: Qt.CrossCursor
+                            preventStealing: true
+                            onPressed: (mouse) => {
+                                if (Settings.connectMode === "drag" && rowItem.inPort && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.beginLink(rowItem.inPort.self, p.x, p.y)
+                                }
+                            }
+                            onPositionChanged: (mouse) => {
+                                if (pressed && Settings.connectMode === "drag" && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.updateLink(p.x, p.y)
+                                }
+                            }
+                            onReleased: (mouse) => {
+                                if (Settings.connectMode === "drag" && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.endLink(p.x, p.y)
+                                }
+                            }
+                            onCanceled: {
+                                if (Settings.connectMode === "drag")
+                                    NodeManager.cancelLink()
+                            }
                             onClicked: {
+                                if (Settings.connectMode === "drag")
+                                    return
                                 if (rowItem.inPort && card.coordItem) {
                                     var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
                                     NodeManager.setInputPort(rowItem.inPort.self, p.x, p.y)
@@ -264,12 +313,6 @@ Item {
                             }
                         }
 
-                        Component.onCompleted: {
-                            if (rowItem.inPort && card.coordItem) {
-                                var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
-                                card.node.setInputPortPosition(rowItem.index, p.x, p.y)
-                            }
-                        }
                     }
 
                     Row {
@@ -355,10 +398,10 @@ Item {
                         width: 12
                         height: 12
                         radius: 6
-                        color: Theme.portOut
+                        color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
                         border.width: 2
                         border.color: Theme.bgElev
-                        scale: outArea.containsMouse ? 1.45 : 1.0
+                        scale: (outArea.containsMouse || (rowItem.outPort && rowItem.outPort.highlighted)) ? 1.45 : 1.0
                         Behavior on scale { NumberAnimation { duration: 120 } }
 
                         Rectangle {
@@ -366,8 +409,8 @@ Item {
                             width: parent.width + 8
                             height: parent.height + 8
                             radius: width / 2
-                            color: Theme.portOut
-                            opacity: outArea.containsMouse ? 0.3 : 0.0
+                            color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
+                            opacity: (outArea.containsMouse || (rowItem.outPort && rowItem.outPort.highlighted)) ? 0.35 : 0.0
                             z: -1
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
@@ -378,7 +421,32 @@ Item {
                             anchors.margins: -6
                             hoverEnabled: true
                             cursorShape: Qt.CrossCursor
+                            preventStealing: true
+                            onPressed: (mouse) => {
+                                if (Settings.connectMode === "drag" && rowItem.outPort && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.beginLink(rowItem.outPort.self, p.x, p.y)
+                                }
+                            }
+                            onPositionChanged: (mouse) => {
+                                if (pressed && Settings.connectMode === "drag" && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.updateLink(p.x, p.y)
+                                }
+                            }
+                            onReleased: (mouse) => {
+                                if (Settings.connectMode === "drag" && card.coordItem) {
+                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                    NodeManager.endLink(p.x, p.y)
+                                }
+                            }
+                            onCanceled: {
+                                if (Settings.connectMode === "drag")
+                                    NodeManager.cancelLink()
+                            }
                             onClicked: {
+                                if (Settings.connectMode === "drag")
+                                    return
                                 if (rowItem.outPort && card.coordItem) {
                                     var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
                                     NodeManager.setOutputPort(rowItem.outPort.self, p.x, p.y)
@@ -386,12 +454,6 @@ Item {
                             }
                         }
 
-                        Component.onCompleted: {
-                            if (rowItem.outPort && card.coordItem) {
-                                var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
-                                card.node.setOutputPortPosition(rowItem.index, p.x, p.y)
-                            }
-                        }
                     }
                 }
             }

@@ -217,7 +217,7 @@ public:
         m_confirmDelete = v; m_store->setValue("interaction/confirmDelete", v); emit confirmDeleteChanged();
     }
     void setConnectMode(const QString& v) {
-        const QString n = oneOf(v, {"click", "drag"}, "click");
+        const QString n = oneOf(v, {"click", "drag"}, "drag");
         if (m_connectMode == n) return;
         m_connectMode = n; m_store->setValue("interaction/connectMode", n); emit connectModeChanged();
     }
@@ -266,7 +266,7 @@ public:
         m_ctrlMultiSelect = true; m_store->setValue("interaction/ctrlMultiSelect", m_ctrlMultiSelect);
         m_contextMenu = true; m_store->setValue("interaction/contextMenu", m_contextMenu);
         m_confirmDelete = false; m_store->setValue("interaction/confirmDelete", m_confirmDelete);
-        m_connectMode = "click"; m_store->setValue("interaction/connectMode", m_connectMode);
+        m_connectMode = "drag"; m_store->setValue("interaction/connectMode", m_connectMode);
         m_autoDisconnect = false; m_store->setValue("interaction/autoDisconnect", m_autoDisconnect);
         m_minimapFps = 30; m_store->setValue("perf/minimapFps", m_minimapFps);
         m_antialias = true; m_store->setValue("perf/antialias", m_antialias);
@@ -382,8 +382,8 @@ private:
         m_ctrlMultiSelect = m_store->value("interaction/ctrlMultiSelect", true).toBool();
         m_contextMenu = m_store->value("interaction/contextMenu", true).toBool();
         m_confirmDelete = m_store->value("interaction/confirmDelete", false).toBool();
-        m_connectMode = oneOf(m_store->value("interaction/connectMode", "click").toString(),
-                              {"click", "drag"}, "click");
+        m_connectMode = oneOf(m_store->value("interaction/connectMode", "drag").toString(),
+                              {"click", "drag"}, "drag");
         m_autoDisconnect = m_store->value("interaction/autoDisconnect", false).toBool();
         m_minimapFps = m_store->value("perf/minimapFps", 30).toInt();
         if (m_minimapFps != 0 && m_minimapFps != 30 && m_minimapFps != 60) m_minimapFps = 30;
@@ -418,7 +418,7 @@ private:
     bool m_ctrlMultiSelect = true;
     bool m_contextMenu = true;
     bool m_confirmDelete = false;
-    QString m_connectMode = "click";
+    QString m_connectMode = "drag";
     bool m_autoDisconnect = false;
     int m_minimapFps = 30;
     bool m_antialias = true;

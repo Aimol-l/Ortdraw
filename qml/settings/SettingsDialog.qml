@@ -713,9 +713,8 @@ Item {
                                     title: "连线方式"
                                     desc: "点击端口依次连接，或拖拽连接"
                                     keywords: "连线 方式 点击 拖拽 connect"
-                                    placeholder: true
                                     SegControl {
-                                        options: [{ value: "click", label: "点击" }, { value: "drag", label: "拖拽" }]
+                                        options: [{ value: "drag", label: "拖拽" }, { value: "click", label: "点击" }]
                                         value: Settings.connectMode
                                         onPicked: (v) => Settings.connectMode = v
                                     }

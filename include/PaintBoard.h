@@ -22,6 +22,7 @@ public:
     DAGraph m_graph;
     Edge m_drawing_edge;
     bool m_drawing_line = false;
+    bool m_draw_reverse = false;
 
     explicit PaintBoard(QQuickItem* parent = nullptr) : QQuickPaintedItem(parent) {
         connect(Theme::theme(), &Theme::changed, this, [this]{ update(); });
@@ -46,17 +47,33 @@ public:
                                             start->dataType(), pos, nullptr);
         m_drawing_edge = Edge(start, m_tmp_port.get());
         m_drawing_edge.midPoint = pos;
+        m_draw_reverse = false;
+        m_drawing_line = true;
+        update();
+    }
+    void startDrawingReverse(Port* stop, QPointF pos) {
+        if(!stop) return;
+        m_tmp_port = std::make_unique<Port>("__tmp__", PortType::Output,
+                                            stop->dataType(), pos, nullptr);
+        m_drawing_edge = Edge(m_tmp_port.get(), stop);
+        m_drawing_edge.midPoint = pos;
+        m_draw_reverse = true;
         m_drawing_line = true;
         update();
     }
     void moveDrawing(QPointF pos) {
         if(!m_drawing_line) return;
-        if(m_drawing_edge.stop_port) m_drawing_edge.stop_port->setPosition(pos);
+        if(m_draw_reverse){
+            if(m_drawing_edge.start_port) m_drawing_edge.start_port->setPosition(pos);
+        } else {
+            if(m_drawing_edge.stop_port) m_drawing_edge.stop_port->setPosition(pos);
+        }
         m_drawing_edge.midPoint = pos;
         update();
     }
     void cancelDrawing() {
         m_drawing_line = false;
+        m_draw_reverse = false;
         m_drawing_edge = Edge{};
         m_tmp_port.reset();
         update();

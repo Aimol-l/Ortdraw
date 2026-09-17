@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QPointF>
+#include <QLineF>
 #include "PaintBoard.h"
 #include "Settings.h"
 #include "utils/DAGraph.hpp"
@@ -22,12 +23,41 @@ private:
     CmdManager m_cmd_manager;
     QPointer<PaintBoard> m_paint_board;
     BaseNode* m_selected_node = nullptr;
+    Port* m_link_src = nullptr;
+    Port* m_link_target = nullptr;
+    bool m_link_from_input = false;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {}
 
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
     void setSelectedNode(BaseNode* n){
         if(m_selected_node == n) return;
         m_selected_node = n; emit selectionChanged();
+    }
+    Port* portAt(const QPointF& pos, PortType want){
+        if(!m_paint_board) return nullptr;
+        Port* best = nullptr;
+        qreal best_d = 14.0;
+        for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
+            auto& ports = (want == PortType::Input) ? node->getInPorts() : node->getOutPorts();
+            for(Port* p : ports){
+                const qreal d = QLineF(p->position(), pos).length();
+                if(d < best_d){ best_d = d; best = p; }
+            }
+        }
+        return best;
+    }
+    static bool compatible(Port* src, Port* dst){
+        if(!src || !dst) return false;
+        if(src->father() == dst->father()) return false;
+        if(src->dataType() != dst->dataType()) return false;
+        if(dst->isConnected()) return false;
+        return true;
+    }
+    void setLinkTarget(Port* p){
+        if(m_link_target == p) return;
+        if(m_link_target) m_link_target->setHighlighted(false);
+        m_link_target = p;
+        if(m_link_target) m_link_target->setHighlighted(true);
     }
 
 public:
@@ -250,6 +280,57 @@ public:
         if(ok) std::println("连接成功");
         else   std::println("有回路或连线无效");
         m_paint_board->finishDrawing();
+        refresh();
+    }
+
+    Q_INVOKABLE void beginLink(Port* port, qreal x, qreal y){
+        if(!m_paint_board || !port) return;
+        m_paint_board->cancelDrawing();
+        setLinkTarget(nullptr);
+        m_link_src = port;
+        m_link_from_input = (port->type() == static_cast<int>(PortType::Input));
+        if(m_link_from_input)
+            m_paint_board->startDrawingReverse(port, QPointF(x, y));
+        else
+            m_paint_board->startDrawing(port, QPointF(x, y));
+        refresh();
+    }
+    Q_INVOKABLE void updateLink(qreal x, qreal y){
+        if(!m_paint_board || !m_link_src) return;
+        const QPointF pos(x, y);
+        m_paint_board->moveDrawing(pos);
+        Port* cand = m_link_from_input ? portAt(pos, PortType::Output)
+                                       : portAt(pos, PortType::Input);
+        Port* src = m_link_from_input ? cand : m_link_src;
+        Port* dst = m_link_from_input ? m_link_src : cand;
+        setLinkTarget(compatible(src, dst) ? cand : nullptr);
+    }
+    Q_INVOKABLE void endLink(qreal x, qreal y){
+        if(!m_paint_board || !m_link_src) return;
+        Port* src = nullptr;
+        Port* dst = nullptr;
+        Port* target = m_link_target;
+        if(target){
+            if(m_link_from_input){ src = target; dst = m_link_src; }
+            else                 { src = m_link_src; dst = target; }
+        }
+        if(src && dst){
+            auto command = std::make_unique<AddEdgeCMD>(src, dst, m_paint_board);
+            bool ok = m_cmd_manager.executeCommand(std::move(command));
+            if(ok) std::println("连接成功");
+            else   std::println("有回路或连线无效");
+        }
+        m_paint_board->finishDrawing();
+        setLinkTarget(nullptr);
+        m_link_src = nullptr;
+        m_link_from_input = false;
+        refresh();
+    }
+    Q_INVOKABLE void cancelLink(){
+        if(m_paint_board) m_paint_board->cancelDrawing();
+        setLinkTarget(nullptr);
+        m_link_src = nullptr;
+        m_link_from_input = false;
         refresh();
     }
 
