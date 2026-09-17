@@ -2,11 +2,12 @@ import QtQuick
 import QtQuick.Controls
 import ThresholdNode
 import Theme
+import Settings
 
 ThresholdNode {
     id: root
     width: 220
-    height: Math.max(root.getMinHeight(), card.contentHeight)
+    height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
 
     NodeCard {
         id: card
@@ -27,7 +28,7 @@ ThresholdNode {
                     text: "阈值"
                     color: Theme.fg
                     font.pixelSize: 11
-                    renderType: Text.CurveRendering
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
                 Text {
                     height: 18
@@ -36,7 +37,7 @@ ThresholdNode {
                     color: Theme.blue
                     font.pixelSize: 11
                     font.bold: true
-                    renderType: Text.CurveRendering
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
             }
 

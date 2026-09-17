@@ -4,6 +4,7 @@
 #include <QPointer>
 #include <QPointF>
 #include "PaintBoard.h"
+#include "Settings.h"
 #include "utils/DAGraph.hpp"
 #include "command/AddNode.hpp"
 #include "command/AddEdge.hpp"
@@ -127,6 +128,7 @@ public:
 
     Q_INVOKABLE void clickNodeEvent(QUuid node_uid, bool ctrl = false) {
         if(!m_paint_board) return;
+        ctrl = ctrl && Settings::settings()->ctrlMultiSelect();
         for(Edge& edge : m_paint_board->m_graph.getAllEdges())
             edge.seleected = false;
         BaseNode* hit_node = nullptr;
@@ -172,10 +174,27 @@ public:
     }
     Q_INVOKABLE void mouseMoveEvent(qreal x, qreal y){
         if(!m_paint_board) return;
-        m_paint_board->moveDrawing(QPointF(x, y));
+        const QPointF pos(x, y);
+        m_paint_board->moveDrawing(pos);
+        auto* st = Settings::settings();
+        if(st->hoverHighlight() || st->midpointMode() == QStringLiteral("hover")){
+            const LinkRenderMode mode = Edge::modeFrom(st->renderMode());
+            const auto& edges = m_paint_board->m_graph.getAllEdges();
+            int hit = -1;
+            for(int i = 0; i < edges.size(); ++i){
+                if(edges[i].isPointOnCurve(pos, mode)){
+                    hit = i;
+                    break;
+                }
+            }
+            m_paint_board->setHoveredEdge(hit);
+        } else {
+            m_paint_board->setHoveredEdge(-1);
+        }
     }
     Q_INVOKABLE void mousePressEvent(const QPointF& pos, bool ctrl = false){
         if(!m_paint_board) return;
+        ctrl = ctrl && Settings::settings()->ctrlMultiSelect();
         bool node_hit = false;
         BaseNode* hit_node = nullptr;
         for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
@@ -188,8 +207,9 @@ public:
                 node->setSelected(false);
             }
         }
+        const LinkRenderMode mode = Edge::modeFrom(Settings::settings()->renderMode());
         for(Edge& edge : m_paint_board->m_graph.getAllEdges())
-            edge.seleected = node_hit ? false : edge.isPointOnCurve(pos);
+            edge.seleected = node_hit ? false : edge.isPointOnCurve(pos, mode);
         setSelectedNode(hit_node);
         refresh();
     }

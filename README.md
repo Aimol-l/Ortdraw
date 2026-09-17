@@ -21,9 +21,27 @@
 - 节点图编辑：从侧栏添加节点，拖拽移动，右下角缩放。
 - 端口连线：先点击输出端口，再点击输入端口即可建立有向连接，连接过程中显示跟随指针的预览线；
   自动拒绝自连、类型不匹配、重复连接与成环。
-- 连线渲染：三次贝塞尔曲线，点击曲线可选中。
+- 连线渲染：支持 Spline/Linear/Straight 三种渲染模式（默认 Spline，可在设置中切换），点击连线可选中。
 - 删除与撤销：Delete 删除选中的节点/连线；`Ctrl+Z` 撤销，`Ctrl+Y` 重做。
-- 多选：`Ctrl+点击` 节点可多选，批量删除。
+- 多选：`Ctrl+点击` 节点可多选，批量删除；多选/右键菜单等可在设置中开关。
+
+## 设置
+
+- **入口**：顶栏最右侧的齿轮按钮 `⚙`（标题「设置」）；或菜单「编辑 → 设置…」。
+- **对话框**：全窗口浮层，分左侧分类与右侧设置行，支持按标签搜索。改动**即时生效**：
+  每个控件直接读写 `Settings` 并立即作用于界面；「保存」只调用 `Settings.sync()` 落盘，
+  「取消」/`Esc`/点击遮罩会回滚到打开对话框时的快照，底部另有「恢复默认」。
+- **分类（8 个）**：外观、画布、节点、连线、交互、性能、快捷键、关于；
+  其中「快捷键」「关于」为只读信息页。
+- **持久化位置**：`QSettings`（IniFormat，UserScope，组织/应用名 `Ortdraw`/`Ortdraw`），
+  Linux 下即 `~/.config/Ortdraw/Ortdraw.ini`；测试可用环境变量 `ORTDRAW_SETTINGS_PATH`
+  指定 INI 文件以隔离真实配置。析构与「保存」时均会落盘。
+- **已接入（修改即时生效）**：主题与强调色、网格显示/吸附/间距、空格平移、适应视图边距、
+  缩放范围、节点预览/缩略图高度/高度自适应/端口类型标签/文字渲染/圆角、
+  连线渲染模式/线宽/中点显示/悬停高亮、Minimap 刷新率、抗锯齿、
+  Ctrl 多选节点（关闭后 Ctrl+点击不再多选/切换选择）、启用右键菜单（关闭后右键不弹出上下文菜单）。
+- **占位（界面标注「即将支持」，控件禁用）**：界面密度、语言、删除确认、连线方式、
+  自动断开旧连线、异步图像加载。
 
 ## 目录结构
 
@@ -33,7 +51,8 @@ include/            头文件（大部分实现为 header-only）
   port/             端口
   utils/            DAGraph（邻接表 + 环检测）、Edge（贝塞尔曲线）
   command/          命令模式 undo/redo
-  Theme.h           Theme 单例（颜色/亮暗主题）
+  Theme.h           Theme 单例（颜色/亮暗主题，读写 Settings）
+  Settings.h        Settings 单例（QSettings 持久化偏好设置）
   NodeManager.h     全局单例，QML 事件入口
   PaintBoard.h      画板（绘制连线）
 src/main.cpp        程序入口
@@ -42,6 +61,7 @@ qml/                界面（主窗口与各组件）
   canvas/           CanvasArea、Minimap
   chrome/           TopBar、StatusBar、ContextMenu
   inspector/        Inspector（属性面板）
+  settings/         SettingsDialog（设置对话框）
   node/NodeCard.qml 节点卡片
 tests/              Qt Test 单元测试
 assets/             图标与贴图

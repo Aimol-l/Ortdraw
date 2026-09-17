@@ -1,11 +1,12 @@
 import QtQuick
 import BlurNode
 import Theme
+import Settings
 
 BlurNode {
     id: root
     width: 220
-    height: Math.max(root.getMinHeight(), card.contentHeight)
+    height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
 
     NodeCard {
         id: card
@@ -24,7 +25,7 @@ BlurNode {
                 text: "核大小"
                 color: Theme.fg
                 font.pixelSize: 11
-                renderType: Text.CurveRendering
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             }
             Rectangle {
                 width: 56
@@ -41,6 +42,7 @@ BlurNode {
                     color: Theme.fg
                     font.pixelSize: 11
                     selectByMouse: true
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     text: "" + root.kernel
                     onEditingFinished: {
                         var v = parseInt(text, 10)
@@ -60,7 +62,7 @@ BlurNode {
                 text: "（奇数）"
                 color: Theme.fgDim
                 font.pixelSize: 10
-                renderType: Text.CurveRendering
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             }
         }
     }

@@ -1,11 +1,12 @@
 import QtQuick
 import ResizeNode
 import Theme
+import Settings
 
 ResizeNode {
     id: root
     width: 220
-    height: Math.max(root.getMinHeight(), card.contentHeight)
+    height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
 
     NodeCard {
         id: card
@@ -26,7 +27,7 @@ ResizeNode {
                     text: "输入尺寸"
                     color: Theme.fgDim
                     font.pixelSize: 10
-                    renderType: Text.CurveRendering
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
                 Text {
                     height: 18
@@ -34,7 +35,7 @@ ResizeNode {
                     text: root.inputSizeText
                     color: Theme.fg
                     font.pixelSize: 10
-                    renderType: Text.CurveRendering
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
             }
 
@@ -55,7 +56,7 @@ ResizeNode {
                             text: modelData.t
                             color: root.mode === modelData.m ? "#ffffff" : Theme.fgDim
                             font.pixelSize: 10
-                            renderType: Text.CurveRendering
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -72,7 +73,10 @@ ResizeNode {
 
                 Text {
                     height: 22; verticalAlignment: Text.AlignVCenter
-                    text: "宽"; color: Theme.fg; font.pixelSize: 11; renderType: Text.CurveRendering
+                    text: "宽"
+                    color: Theme.fg
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
                 Rectangle {
                     width: 50; height: 22; radius: 5
@@ -87,6 +91,7 @@ ResizeNode {
                         color: Theme.fg
                         font.pixelSize: 11
                         selectByMouse: true
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "" + root.outWidth
                         onEditingFinished: {
                             var v = parseInt(text, 10)
@@ -103,7 +108,10 @@ ResizeNode {
 
                 Text {
                     height: 22; verticalAlignment: Text.AlignVCenter
-                    text: "高"; color: Theme.fg; font.pixelSize: 11; renderType: Text.CurveRendering
+                    text: "高"
+                    color: Theme.fg
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
                 Rectangle {
                     width: 50; height: 22; radius: 5
@@ -118,6 +126,7 @@ ResizeNode {
                         color: Theme.fg
                         font.pixelSize: 11
                         selectByMouse: true
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "" + root.outHeight
                         onEditingFinished: {
                             var v = parseInt(text, 10)
@@ -139,7 +148,10 @@ ResizeNode {
 
                 Text {
                     height: 22; verticalAlignment: Text.AlignVCenter
-                    text: "比例"; color: Theme.fg; font.pixelSize: 11; renderType: Text.CurveRendering
+                    text: "比例"
+                    color: Theme.fg
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
                 Rectangle {
                     width: 58; height: 22; radius: 5
@@ -154,6 +166,7 @@ ResizeNode {
                         color: Theme.fg
                         font.pixelSize: 11
                         selectByMouse: true
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "" + root.percent
                         onEditingFinished: {
                             var v = parseInt(text, 10)
@@ -169,7 +182,10 @@ ResizeNode {
                 }
                 Text {
                     height: 22; verticalAlignment: Text.AlignVCenter
-                    text: "%"; color: Theme.fgDim; font.pixelSize: 11; renderType: Text.CurveRendering
+                    text: "%"
+                    color: Theme.fgDim
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 }
             }
         }

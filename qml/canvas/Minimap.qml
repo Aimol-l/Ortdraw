@@ -1,6 +1,7 @@
 import QtQuick
 import Theme
 import NodeManager
+import Settings
 
 Rectangle {
     id: mini
@@ -20,6 +21,20 @@ Rectangle {
     function jumpFrom(px, py) {
         const m = mini._map
         mini.jumpTo((px - m.ox) / m.s, (py - m.oy) / m.s)
+    }
+
+    function requestRepaint() {
+        if (Settings.minimapFps > 0)
+            throttle.restart()
+        else
+            cv.requestPaint()
+    }
+
+    Timer {
+        id: throttle
+        interval: Settings.minimapFps > 0 ? 1000 / Settings.minimapFps : 0
+        repeat: false
+        onTriggered: cv.requestPaint()
     }
 
     Canvas {
@@ -70,12 +85,12 @@ Rectangle {
         onPressed: (e) => mini.jumpFrom(e.x, e.y)
         onPositionChanged: (e) => { if (pressed) mini.jumpFrom(e.x, e.y) }
     }
-    Connections { target: NodeManager; function onGraphChanged(){ cv.requestPaint() } }
+    Connections { target: NodeManager; function onGraphChanged(){ mini.requestRepaint() } }
     Connections { target: Theme;     function onChanged(){ cv.requestPaint() } }
-    onZoomChanged: cv.requestPaint()
-    onPanXChanged: cv.requestPaint()
-    onPanYChanged: cv.requestPaint()
-    onViewWidthChanged: cv.requestPaint()
-    onViewHeightChanged: cv.requestPaint()
+    onZoomChanged: mini.requestRepaint()
+    onPanXChanged: mini.requestRepaint()
+    onPanYChanged: mini.requestRepaint()
+    onViewWidthChanged: mini.requestRepaint()
+    onViewHeightChanged: mini.requestRepaint()
     Component.onCompleted: cv.requestPaint()
 }

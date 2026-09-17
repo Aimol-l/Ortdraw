@@ -1,5 +1,6 @@
 #include "NodeManager.h"
 #include "PaintBoard.h"
+#include "Settings.h"
 #include "Theme.h"
 #include "node/ImageLoad.hpp"
 #include "node/ImageShow.hpp"
@@ -36,6 +37,7 @@ int main(int argc, char *argv[]){
     qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");
     qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
+    qmlRegisterSingletonInstance("Settings", 1, 0, "Settings", Settings::instance());
     qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());
     qmlRegisterSingletonType(QUrl("qrc:/NodeCatalog.qml"), "NodeCatalog", 1, 0, "NodeCatalog");
     qmlRegisterSingletonType(QUrl("qrc:/UiBus.qml"), "UiBus", 1, 0, "UiBus");

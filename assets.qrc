@@ -20,5 +20,18 @@
         <file alias="NodePalette.qml">qml/palette/NodePalette.qml</file>
         <file alias="PaletteItem.qml">qml/palette/PaletteItem.qml</file>
         <file alias="Inspector.qml">qml/inspector/Inspector.qml</file>
+        <file alias="settings/SettingsDialog.qml">qml/settings/SettingsDialog.qml</file>
+        <file alias="settings/controls/GroupTitle.qml">qml/settings/controls/GroupTitle.qml</file>
+        <file alias="settings/controls/SettingRow.qml">qml/settings/controls/SettingRow.qml</file>
+        <file alias="settings/controls/SegControl.qml">qml/settings/controls/SegControl.qml</file>
+        <file alias="settings/controls/SwitchControl.qml">qml/settings/controls/SwitchControl.qml</file>
+        <file alias="settings/controls/SliderControl.qml">qml/settings/controls/SliderControl.qml</file>
+        <file alias="settings/controls/SelectControl.qml">qml/settings/controls/SelectControl.qml</file>
+        <file alias="settings/controls/SwatchControl.qml">qml/settings/controls/SwatchControl.qml</file>
+        <file alias="settings/controls/LinkModeControl.qml">qml/settings/controls/LinkModeControl.qml</file>
+        <file alias="settings/controls/KeyRow.qml">qml/settings/controls/KeyRow.qml</file>
+        <file alias="settings/controls/Badge.qml">qml/settings/controls/Badge.qml</file>
+        <file alias="settings/controls/GhostButton.qml">qml/settings/controls/GhostButton.qml</file>
+        <file alias="settings/controls/PrimaryButton.qml">qml/settings/controls/PrimaryButton.qml</file>
     </qresource>
 </RCC>

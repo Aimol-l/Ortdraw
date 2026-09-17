@@ -7,4 +7,5 @@ QtObject {
 
     signal contextMenuRequested(real x, real y, string kind, var data)
     signal previewRequested(url src)
+    signal settingsRequested()
 }

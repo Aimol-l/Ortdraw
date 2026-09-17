@@ -1,10 +1,11 @@
 import QtQuick
 import ConvNode
+import Settings
 
 ConvNode {
     id: root
     width: 220
-    height: Math.max(root.getMinHeight(), card.contentHeight)
+    height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
     NodeCard {
         id: card
         anchors.fill: parent

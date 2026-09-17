@@ -1,5 +1,6 @@
 set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/Theme.h
+    ${PROJECT_SOURCE_DIR}/include/Settings.h
     ${PROJECT_SOURCE_DIR}/include/NodeManager.h
     ${PROJECT_SOURCE_DIR}/include/PaintBoard.h
     ${PROJECT_SOURCE_DIR}/include/node/BaseNode.hpp

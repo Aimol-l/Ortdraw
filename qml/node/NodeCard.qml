@@ -3,6 +3,7 @@ import QtQuick
 import Theme
 import NodeManager
 import UiBus
+import Settings
 
 Item {
     id: card
@@ -26,7 +27,7 @@ Item {
     readonly property real contentHeight: headHeight + bodyPadding
         + portRows * rowHeight
         + (extraHost.height > 0 ? extraHost.height + 8 : 0)
-        + (previewBox.visible ? previewBox.height + 8 : 0)
+        + (previewBox.visible ? Settings.previewHeight + 8 : 0)
         + 12
 
     readonly property int headHeight: 46
@@ -40,7 +41,7 @@ Item {
         anchors.centerIn: bg
         width: bg.width + 8
         height: bg.height + 8
-        radius: 14
+        radius: Settings.cornerRadius + 4
         color: "transparent"
         border.width: 1
         border.color: Theme.blue
@@ -54,7 +55,7 @@ Item {
         y: 5
         width: card.width
         height: card.height
-        radius: 12
+        radius: Settings.cornerRadius + 2
         color: Qt.rgba(0, 0, 0, Theme.dark ? 0.20 : 0.055)
     }
 
@@ -65,14 +66,14 @@ Item {
         y: 3
         width: card.width
         height: card.height
-        radius: 11
+        radius: Settings.cornerRadius + 1
         color: Qt.rgba(0, 0, 0, Theme.dark ? 0.30 : 0.08)
     }
 
     Rectangle {
         id: bg
         anchors.fill: parent
-        radius: 10
+        radius: Settings.cornerRadius
         color: Theme.bgElev
         border.width: card.selected ? 2 : 1
         border.color: card.selected ? Theme.blue : Theme.border
@@ -82,8 +83,8 @@ Item {
             width: parent.width
             height: card.headHeight
             color: "transparent"
-            topLeftRadius: 9
-            topRightRadius: 9
+            topLeftRadius: Math.max(0, Settings.cornerRadius - 1)
+            topRightRadius: Math.max(0, Settings.cornerRadius - 1)
             gradient: Gradient {
                 GradientStop {
                     position: 0.0
@@ -123,7 +124,7 @@ Item {
                 color: Theme.fgBright
                 font.pixelSize: 14
                 font.bold: true
-                renderType: Text.CurveRendering
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 elide: Text.ElideRight
             }
 
@@ -136,7 +137,7 @@ Item {
                 color: Theme.fgDim
                 font.family: "monospace"
                 font.pixelSize: 11
-                renderType: Text.CurveRendering
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             }
 
             Rectangle {
@@ -191,8 +192,10 @@ Item {
                         return
                     if (mouse.button === Qt.RightButton) {
                         NodeManager.clickNodeEvent(card.node.uuid, false)
-                        var g = card.mapToItem(null, mouse.x, mouse.y)
-                        UiBus.contextMenuRequested(g.x, g.y, "node", { uid: card.node.uuid })
+                        if (Settings.contextMenu) {
+                            var g = card.mapToItem(null, mouse.x, mouse.y)
+                            UiBus.contextMenuRequested(g.x, g.y, "node", { uid: card.node.uuid })
+                        }
                         return
                     }
                     NodeManager.clickNodeEvent(card.node.uuid,
@@ -281,11 +284,12 @@ Item {
                             text: rowItem.inPort ? rowItem.inPort.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
-                            renderType: Text.CurveRendering
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         }
 
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: Settings.showPortTypeTags
                             height: 16
                             width: inTag.implicitWidth + 10
                             color: Theme.bg
@@ -300,7 +304,7 @@ Item {
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
-                                renderType: Text.CurveRendering
+                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             }
                         }
                     }
@@ -315,6 +319,7 @@ Item {
 
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
+                            visible: Settings.showPortTypeTags
                             height: 16
                             width: outTag.implicitWidth + 10
                             color: Theme.bg
@@ -329,7 +334,7 @@ Item {
                                 color: Theme.fgDim
                                 font.family: "monospace"
                                 font.pixelSize: 9
-                                renderType: Text.CurveRendering
+                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             }
                         }
 
@@ -338,7 +343,7 @@ Item {
                             text: rowItem.outPort ? rowItem.outPort.name : ""
                             color: Theme.fg
                             font.pixelSize: 11
-                            renderType: Text.CurveRendering
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         }
                     }
 
@@ -407,15 +412,15 @@ Item {
         // 输出预览缩略图（暂时用占位图）；点击放大查看
         Rectangle {
             id: previewBox
-            visible: card.previewSource != ""
+            visible: card.previewSource !== "" && Settings.showPreview
             anchors.top: extraHost.bottom
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: 10
             anchors.rightMargin: 10
             anchors.topMargin: 8
-            height: 88
-            radius: 6
+            height: Settings.previewHeight
+            radius: Math.max(0, Settings.cornerRadius - 4)
             color: Theme.bg
             border.width: 1
             border.color: Theme.borderSoft

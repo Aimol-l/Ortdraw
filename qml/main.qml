@@ -3,6 +3,7 @@ import QtQuick.Window
 import QtQuick.Controls as Controls
 import Theme
 import NodeManager
+import "settings"
 
 Controls.ApplicationWindow {
     id: win
@@ -49,12 +50,10 @@ Controls.ApplicationWindow {
         TopBar {
             id: topbar
             width: parent.width
-            gridVisible: canvas.gridVisible
             onUndoRequested: NodeManager.undo()
             onRedoRequested: NodeManager.redo()
             onFitRequested: canvas.fitView()
             onClearRequested: NodeManager.clearGraph()
-            onGridToggled: canvas.gridVisible = !canvas.gridVisible
         }
 
         Item {
@@ -179,8 +178,11 @@ Controls.ApplicationWindow {
 
     ImageViewer { id: viewer }
 
+    SettingsDialog { id: settingsDialog }
+
     Shortcut {
         sequence: "Delete"
+        enabled: !settingsDialog.visible
         onActivated: {
             NodeManager.removeNode()
             NodeManager.removeEdge()
@@ -189,27 +191,31 @@ Controls.ApplicationWindow {
 
     Shortcut {
         sequence: "Ctrl+Z"
+        enabled: !settingsDialog.visible
         onActivated: NodeManager.undo()
     }
 
     Shortcut {
         sequence: "Ctrl+Y"
+        enabled: !settingsDialog.visible
         onActivated: NodeManager.redo()
     }
 
     Shortcut {
         sequence: "Ctrl+D"
-        enabled: NodeManager.selectedNode !== null
+        enabled: NodeManager.selectedNode !== null && !settingsDialog.visible
         onActivated: ctx.cloneNode(NodeManager.selectedNode.uuid)
     }
 
     Shortcut {
         sequence: "Ctrl+0"
+        enabled: !settingsDialog.visible
         onActivated: canvas.fitView()
     }
 
     Shortcut {
         sequence: "Escape"
+        enabled: !settingsDialog.visible
         onActivated: NodeManager.mousePressEvent(Qt.point(-100000, -100000), false)
     }
 }

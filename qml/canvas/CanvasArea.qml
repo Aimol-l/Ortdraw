@@ -3,6 +3,7 @@ import PaintBoard
 import NodeManager
 import Theme
 import UiBus
+import Settings
 
 Item {
     id: area
@@ -13,7 +14,6 @@ Item {
     property real zoom: 1.0
     property real panX: 0
     property real panY: 0
-    property bool gridVisible: true
 
     Keys.onPressed: (e) => {
         if (e.key === Qt.Key_Space && !e.isAutoRepeat) {
@@ -45,12 +45,12 @@ Item {
     Canvas {
         id: grid
         anchors.fill: parent
-        visible: area.gridVisible
+        visible: Settings.showGrid
 
         onPaint: {
             var ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            var spacing = 26
+            var spacing = Settings.gridSpacing
             var ox = ((area.panX % spacing) + spacing) % spacing
             var oy = ((area.panY % spacing) + spacing) % spacing
             ctx.fillStyle = Theme.grid
@@ -69,6 +69,12 @@ Item {
         }
 
         Connections {
+            target: Settings
+            function onShowGridChanged() { grid.requestPaint() }
+            function onGridSpacingChanged() { grid.requestPaint() }
+        }
+
+        Connections {
             target: area
             function onPanXChanged() { grid.requestPaint() }
             function onPanYChanged() { grid.requestPaint() }
@@ -83,8 +89,9 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true
-        cursorShape: UiBus.spaceHeld ? (input.panning ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.ArrowCursor
+        cursorShape: input.panMode ? (input.panning ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.ArrowCursor
 
+        property bool panMode: UiBus.spaceHeld || !Settings.spaceToPan
         property bool panning: false
         property real lastX: 0
         property real lastY: 0
@@ -94,16 +101,18 @@ Item {
             var p = area.toWorld(mouse.x, mouse.y)
             NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
             if (mouse.button === Qt.RightButton) {
-                var kind = "canvas"
-                if (NodeManager.selectedNode)
-                    kind = "node"
-                else if (NodeManager.selectedEdge.from !== undefined)
-                    kind = "edge"
-                var g = area.mapToItem(null, mouse.x, mouse.y)
-                UiBus.contextMenuRequested(g.x, g.y, kind, {})
+                if (Settings.contextMenu) {
+                    var kind = "canvas"
+                    if (NodeManager.selectedNode)
+                        kind = "node"
+                    else if (NodeManager.selectedEdge.from !== undefined)
+                        kind = "edge"
+                    var g = area.mapToItem(null, mouse.x, mouse.y)
+                    UiBus.contextMenuRequested(g.x, g.y, kind, {})
+                }
                 return
             }
-            if (mouse.button === Qt.LeftButton && UiBus.spaceHeld) {
+            if (mouse.button === Qt.LeftButton && input.panMode) {
                 panning = true
                 lastX = mouse.x
                 lastY = mouse.y
@@ -126,7 +135,7 @@ Item {
         onWheel: (wheel) => {
             var old = area.zoom
             var factor = wheel.angleDelta.y > 0 ? 1.1 : 1 / 1.1
-            var nz = Math.min(2.4, Math.max(0.35, old * factor))
+            var nz = Math.min(Settings.zoomMax, Math.max(Settings.zoomMin, old * factor))
             if (nz !== old)
                 area.applyZoom(nz, wheel.x, wheel.y)
             wheel.accepted = true
@@ -177,7 +186,7 @@ Item {
     }
 
     function applyZoom(nz, px, py) {
-        nz = Math.min(2.4, Math.max(0.35, nz))
+        nz = Math.min(Settings.zoomMax, Math.max(Settings.zoomMin, nz))
         var old = area.zoom
         if (nz === old)
             return
@@ -206,11 +215,20 @@ Item {
             area.panY = 0
             return
         }
-        const z = Math.min(2.4, Math.max(0.35, Math.min((width - 160) / r.width, (height - 120) / r.height)))
+        const m = Settings.fitMargin
+        const z = Math.min(Settings.zoomMax, Math.max(Settings.zoomMin, Math.min((width - 2 * m) / r.width, (height - 2 * m) / r.height)))
         area.zoom = z
         area.panX = width / 2 - (r.x + r.width / 2) * z
         area.panY = height / 2 - (r.y + r.height / 2) * z
     }
 
-    Component.onCompleted: NodeManager.setPaintBoard(board)
+    Connections {
+        target: Settings
+        function onSnapToGridChanged() { UiBus.snapEnabled = Settings.snapToGrid }
+    }
+
+    Component.onCompleted: {
+        UiBus.snapEnabled = Settings.snapToGrid
+        NodeManager.setPaintBoard(board)
+    }
 }

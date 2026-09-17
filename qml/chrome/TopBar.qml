@@ -1,6 +1,8 @@
 import QtQuick
+import QtQuick.Controls as Controls
 import Theme
 import UiBus
+import Settings
 
 Rectangle {
     id: root
@@ -8,12 +10,9 @@ Rectangle {
     height: 46
     color: Theme.bgPanel
 
-    property bool gridVisible: true
-
     signal undoRequested()
     signal redoRequested()
     signal fitRequested()
-    signal gridToggled()
     signal clearRequested()
 
     Rectangle {
@@ -100,6 +99,10 @@ Rectangle {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (modelData === "编辑")
+                                editMenu.popup()
+                        }
                     }
                 }
             }
@@ -152,19 +155,28 @@ Rectangle {
 
                 TbButton {
                     glyph: "▦"
-                    active: root.gridVisible
-                    onActivated: root.gridToggled()
+                    active: Settings.showGrid
+                    onActivated: Settings.showGrid = !Settings.showGrid
                 }
 
                 TbButton {
                     glyph: "⌗"
-                    active: UiBus.snapEnabled
-                    onActivated: UiBus.snapEnabled = !UiBus.snapEnabled
+                    active: Settings.snapToGrid
+                    onActivated: {
+                        Settings.snapToGrid = !Settings.snapToGrid
+                        UiBus.snapEnabled = Settings.snapToGrid
+                    }
                 }
 
                 TbButton {
                     glyph: Theme.dark ? "☀" : "☾"
                     onActivated: Theme.toggle()
+                }
+
+                TbButton {
+                    glyph: "⚙"
+                    tooltip: "设置"
+                    onActivated: UiBus.settingsRequested()
                 }
             }
         }
@@ -191,11 +203,29 @@ Rectangle {
         }
     }
 
+    Controls.Menu {
+        id: editMenu
+
+        Controls.MenuItem {
+            text: "设置…"
+            onTriggered: UiBus.settingsRequested()
+        }
+
+        background: Rectangle {
+            implicitWidth: 170
+            color: Theme.bgElev
+            border.width: 1
+            border.color: Theme.border
+            radius: 8
+        }
+    }
+
     component TbButton: Rectangle {
         id: tb
 
         property string glyph: ""
         property bool active: false
+        property string tooltip: ""
 
         signal activated()
 
@@ -221,6 +251,28 @@ Rectangle {
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: tb.activated()
+        }
+
+        Rectangle {
+            visible: tb.tooltip !== "" && tbArea.containsMouse
+            z: 100
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.bottom
+            anchors.topMargin: 6
+            width: tbTip.implicitWidth + 16
+            height: 24
+            radius: 5
+            color: Theme.bgElev
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: tbTip
+                anchors.centerIn: parent
+                text: tb.tooltip
+                color: Theme.fg
+                font.pixelSize: 11
+            }
         }
     }
 
