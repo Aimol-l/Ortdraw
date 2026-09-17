@@ -49,6 +49,7 @@ public:
         else
             m_store = std::make_unique<QSettings>(QSettings::IniFormat, QSettings::UserScope,
                                                   QStringLiteral("Ortdraw"), QStringLiteral("Ortdraw"));
+        cleanupLegacyKeys();
         load();
     }
 
@@ -56,7 +57,13 @@ public:
         : QObject(parent)
         , m_store(std::make_unique<QSettings>(iniPath, QSettings::IniFormat)) {
         load();
+        cleanupLegacyKeys();
     }
+    // 清理已废弃的历史键
+    void cleanupLegacyKeys() {
+        m_store->remove("canvas/showGrid");   // 已由 canvas/background 取代
+    }
+
 
     ~Settings() override { m_store->sync(); }
 
