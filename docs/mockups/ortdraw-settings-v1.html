@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ortdraw · 设置（设计原型）</title>
+<style>
+  :root, [data-theme="light"]{
+    --bg:#eef0f7; --bg-app:#e3e5ef; --bg-panel:#ffffff; --bg-elev:#ffffff;
+    --bg-hover:#e9ebf6; --border:#cfd3e6; --border-soft:#e4e6f2;
+    --fg:#4c5180; --fg-dim:#9095b8; --fg-bright:#1f2335;
+    --blue:#2e7de9; --cyan:#007197; --green:#587539; --yellow:#8c6c3e;
+    --orange:#b15c00; --magenta:#9854f1; --red:#f52a65;
+    --wire:#b9bddb; --grid:#d6d9e8;
+    --cat-input:#007197; --cat-process:#2e7de9; --cat-math:#b15c00; --cat-output:#9854f1;
+    --shadow:0 24px 60px rgba(30,35,60,.28);
+    --overlay:rgba(30,35,60,.35);
+  }
+  [data-theme="dark"]{
+    --bg:#1a1b26; --bg-app:#16161e; --bg-panel:#16161e; --bg-elev:#1f2335;
+    --bg-hover:#292e42; --border:#292e42; --border-soft:#222436;
+    --fg:#a9b1d6; --fg-dim:#565f89; --fg-bright:#c0caf5;
+    --blue:#7aa2f7; --cyan:#7dcfff; --green:#9ece6a; --yellow:#e0af68;
+    --orange:#ff9e64; --magenta:#bb9af7; --red:#f7768e;
+    --wire:#3b4261; --grid:#292e42;
+    --cat-input:#0db9d7; --cat-process:#7aa2f7; --cat-math:#ff9e64; --cat-output:#bb9af7;
+    --shadow:0 26px 70px rgba(0,0,0,.6);
+    --overlay:rgba(0,0,0,.5);
+  }
+  :root{ --radius:12px; --font:"Inter","Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace; }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{font-family:var(--font);font-size:13px;color:var(--fg);background:var(--bg-app);overflow:hidden}
+  .swatch{width:9px;height:22px;border-radius:3px;flex:none}
+
+  /* ===== 背景：简化编辑器 ===== */
+  .app{position:absolute;inset:0;display:grid;grid-template-rows:46px 1fr 30px;filter:saturate(.9)}
+  .topbar{display:flex;align-items:center;gap:14px;padding:0 14px;background:var(--bg-panel);border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;color:var(--fg-bright)}
+  .logo{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,var(--blue),var(--magenta));
+    display:grid;place-items:center;color:#fff;font-weight:800;font-size:13px}
+  .muted{color:var(--fg-dim)}
+  .body{display:grid;grid-template-columns:230px 1fr 260px;min-height:0}
+  .panel{background:var(--bg-panel)}
+  .panel.l{border-right:1px solid var(--border)} .panel.r{border-left:1px solid var(--border)}
+  .stage{position:relative;background:var(--bg);overflow:hidden}
+  .stage::before{content:"";position:absolute;inset:0;background-image:radial-gradient(var(--grid) 1.2px,transparent 1.2px);
+    background-size:26px 26px;opacity:.8}
+  .ghost-node{position:absolute;width:180px;height:110px;border-radius:10px;background:var(--bg-elev);
+    border:1px solid var(--border);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+  .statusbar{display:flex;align-items:center;gap:16px;padding:0 14px;border-top:1px solid var(--border);
+    background:var(--bg-panel);color:var(--fg-dim);font-size:11.5px}
+
+  /* ===== 遮罩 + 对话框 ===== */
+  .overlay{position:absolute;inset:0;background:var(--overlay);display:grid;place-items:center;z-index:10}
+  .dialog{width:900px;height:620px;background:var(--bg-panel);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:var(--shadow);display:grid;grid-template-rows:56px 1fr 60px;overflow:hidden}
+  .dlg-head{display:flex;align-items:center;gap:12px;padding:0 18px;border-bottom:1px solid var(--border-soft)}
+  .dlg-head h1{font-size:15px;margin:0;color:var(--fg-bright);font-weight:700}
+  .dlg-head .sub{color:var(--fg-dim);font-size:11.5px}
+  .search{margin-left:auto;position:relative}
+  .search input{width:240px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);
+    padding:7px 10px 7px 30px;font-family:inherit;font-size:12.5px;outline:none}
+  .search input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,125,233,.14)}
+  .search::before{content:"⌕";position:absolute;left:10px;top:6px;color:var(--fg-dim)}
+  .icon-btn{width:28px;height:28px;border-radius:7px;border:1px solid transparent;background:none;color:var(--fg-dim);
+    cursor:pointer;font-size:15px}
+  .icon-btn:hover{background:var(--bg-hover);color:var(--fg-bright)}
+
+  .dlg-body{display:grid;grid-template-columns:210px 1fr;min-height:0}
+  .nav{border-right:1px solid var(--border-soft);padding:10px;overflow:auto}
+  .nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 11px;border-radius:8px;
+    border:none;background:none;color:var(--fg);font-family:inherit;font-size:12.5px;cursor:pointer;margin-bottom:3px}
+  .nav button:hover{background:var(--bg-hover)}
+  .nav button.active{background:rgba(46,125,233,.12);color:var(--blue);font-weight:600}
+  .nav .ic{width:16px;text-align:center;opacity:.85}
+
+  .content{overflow:auto;padding:8px 20px 24px}
+  .group-title{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim);font-weight:700;
+    margin:18px 0 6px;padding-bottom:7px;border-bottom:1px solid var(--border-soft)}
+  .row{display:flex;align-items:center;gap:16px;padding:11px 4px;border-bottom:1px solid var(--border-soft)}
+  .row:last-child{border-bottom:none}
+  .row .label{flex:1;min-width:0}
+  .row .label b{display:block;color:var(--fg-bright);font-weight:600;font-size:12.5px}
+  .row .label span{display:block;color:var(--fg-dim);font-size:11.5px;margin-top:2px;line-height:1.5}
+  .control{flex:none;display:flex;align-items:center;gap:10px}
+
+  /* 控件 */
+  .seg{display:flex;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:2px}
+  .seg button{border:none;background:none;color:var(--fg-dim);font-family:inherit;font-size:12px;padding:5px 12px;
+    border-radius:6px;cursor:pointer;transition:.14s}
+  .seg button.active{background:var(--blue);color:#fff}
+  .switch{width:40px;height:22px;border-radius:11px;border:1px solid var(--border);background:var(--bg);position:relative;cursor:pointer;transition:.16s}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--fg-dim);transition:.16s}
+  .switch.on{background:var(--blue);border-color:var(--blue)}
+  .switch.on::after{left:20px;background:#fff}
+  .slider{width:150px;height:22px;display:flex;align-items:center;gap:8px}
+  .slider input[type=range]{width:110px;accent-color:var(--blue)}
+  .slider .val{width:34px;text-align:right;color:var(--fg);font-variant-numeric:tabular-nums}
+  select{background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--fg);padding:6px 9px;
+    font-family:inherit;font-size:12px;outline:none}
+  .swatches{display:flex;gap:7px}
+  .swatches i{width:22px;height:22px;border-radius:6px;border:2px solid transparent;cursor:pointer}
+  .swatches i.active{border-color:var(--fg-bright);box-shadow:0 0 0 2px var(--bg-panel) inset}
+  .badge{font-size:10px;padding:1px 7px;border-radius:5px;background:var(--bg-hover);color:var(--fg-dim);font-family:var(--mono)}
+
+  /* 连线模式预览 */
+  .linkpreview{display:flex;gap:12px}
+  .lpm{width:84px;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--bg);cursor:pointer;text-align:center}
+  .lpm.active{border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,125,233,.12)}
+  .lpm svg{display:block;width:100%;height:44px}
+  .lpm small{color:var(--fg-dim);font-size:10.5px}
+  .lpm.active small{color:var(--blue)}
+
+  /* 快捷键表 */
+  .keys{display:grid;grid-template-columns:1fr 1fr;gap:6px 26px}
+  .keyrow{display:flex;align-items:center;justify-content:space-between;padding:6px 2px;border-bottom:1px solid var(--border-soft)}
+  .keyrow span{color:var(--fg)}
+  kbd{font-family:var(--mono);font-size:10.5px;background:var(--bg);border:1px solid var(--border);
+    border-bottom-width:2px;border-radius:5px;padding:2px 6px;color:var(--fg-dim)}
+
+  .dlg-foot{display:flex;align-items:center;gap:10px;padding:0 18px;border-top:1px solid var(--border-soft)}
+  .dlg-foot .hint{color:var(--fg-dim);font-size:11.5px}
+  .btn{padding:8px 16px;border-radius:8px;font-family:inherit;font-size:12.5px;cursor:pointer;border:1px solid transparent;font-weight:600}
+  .btn.ghost{background:var(--bg);border-color:var(--border);color:var(--fg)}
+  .btn.ghost:hover{border-color:var(--blue);color:var(--fg-bright)}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .spacer{flex:1}
+  .section{display:none}
+  .section.active{display:block}
+  .empty{color:var(--fg-dim);text-align:center;padding:40px 0}
+</style>
+</head>
+<body>
+
+<!-- 背景：简化编辑器 -->
+<div class="app" aria-hidden="true">
+  <div class="topbar">
+    <div class="brand"><div class="logo">O</div> Ortdraw <span class="muted" style="font-weight:500">· 节点式图像处理</span></div>
+    <div class="muted" style="margin-left:10px">文件　编辑　视图　运行　帮助</div>
+  </div>
+  <div class="body">
+    <div class="panel l"></div>
+    <div class="stage">
+      <div class="ghost-node" style="left:80px;top:60px"></div>
+      <div class="ghost-node" style="left:340px;top:150px;width:200px;height:150px"></div>
+    </div>
+    <div class="panel r"></div>
+  </div>
+  <div class="statusbar"><span>就绪</span><span>节点 2</span><span>连线 1</span></div>
+</div>
+
+<!-- 设置对话框 -->
+<div class="overlay">
+  <div class="dialog" role="dialog" aria-label="设置">
+    <div class="dlg-head">
+      <h1>设置</h1>
+      <span class="sub">Ortdraw 偏好设置</span>
+      <div class="search"><input id="search" placeholder="搜索设置项…"></div>
+      <button class="icon-btn" id="themeBtn" title="切换亮/暗">☾</button>
+      <button class="icon-btn" onclick="document.querySelector('.overlay').style.display='none'" title="关闭">×</button>
+    </div>
+
+    <div class="dlg-body">
+      <nav class="nav" id="nav">
+        <button data-sec="appearance" class="active"><span class="ic">◐</span>外观</button>
+        <button data-sec="canvas"><span class="ic">▦</span>画布</button>
+        <button data-sec="nodes"><span class="ic">◇</span>节点</button>
+        <button data-sec="links"><span class="ic">⌇</span>连线</button>
+        <button data-sec="interaction"><span class="ic">☞</span>交互</button>
+        <button data-sec="perf"><span class="ic">⚡</span>性能</button>
+        <button data-sec="keys"><span class="ic">⌨</span>快捷键</button>
+        <button data-sec="about"><span class="ic">ⓘ</span>关于</button>
+      </nav>
+
+      <div class="content" id="content">
+
+        <!-- 外观 -->
+        <section class="section active" data-sec="appearance">
+          <div class="group-title">主题</div>
+          <div class="row" data-label="主题 亮色 暗色">
+            <div class="label"><b>配色主题</b><span>亮色为默认；暗色为 Tokyo Night</span></div>
+            <div class="control seg" data-seg="theme">
+              <button data-val="light" class="active">亮色</button>
+              <button data-val="dark">暗色</button>
+            </div>
+          </div>
+          <div class="row" data-label="强调色 主题色">
+            <div class="label"><b>强调色</b><span>选中、连线、按钮等的强调色</span></div>
+            <div class="control swatches" id="accent">
+              <i style="background:#2e7de9" data-c="#2e7de9" class="active"></i>
+              <i style="background:#9854f1" data-c="#9854f1"></i>
+              <i style="background:#007197" data-c="#007197"></i>
+              <i style="background:#587539" data-c="#587539"></i>
+              <i style="background:#b15c00" data-c="#b15c00"></i>
+            </div>
+          </div>
+          <div class="group-title">界面</div>
+          <div class="row" data-label="界面密度 紧凑 标准 宽松">
+            <div class="label"><b>界面密度</b><span>调整间距与控件大小</span></div>
+            <div class="control seg" data-seg>
+              <button>紧凑</button><button class="active">标准</button><button>宽松</button>
+            </div>
+          </div>
+          <div class="row" data-label="语言 简体中文 English">
+            <div class="label"><b>语言</b><span>界面显示语言</span></div>
+            <div class="control"><select><option>简体中文</option><option>English</option></select></div>
+          </div>
+        </section>
+
+        <!-- 画布 -->
+        <section class="section" data-sec="canvas">
+          <div class="group-title">网格</div>
+          <div class="row" data-label="显示网格">
+            <div class="label"><b>显示网格</b><span>在画布上绘制点阵背景</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="网格吸附 对齐">
+            <div class="label"><b>网格吸附</b><span>拖动节点时对齐到 8px 网格</span></div>
+            <div class="control"><div class="switch" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="网格间距">
+            <div class="label"><b>网格间距</b><span>点阵间距（像素）</span></div>
+            <div class="control slider"><input type="range" min="10" max="60" value="26"><span class="val">26</span></div>
+          </div>
+          <div class="group-title">视图</div>
+          <div class="row" data-label="空格拖动平移">
+            <div class="label"><b>按住空格拖动平移画布</b><span>关闭后可直接拖空白平移</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="适应视图边距">
+            <div class="label"><b>适应视图边距</b><span>适应视图时四周保留的空白</span></div>
+            <div class="control slider"><input type="range" min="20" max="200" value="80"><span class="val">80</span></div>
+          </div>
+          <div class="row" data-label="缩放范围">
+            <div class="label"><b>缩放范围</b><span>最小 / 最大缩放比例</span></div>
+            <div class="control"><select><option>35% – 240%</option><option>10% – 400%</option></select></div>
+          </div>
+        </section>
+
+        <!-- 节点 -->
+        <section class="section" data-sec="nodes">
+          <div class="group-title">显示</div>
+          <div class="row" data-label="显示预览缩略图">
+            <div class="label"><b>显示预览缩略图</b><span>在节点内显示输出预览（可点击放大）</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="缩略图高度">
+            <div class="label"><b>缩略图高度</b><span>节点内预览缩略图的高度</span></div>
+            <div class="control slider"><input type="range" min="60" max="160" value="88"><span class="val">88</span></div>
+          </div>
+          <div class="row" data-label="端口类型标签">
+            <div class="label"><b>显示端口类型标签</b><span>在端口名旁显示 Image / Int 等类型</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="节点自动高度">
+            <div class="label"><b>节点高度自适应内容</b><span>根据端口与参数自动调整高度</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="group-title">文字与外观</div>
+          <div class="row" data-label="文字渲染 曲线 原生">
+            <div class="label"><b>文字渲染方式</b><span>曲线渲染缩放不糊；原生渲染更锐利</span></div>
+            <div class="control seg" data-seg>
+              <button class="active">曲线</button><button>原生</button>
+            </div>
+          </div>
+          <div class="row" data-label="节点圆角">
+            <div class="label"><b>节点圆角</b><span>节点卡片圆角半径</span></div>
+            <div class="control slider"><input type="range" min="0" max="20" value="10"><span class="val">10</span></div>
+          </div>
+        </section>
+
+        <!-- 连线 -->
+        <section class="section" data-sec="links">
+          <div class="group-title">渲染</div>
+          <div class="row" data-label="连线渲染模式 Spline Linear Straight">
+            <div class="label"><b>连线渲染模式</b><span>与 ComfyUI 一致：Spline 平滑 / Linear 圆角折线 / Straight 直线</span></div>
+            <div class="control linkpreview" id="linkmode">
+              <div class="lpm active" data-mode="spline">
+                <svg viewBox="0 0 80 44"><path d="M6 12 H22 C36 12 44 32 58 32 H74" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round"/></svg>
+                <small>Spline</small>
+              </div>
+              <div class="lpm" data-mode="linear">
+                <svg viewBox="0 0 80 44"><path d="M6 12 H30 Q36 12 36 20 V26 Q36 32 42 32 H74" fill="none" stroke="var(--wire)" stroke-width="2" stroke-linecap="round"/></svg>
+                <small>Linear</small>
+              </div>
+              <div class="lpm" data-mode="straight">
+                <svg viewBox="0 0 80 44"><path d="M6 12 L74 32" fill="none" stroke="var(--wire)" stroke-width="2" stroke-linecap="round"/></svg>
+                <small>Straight</small>
+              </div>
+            </div>
+          </div>
+          <div class="row" data-label="连线线宽">
+            <div class="label"><b>连线线宽</b><span>连线描边宽度</span></div>
+            <div class="control slider"><input type="range" min="1" max="5" value="2"><span class="val">2</span></div>
+          </div>
+          <div class="group-title">选中与提示</div>
+          <div class="row" data-label="中点显示 选中 悬停 始终 从不">
+            <div class="label"><b>连线中点显示</b><span>控制中点圆点何时显示</span></div>
+            <div class="control seg" data-seg>
+              <button class="active">选中</button><button>悬停</button><button>始终</button><button>从不</button>
+            </div>
+          </div>
+          <div class="row" data-label="悬停高亮">
+            <div class="label"><b>悬停高亮连线</b><span>鼠标悬停时高亮所在连线</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+        </section>
+
+        <!-- 交互 -->
+        <section class="section" data-sec="interaction">
+          <div class="group-title">选择与编辑</div>
+          <div class="row" data-label="Ctrl 点击多选">
+            <div class="label"><b>Ctrl + 点击多选节点</b><span>按住 Ctrl 点击可多选节点</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="删除确认">
+            <div class="label"><b>删除前确认</b><span>删除节点时弹出确认</span></div>
+            <div class="control"><div class="switch" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="右键菜单">
+            <div class="label"><b>启用右键菜单</b><span>在节点 / 连线 / 画布上右键打开菜单</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="group-title">连接</div>
+          <div class="row" data-label="连线方式">
+            <div class="label"><b>连线方式</b><span>点击端口依次连接，或拖拽连接</span></div>
+            <div class="control seg" data-seg>
+              <button class="active">点击</button><button>拖拽</button>
+            </div>
+          </div>
+          <div class="row" data-label="自动断开">
+            <div class="label"><b>连接时自动断开旧连线</b><span>输入端口已有连线时自动替换</span></div>
+            <div class="control"><div class="switch" data-toggle></div></div>
+          </div>
+        </section>
+
+        <!-- 性能 -->
+        <section class="section" data-sec="perf">
+          <div class="group-title">渲染</div>
+          <div class="row" data-label="Minimap 刷新">
+            <div class="label"><b>Minimap 刷新频率上限</b><span>拖动时限制重绘频率</span></div>
+            <div class="control"><select><option>30 FPS</option><option>60 FPS</option><option>不限制</option></select></div>
+          </div>
+          <div class="row" data-label="异步图像加载">
+            <div class="label"><b>异步加载图像</b><span>后台线程加载图片，避免卡顿</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+          <div class="row" data-label="抗锯齿">
+            <div class="label"><b>画布抗锯齿</b><span>平滑渲染连线与节点边缘</span></div>
+            <div class="control"><div class="switch on" data-toggle></div></div>
+          </div>
+        </section>
+
+        <!-- 快捷键 -->
+        <section class="section" data-sec="keys">
+          <div class="group-title">编辑器快捷键</div>
+          <div class="keys">
+            <div class="keyrow"><span>删除选中节点 / 连线</span><kbd>Delete</kbd></div>
+            <div class="keyrow"><span>撤销</span><kbd>Ctrl + Z</kbd></div>
+            <div class="keyrow"><span>重做</span><kbd>Ctrl + Y</kbd></div>
+            <div class="keyrow"><span>复制选中节点</span><kbd>Ctrl + D</kbd></div>
+            <div class="keyrow"><span>适应视图</span><kbd>Ctrl + 0</kbd></div>
+            <div class="keyrow"><span>平移画布</span><kbd>按住空格</kbd></div>
+            <div class="keyrow"><span>多选节点</span><kbd>Ctrl + 点击</kbd></div>
+            <div class="keyrow"><span>关闭菜单 / 取消连线</span><kbd>Esc</kbd></div>
+          </div>
+          <div class="group-title">文件</div>
+          <div class="keys">
+            <div class="keyrow"><span>保存图</span><kbd>Ctrl + S</kbd></div>
+            <div class="keyrow"><span>打开图</span><kbd>Ctrl + O</kbd></div>
+            <div class="keyrow"><span>新建图</span><kbd>Ctrl + N</kbd></div>
+          </div>
+        </section>
+
+        <!-- 关于 -->
+        <section class="section" data-sec="about">
+          <div class="group-title">关于 Ortdraw</div>
+          <div class="row"><div class="label"><b>版本</b><span>基于节点的深度学习图像处理工具（原型）</span></div>
+            <div class="control"><span class="badge">v0.2.0</span></div></div>
+          <div class="row"><div class="label"><b>构建依赖</b><span>Qt 6 · OpenCV · C++23</span></div>
+            <div class="control"><span class="badge">Qt 6.11</span><span class="badge">OpenCV 5</span></div></div>
+          <div class="row"><div class="label"><b>规划</b><span>ONNX Runtime 推理节点</span></div>
+            <div class="control"><span class="badge">未接入</span></div></div>
+          <div class="row"><div class="label"><b>开源许可</b><span>第三方组件许可</span></div>
+            <div class="control"><button class="btn ghost">查看许可</button></div></div>
+        </section>
+
+        <div class="empty" id="empty" style="display:none">没有匹配的设置项</div>
+      </div>
+    </div>
+
+    <div class="dlg-foot">
+      <span class="hint">更改会立即生效</span>
+      <div class="spacer"></div>
+      <button class="btn ghost">恢复默认</button>
+      <button class="btn ghost">取消</button>
+      <button class="btn primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const html = document.documentElement;
+const themeBtn = document.getElementById('themeBtn');
+function setTheme(t){ html.dataset.theme = t; themeBtn.textContent = t==='light' ? '☾' : '☀'; }
+themeBtn.onclick = () => setTheme(html.dataset.theme==='light' ? 'dark' : 'light');
+
+// 分类导航
+const nav = document.getElementById('nav');
+const sections = [...document.querySelectorAll('.section')];
+nav.addEventListener('click', e => {
+  const b = e.target.closest('button[data-sec]');
+  if(!b) return;
+  nav.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  sections.forEach(s=>s.classList.toggle('active', s.dataset.sec===b.dataset.sec));
+  document.getElementById('empty').style.display='none';
+  document.getElementById('search').value = '';
+});
+
+// 搜索过滤
+document.getElementById('search').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  const empty = document.getElementById('empty');
+  if(!q){
+    sections.forEach(s=>s.classList.toggle('active', s.dataset.sec===nav.querySelector('.active').dataset.sec));
+    document.querySelectorAll('.row').forEach(r=>r.style.display='');
+    empty.style.display='none';
+    return;
+  }
+  let any = false;
+  sections.forEach(s=>{
+    let secHit = false;
+    s.querySelectorAll('.row').forEach(r=>{
+      const hay = ((r.dataset.label||'') + ' ' + r.textContent).toLowerCase();
+      const hit = hay.includes(q);
+      r.style.display = hit ? '' : 'none';
+      if(hit){ secHit = true; any = true; }
+    });
+    s.classList.toggle('active', secHit);
+  });
+  empty.style.display = any ? 'none' : 'block';
+});
+
+// 分段控件
+document.querySelectorAll('.seg[data-seg]').forEach(seg=>{
+  seg.addEventListener('click', e=>{
+    const btn = e.target.closest('button'); if(!btn) return;
+    seg.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    if(seg.dataset.seg==='theme') setTheme(btn.dataset.val);
+  });
+});
+
+// 开关
+document.querySelectorAll('[data-toggle]').forEach(sw=>{
+  sw.addEventListener('click', ()=>sw.classList.toggle('on'));
+});
+
+// 滑杆
+document.querySelectorAll('.slider input[type=range]').forEach(r=>{
+  const val = r.parentElement.querySelector('.val');
+  const upd = ()=> val.textContent = r.value;
+  r.addEventListener('input', upd); upd();
+});
+
+// 强调色
+document.getElementById('accent').addEventListener('click', e=>{
+  const i = e.target.closest('i[data-c]'); if(!i) return;
+  document.querySelectorAll('#accent i').forEach(x=>x.classList.remove('active'));
+  i.classList.add('active');
+  html.style.setProperty('--blue', i.dataset.c);
+});
+
+// 连线模式
+const linkmode = document.getElementById('linkmode');
+linkmode.addEventListener('click', e=>{
+  const m = e.target.closest('.lpm'); if(!m) return;
+  linkmode.querySelectorAll('.lpm').forEach(x=>{
+    x.classList.remove('active');
+    x.querySelector('path').setAttribute('stroke','var(--wire)');
+  });
+  m.classList.add('active');
+  m.querySelector('path').setAttribute('stroke','var(--blue)');
+});
+
+setTheme('light');
+</script>
+</body>
+</html>
