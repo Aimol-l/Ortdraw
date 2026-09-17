@@ -84,13 +84,15 @@ Rectangle {
                     width: menuLabel.implicitWidth + 20
                     height: 26
                     radius: 6
-                    color: menuArea.containsMouse ? Theme.bgHover : "transparent"
+                    color: menuHover.hovered ? Theme.bgHover : "transparent"
+
+                    HoverHandler { id: menuHover }
 
                     Text {
                         id: menuLabel
                         anchors.centerIn: parent
                         text: parent.modelData
-                        color: menuArea.containsMouse ? Theme.fgBright : Theme.fg
+                        color: menuHover.hovered ? Theme.fgBright : Theme.fg
                         font.pixelSize: 13
                     }
 
@@ -124,11 +126,13 @@ Rectangle {
 
                 TbButton {
                     glyph: "↺"
+                    tooltip: "撤销 (Ctrl+Z)"
                     onActivated: root.undoRequested()
                 }
 
                 TbButton {
                     glyph: "↻"
+                    tooltip: "重做 (Ctrl+Y)"
                     onActivated: root.redoRequested()
                 }
             }
@@ -150,11 +154,13 @@ Rectangle {
 
                 TbButton {
                     glyph: "⤢"
+                    tooltip: "适应视图 (Ctrl+0)"
                     onActivated: root.fitRequested()
                 }
 
                 TbButton {
                     glyph: "▦"
+                    tooltip: "画布背景"
                     active: Settings.backgroundMode !== "none"
                     onActivated: {
                         // 循环：空白 → 点阵 → 网格 → 空白
@@ -165,6 +171,7 @@ Rectangle {
 
                 TbButton {
                     glyph: "⌗"
+                    tooltip: "网格吸附"
                     active: Settings.snapToGrid
                     onActivated: {
                         Settings.snapToGrid = !Settings.snapToGrid
@@ -174,11 +181,13 @@ Rectangle {
 
                 TbButton {
                     glyph: Theme.dark ? "☀" : "☾"
+                    tooltip: "切换主题"
                     onActivated: Theme.toggle()
                 }
 
                 TbButton {
                     glyph: "⚙"
+                    tooltip: "设置"
                     onActivated: UiBus.settingsRequested()
                 }
             }
@@ -236,15 +245,17 @@ Rectangle {
         height: 26
         radius: 6
         color: tb.active
-               ? Qt.rgba(Theme.blue.r, Theme.blue.g, Theme.blue.b, 0.14)
-               : (tbArea.containsMouse ? Theme.bgHover : "transparent")
+               ? Qt.rgba(Theme.blue.r, Theme.blue.g, Theme.blue.b, tbHover.hovered ? 0.24 : 0.14)
+               : (tbHover.hovered ? Theme.bgHover : "transparent")
         Behavior on color { ColorAnimation { duration: 120 } }
+
+        HoverHandler { id: tbHover }
 
         Text {
             anchors.centerIn: parent
             text: tb.glyph
             color: tb.active ? Theme.blue
-                             : (tbArea.containsMouse ? Theme.fgBright : Theme.fgDim)
+                             : (tbHover.hovered ? Theme.fgBright : Theme.fgDim)
             font.pixelSize: 14
         }
 
@@ -256,25 +267,30 @@ Rectangle {
             onClicked: tb.activated()
         }
 
-        Rectangle {
-            visible: tb.tooltip !== "" && tbArea.containsMouse
-            z: 100
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.bottom
-            anchors.topMargin: 6
-            width: tbTip.implicitWidth + 16
-            height: 24
-            radius: 5
-            color: Theme.bgElev
-            border.width: 1
-            border.color: Theme.border
-
-            Text {
-                id: tbTip
-                anchors.centerIn: parent
-                text: tb.tooltip
+        Controls.ToolTip {
+            id: tbTip
+            text: tb.tooltip
+            visible: tb.tooltip !== "" && tbHover.hovered
+            delay: 400
+            padding: 0
+            width: tbTipText.implicitWidth + 16
+            height: tbTipText.implicitHeight + 8
+            x: Math.round((tb.width - width) / 2)
+            y: tb.height + 10
+            background: Rectangle {
+                color: Theme.bgElev
+                border.width: 1
+                border.color: Theme.border
+                radius: 5
+            }
+            contentItem: Text {
+                id: tbTipText
+                text: tbTip.text
                 color: Theme.fg
                 font.pixelSize: 11
+                renderType: Text.NativeRendering
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
     }
@@ -296,11 +312,11 @@ Rectangle {
         radius: 8
         color: pill.disabled
                ? Qt.rgba(Theme.green.r, Theme.green.g, Theme.green.b, 0.35)
-               : (pillArea.containsMouse ? Theme.bgHover : Theme.bg)
+               : (pillHover.hovered ? Theme.bgHover : Theme.bg)
         border.width: 1
         border.color: pill.disabled
                       ? Theme.border
-                      : (pillArea.containsMouse ? Theme.blue : Theme.border)
+                      : (pillHover.hovered ? Theme.blue : Theme.border)
 
         Row {
             id: contentRow
@@ -326,6 +342,8 @@ Rectangle {
             }
         }
 
+        HoverHandler { id: pillHover }
+
         MouseArea {
             id: pillArea
             anchors.fill: parent
@@ -334,26 +352,30 @@ Rectangle {
             onClicked: if (!pill.disabled) pill.activated()
         }
 
-        Rectangle {
-            id: tipBox
-            visible: pill.tooltip !== "" && pillArea.containsMouse
-            z: 100
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.bottom
-            anchors.topMargin: 6
-            width: tipLabel.implicitWidth + 16
-            height: 24
-            radius: 5
-            color: Theme.bgElev
-            border.width: 1
-            border.color: Theme.border
-
-            Text {
-                id: tipLabel
-                anchors.centerIn: parent
-                text: pill.tooltip
+        Controls.ToolTip {
+            id: pillTip
+            text: pill.tooltip
+            visible: pill.tooltip !== "" && pillHover.hovered
+            delay: 400
+            padding: 0
+            width: pillTipText.implicitWidth + 16
+            height: pillTipText.implicitHeight + 8
+            x: Math.round((pill.width - width) / 2)
+            y: pill.height + 10
+            background: Rectangle {
+                color: Theme.bgElev
+                border.width: 1
+                border.color: Theme.border
+                radius: 5
+            }
+            contentItem: Text {
+                id: pillTipText
+                text: pillTip.text
                 color: Theme.fg
                 font.pixelSize: 11
+                renderType: Text.NativeRendering
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
             }
         }
     }

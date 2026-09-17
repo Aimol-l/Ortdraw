@@ -48,7 +48,7 @@ public:
     QColor bg()        const { static const QColor l("#eef0f7"), d("#1b1f24"); return dark() ? d : l; }
     QColor bgPanel()   const { static const QColor l("#ffffff"), d("#22272e"); return dark() ? d : l; }
     QColor bgElev()    const { static const QColor l("#ffffff"), d("#2d333b"); return dark() ? d : l; }
-    QColor bgHover()   const { static const QColor l("#e9ebf6"), d("#373e47"); return dark() ? d : l; }
+    QColor bgHover()   const { static const QColor l("#dde3f2"), d("#373e47"); return dark() ? d : l; }
     QColor border()    const { static const QColor l("#cfd3e6"), d("#373e47"); return dark() ? d : l; }
     QColor borderSoft()const { static const QColor l("#e4e6f2"), d("#2d333b"); return dark() ? d : l; }
     QColor fg()        const { static const QColor l("#4c5180"), d("#adbac7"); return dark() ? d : l; }
