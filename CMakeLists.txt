@@ -31,7 +31,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 find_package(OpenCV REQUIRED)
-find_package(Qt6 COMPONENTS Core Gui Quick Test REQUIRED)
+find_package(Qt6 COMPONENTS Core Gui Quick Widgets Test REQUIRED)
 qt_standard_project_setup(REQUIRES 6.8)
 link_directories(${PROJECT_DIR}/lib)
 include_directories(${PROJECT_DIR}/include/)
@@ -55,7 +55,7 @@ qt_add_executable(${CMAKE_PROJECT_NAME}
 target_compile_features(${CMAKE_PROJECT_NAME} PRIVATE cxx_std_23)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     ${OpenCV_LIBRARIES}
-    Qt6::Core Qt6::Gui Qt6::Quick
+    Qt6::Core Qt6::Gui Qt6::Quick Qt6::Widgets
 )
 
 enable_testing()

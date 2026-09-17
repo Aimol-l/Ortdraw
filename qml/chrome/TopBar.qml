@@ -14,6 +14,10 @@ Rectangle {
     signal redoRequested()
     signal fitRequested()
     signal clearRequested()
+    signal newRequested()
+    signal openRequested()
+    signal saveRequested()
+    signal saveAsRequested()
 
     Rectangle {
         anchors.bottom: parent.bottom
@@ -102,7 +106,9 @@ Rectangle {
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            if (modelData === "编辑")
+                            if (modelData === "文件")
+                                fileMenu.popup()
+                            else if (modelData === "编辑")
                                 editMenu.popup()
                         }
                     }
@@ -212,6 +218,40 @@ Rectangle {
             dot: true
             disabled: true
             tooltip: "执行引擎尚未实现"
+        }
+    }
+
+    Controls.Menu {
+        id: fileMenu
+
+        Controls.MenuItem {
+            text: "新建"
+            onTriggered: root.newRequested()
+        }
+
+        Controls.MenuItem {
+            text: "打开…"
+            onTriggered: root.openRequested()
+        }
+
+        Controls.MenuSeparator {}
+
+        Controls.MenuItem {
+            text: "保存"
+            onTriggered: root.saveRequested()
+        }
+
+        Controls.MenuItem {
+            text: "另存为…"
+            onTriggered: root.saveAsRequested()
+        }
+
+        background: Rectangle {
+            implicitWidth: 170
+            color: Theme.bgElev
+            border.width: 1
+            border.color: Theme.border
+            radius: 8
         }
     }
 

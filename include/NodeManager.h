@@ -4,6 +4,10 @@
 #include <QPointer>
 #include <QPointF>
 #include <QLineF>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include "PaintBoard.h"
 #include "Settings.h"
 #include "utils/DAGraph.hpp"
@@ -89,6 +93,86 @@ public:
     Q_INVOKABLE QVariantList edgeSnapshots() {
         if(!m_paint_board) return {};
         return edgeSnapshotsOf(m_paint_board->m_graph);
+    }
+
+    // 将当前图序列化为可 JSON 化的映射：节点类型/位置/尺寸/参数 + 端口索引构成的边
+    Q_INVOKABLE QVariantMap graphToMap() const {
+        QVariantMap doc;
+        if(!m_paint_board) return doc;
+        doc["version"] = 1;
+
+        QVariantList nodes;
+        for(BaseNode* n : m_paint_board->m_graph.getAllNodes()){
+            QVariantMap nm;
+            nm["uuid"]   = n->uuid().toString();
+            nm["type"]   = n->typeName();
+            nm["x"]      = n->x();
+            nm["y"]      = n->y();
+            nm["w"]      = n->width();
+            nm["h"]      = n->height();
+            nm["name"]   = n->name();
+            nm["params"] = n->params();
+            nodes.append(nm);
+        }
+        doc["nodes"] = nodes;
+
+        QVariantList edges;
+        for(const Edge& e : m_paint_board->m_graph.getAllEdges()){
+            if(!e.start_port || !e.stop_port) continue;
+            BaseNode* from = e.start_port->father();
+            BaseNode* to   = e.stop_port->father();
+            if(!from || !to) continue;
+            QVariantMap em;
+            em["fromNode"] = from->uuid().toString();
+            em["fromPort"] = from->getOutPorts().indexOf(e.start_port);
+            em["toNode"]   = to->uuid().toString();
+            em["toPort"]   = to->getInPorts().indexOf(e.stop_port);
+            edges.append(em);
+        }
+        doc["edges"] = edges;
+        return doc;
+    }
+
+    Q_INVOKABLE bool saveGraph(const QString& path) {
+        const QJsonDocument doc(QJsonObject::fromVariantMap(graphToMap()));
+        QFile f(path);
+        if(!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+        const QByteArray data = doc.toJson(QJsonDocument::Indented);
+        const bool ok = (f.write(data) == data.size());
+        f.close();
+        return ok;
+    }
+
+    Q_INVOKABLE QVariantMap readGraph(const QString& path) {
+        QFile f(path);
+        if(!f.open(QIODevice::ReadOnly)) return {};
+        const QByteArray data = f.readAll();
+        f.close();
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
+        if(err.error != QJsonParseError::NoError || !doc.isObject()) return {};
+        return doc.object().toVariantMap();
+    }
+
+    // 依据 uuid + 端口索引恢复连线（读取图文件时使用）
+    Q_INVOKABLE bool addEdgeByUuid(const QString& fromNodeUuid, int fromPort,
+                                   const QString& toNodeUuid, int toPort) {
+        if(!m_paint_board) return false;
+        BaseNode* from = nullptr;
+        BaseNode* to = nullptr;
+        for(BaseNode* n : m_paint_board->m_graph.getAllNodes()){
+            if(n->uuid().toString() == fromNodeUuid) from = n;
+            if(n->uuid().toString() == toNodeUuid)   to = n;
+        }
+        if(!from || !to) return false;
+        auto& outs = from->getOutPorts();
+        auto& ins  = to->getInPorts();
+        if(fromPort < 0 || fromPort >= outs.size()) return false;
+        if(toPort < 0 || toPort >= ins.size()) return false;
+        auto command = std::make_unique<AddEdgeCMD>(outs[fromPort], ins[toPort], m_paint_board);
+        bool ok = m_cmd_manager.executeCommand(std::move(command));
+        refresh();
+        return ok;
     }
 
     Q_INVOKABLE bool createNode(BaseNode *node){

@@ -25,6 +25,8 @@
 - 连线渲染：支持 Spline/Linear/Straight 三种渲染模式（默认 Spline，可在设置中切换），点击连线可选中。
 - 删除与撤销：Delete 删除选中的节点/连线；`Ctrl+Z` 撤销，`Ctrl+Y` 重做。
 - 多选：`Ctrl+点击` 节点可多选，批量删除；多选/右键菜单等可在设置中开关。
+- 图文件：新建 / 打开 / 保存（`Ctrl+N` / `Ctrl+O` / `Ctrl+S`，菜单「文件」）使用**系统原生文件对话框**
+  （KDE/Dolphin 等桌面环境），文件格式为 `.ortdraw`（JSON），保存时自动补全扩展名。
 
 ## 设置
 
@@ -73,7 +75,7 @@ docs/               设计与实施文档
 
 - CMake ≥ 3.30
 - 支持 C++23 的编译器（GCC 13+ / Clang 16+ / MSVC 19.35+）
-- Qt 6.8+（Core、Gui、Quick、Test）
+- Qt 6.8+（Core、Gui、Quick、Widgets、Test）
 - OpenCV 4/5
 
 ## 构建

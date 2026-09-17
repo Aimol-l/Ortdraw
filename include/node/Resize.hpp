@@ -27,6 +27,21 @@ public:
     QString inputSizeText() const { return m_input_size_text; }
     void setInputSizeText(const QString& t) { if(m_input_size_text == t) return; m_input_size_text = t; emit paramsChanged(); }
 
+    QVariantMap params() const override {
+        return {
+            { "mode", mode() },
+            { "outWidth", outWidth() },
+            { "outHeight", outHeight() },
+            { "percent", percent() }
+        };
+    }
+    void setParams(const QVariantMap& p) override {
+        if(p.contains("mode"))      setMode(p.value("mode").toInt());
+        if(p.contains("outWidth"))  setOutWidth(p.value("outWidth").toInt());
+        if(p.contains("outHeight")) setOutHeight(p.value("outHeight").toInt());
+        if(p.contains("percent"))   setPercent(p.value("percent").toInt());
+    }
+
     ResizeNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "缩放";
         m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));

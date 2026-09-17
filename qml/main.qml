@@ -3,6 +3,8 @@ import QtQuick.Window
 import QtQuick.Controls as Controls
 import Theme
 import NodeManager
+import NodeCatalog
+import FileDialogs
 import "settings"
 
 Controls.ApplicationWindow {
@@ -18,6 +20,7 @@ Controls.ApplicationWindow {
 
     property bool leftCollapsed: false
     property bool rightCollapsed: false
+    property string currentPath: ""
 
     property real leftPanelWidth: leftCollapsed ? 0 : 250
     property real rightPanelWidth: rightCollapsed ? 0 : 286
@@ -30,6 +33,54 @@ Controls.ApplicationWindow {
     function demoPopulate() {
         palette.addNodeAt("ImageLoad", 80, 120)
         palette.addNodeAt("ImageShow", 720, 200)
+    }
+
+    // ---- 图文件：新建 / 打开 / 保存 ----
+    function newGraph() {
+        NodeManager.clearGraph()
+        currentPath = ""
+    }
+    function openGraph() { var p = FileDialogs.openGraph(currentPath); if (p !== "") doLoad(p) }
+    function saveGraph() { if (currentPath === "") saveGraphAs(); else doSave(currentPath) }
+    function saveGraphAs() { var p = FileDialogs.saveGraph(currentPath); if (p !== "") doSave(p) }
+    function doSave(path) {
+        if (NodeManager.saveGraph(path))
+            currentPath = path
+    }
+    function doLoad(path) {
+        var g = NodeManager.readGraph(path)
+        if (!g || !g.nodes)
+            return
+        NodeManager.clearGraph()
+        var map = ({})
+        for (var i = 0; i < g.nodes.length; ++i) {
+            var d = g.nodes[i]
+            var url = NodeCatalog.componentUrl(d.type)
+            if (!url)
+                continue
+            var comp = Qt.createComponent(url)
+            if (comp.status !== Component.Ready) {
+                console.error(comp.errorString())
+                continue
+            }
+            var obj = comp.createObject(canvas.nodeLayer)
+            if (!obj)
+                continue
+            if (d.uuid) obj.setUuid(d.uuid)
+            obj.x = d.x
+            obj.y = d.y
+            if (d.w) obj.width = d.w
+            if (d.h) obj.height = d.h
+            if (d.name) obj.name = d.name
+            if (d.params) obj.setParams(d.params)
+            NodeManager.createNode(obj)
+            map[d.uuid] = obj
+        }
+        for (var j = 0; j < g.edges.length; ++j) {
+            var e = g.edges[j]
+            NodeManager.addEdgeByUuid(e.fromNode, e.fromPort, e.toNode, e.toPort)
+        }
+        currentPath = path
     }
 
     Component.onCompleted: {
@@ -54,6 +105,10 @@ Controls.ApplicationWindow {
             onRedoRequested: NodeManager.redo()
             onFitRequested: canvas.fitView()
             onClearRequested: NodeManager.clearGraph()
+            onNewRequested: win.newGraph()
+            onOpenRequested: win.openGraph()
+            onSaveRequested: win.saveGraph()
+            onSaveAsRequested: win.saveGraphAs()
         }
 
         Item {
@@ -179,6 +234,24 @@ Controls.ApplicationWindow {
     ImageViewer { id: viewer }
 
     SettingsDialog { id: settingsDialog }
+
+    Shortcut {
+        sequence: "Ctrl+N"
+        enabled: !settingsDialog.visible
+        onActivated: win.newGraph()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+O"
+        enabled: !settingsDialog.visible
+        onActivated: win.openGraph()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+S"
+        enabled: !settingsDialog.visible
+        onActivated: win.saveGraph()
+    }
 
     Shortcut {
         sequence: "Delete"

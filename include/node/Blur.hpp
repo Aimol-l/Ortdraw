@@ -20,6 +20,11 @@ public:
         m_kernel = v; emit paramsChanged();
     }
 
+    QVariantMap params() const override { return { { "kernel", kernel() } }; }
+    void setParams(const QVariantMap& p) override {
+        if(p.contains("kernel")) setKernel(p.value("kernel").toInt());
+    }
+
     BlurNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "高斯模糊";
         m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));

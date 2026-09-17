@@ -14,6 +14,11 @@ public:
     int threshold() const { return m_threshold; }
     void setThreshold(int v) { v = qBound(0, v, 255); if(m_threshold == v) return; m_threshold = v; emit paramsChanged(); }
 
+    QVariantMap params() const override { return { { "threshold", threshold() } }; }
+    void setParams(const QVariantMap& p) override {
+        if(p.contains("threshold")) setThreshold(p.value("threshold").toInt());
+    }
+
     ThresholdNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "阈值二值化";
         m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));
