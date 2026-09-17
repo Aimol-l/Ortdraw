@@ -75,11 +75,6 @@ Rectangle {
             ctx.strokeRect(vx*s+ox, vy*s+oy, vw*s, vh*s)
         }
     }
-    Text {
-        anchors.left: parent.left; anchors.top: parent.top
-        anchors.leftMargin: 8; anchors.topMargin: 6
-        text: "MINIMAP"; color: Theme.fgDim; font.pixelSize: 10; font.letterSpacing: 1
-    }
     MouseArea {
         anchors.fill: parent
         onPressed: (e) => mini.jumpFrom(e.x, e.y)
