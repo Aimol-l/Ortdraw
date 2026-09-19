@@ -16,8 +16,8 @@ private slots:
         QVERIFY(p.isConnected());
     }
     void testDataType() {
-        Port p("p", PortType::Output, DataType::Float, QPointF(1, 2), nullptr);
-        QCOMPARE(p.dataType(), DataType::Float);
+        Port p("p", PortType::Output, DataType::Number, QPointF(1, 2), nullptr);
+        QCOMPARE(p.dataType(), DataType::Number);
         QCOMPARE(p.type(), static_cast<int>(PortType::Output));
     }
 };

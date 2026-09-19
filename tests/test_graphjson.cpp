@@ -129,8 +129,8 @@ private slots:
         QVERIFY(!resizeUuid.isEmpty());
         auto* load2 = new ImageLoadNode();
         auto* resize2 = new ResizeNode();
-        load2->setUuid(QUuid(loadUuid));
-        resize2->setUuid(QUuid(resizeUuid));
+        load2->setUuid(loadUuid);
+        resize2->setUuid(resizeUuid);
         QCOMPARE(load2->uuid().toString(), loadUuid);
         QVERIFY(nm->createNode(load2));
         QVERIFY(nm->createNode(resize2));

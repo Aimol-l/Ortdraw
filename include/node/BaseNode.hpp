@@ -48,7 +48,7 @@ public:
     Q_INVOKABLE qreal getMinWidth(){return min_width;}
     Q_INVOKABLE qreal getMinHeight(){return min_height;}
     // 读取图文件时恢复节点 uuid，使连线可按保存的 uuid 重新匹配
-    Q_INVOKABLE void setUuid(const QUuid& id) { m_id = id; }
+    Q_INVOKABLE void setUuid(const QString& id) { m_id = QUuid(id); }
     // 节点参数序列化接口：子类按需覆写，用于图文件的保存/读取
     Q_INVOKABLE virtual QVariantMap params() const { return {}; }
     Q_INVOKABLE virtual void setParams(const QVariantMap&) {}
@@ -85,7 +85,6 @@ public:
           is_selected(false)
     {
         this->setFlag(QQuickItem::ItemIsFocusScope, true); // 允许管理子组件的焦点
-        qDebug()<<this->m_id;
         }
     ~BaseNode() {
         qDeleteAll(m_input_ports);

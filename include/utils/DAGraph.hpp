@@ -37,7 +37,7 @@ public:
         if(!src || !dst || !src->father() || !dst->father()) return false;
         if(!m_adj_list.contains(src->father()) || !m_adj_list.contains(dst->father())) return false;
         if(src->father() == dst->father()) return false;
-        if(src->dataType() != dst->dataType()) return false;
+        if(!Port::compatible(src->dataType(), dst->dataType())) return false;
         if(dst->isConnected()) return false;
         // 防御性检查：常规路径已被 dst->isConnected() 拦截
         for(const auto& edge : m_edges){

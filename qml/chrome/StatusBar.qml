@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Theme
+import NodeManager
 
 Rectangle {
     id: root
@@ -44,13 +45,14 @@ Rectangle {
                 width: 7
                 height: 7
                 radius: 3.5
-                color: Theme.green
+                color: NodeManager.engineStatus === "失败" ? Theme.red
+                     : NodeManager.engineRunning ? Theme.yellow : Theme.green
             }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: "就绪"
-                color: Theme.fgDim
+                text: NodeManager.engineStatus
+                color: NodeManager.engineStatus === "失败" ? Theme.red : Theme.fgDim
                 font.pixelSize: 11
             }
         }

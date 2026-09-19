@@ -9,6 +9,8 @@
 #include "node/Blur.hpp"
 #include "node/Threshold.hpp"
 #include "node/Conv.hpp"
+#include "engine/BuiltinExecutors.hpp"
+#include "engine/ImageStore.hpp"
 #include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlEngine>
@@ -43,6 +45,8 @@ int main(int argc, char *argv[]){
     qmlRegisterSingletonInstance("FileDialogs", 1, 0, "FileDialogs", FileDialogs::instance());
     qmlRegisterSingletonType(QUrl("qrc:/NodeCatalog.qml"), "NodeCatalog", 1, 0, "NodeCatalog");
     qmlRegisterSingletonType(QUrl("qrc:/UiBus.qml"), "UiBus", 1, 0, "UiBus");
+    registerBuiltinExecutors();
+    engine.addImageProvider("nodeimage", new NodeImageProvider());
     engine.load(url);
     return app.exec();
 }

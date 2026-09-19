@@ -3,6 +3,7 @@ import QtQuick.Controls as Controls
 import Theme
 import UiBus
 import Settings
+import NodeManager
 
 Rectangle {
     id: root
@@ -214,10 +215,11 @@ Rectangle {
 
         Pill {
             anchors.verticalCenter: parent.verticalCenter
-            label: "运行"
+            label: NodeManager.engineRunning ? "停止" : "运行"
             dot: true
-            disabled: true
-            tooltip: "执行引擎尚未实现"
+            tooltip: NodeManager.engineRunning ? "停止当前运行" : "运行节点图"
+            onActivated: NodeManager.engineRunning ? NodeManager.cancelRun()
+                                                   : NodeManager.run()
         }
     }
 

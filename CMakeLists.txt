@@ -31,6 +31,7 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 endif()
 
 find_package(OpenCV REQUIRED)
+find_package(Tensorvia REQUIRED)
 find_package(Qt6 COMPONENTS Core Gui Quick Widgets Test REQUIRED)
 qt_standard_project_setup(REQUIRES 6.8)
 link_directories(${PROJECT_DIR}/lib)
@@ -44,6 +45,8 @@ file(GLOB SRC_FILES
     "${PROJECT_SOURCE_DIR}/include/utils/*.hpp"
     "${PROJECT_SOURCE_DIR}/include/command/*.hpp"
     "${PROJECT_SOURCE_DIR}/include/command/*.h"
+    "${PROJECT_SOURCE_DIR}/include/engine/*.hpp"
+    "${PROJECT_SOURCE_DIR}/include/engine/executors/*.hpp"
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
 )
 
@@ -55,6 +58,7 @@ qt_add_executable(${CMAKE_PROJECT_NAME}
 target_compile_features(${CMAKE_PROJECT_NAME} PRIVATE cxx_std_23)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     ${OpenCV_LIBRARIES}
+    Tensorvia::tensorvia
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::Widgets
 )
 

@@ -18,6 +18,10 @@ public:
         return QFileDialog::getOpenFileName(nullptr, tr("打开节点图"),
             startDir, QStringLiteral("Ortdraw 图 (*.ortdraw);;所有文件 (*)"));
     }
+    Q_INVOKABLE QString openImage(const QString& startDir = QString()) {
+        return QFileDialog::getOpenFileName(nullptr, tr("选择图片"), startDir,
+            QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;所有文件 (*)"));
+    }
     Q_INVOKABLE QString saveGraph(const QString& startDir = QString(),
                                   const QString& suggested = QStringLiteral("graph.ortdraw")) {
         const QString dir = startDir.isEmpty()

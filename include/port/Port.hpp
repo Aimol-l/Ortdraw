@@ -9,10 +9,10 @@ enum class PortType{
 };
 enum class DataType{
     Image,
-    Float,
-    Int,
+    Tensor,
+    Number,
     Bool,
-    Tensor
+    Any
 };
 // using NodeData = 
 //     std::variant<int16_t,int32_t,int64_t,float,std::string,bool,
@@ -63,12 +63,15 @@ public:
     QString dataTypeName() const {
         switch(m_data_type){
         case DataType::Image: return "Image";
-        case DataType::Float: return "Float";
-        case DataType::Int:   return "Int";
-        case DataType::Bool:  return "Bool";
         case DataType::Tensor:return "Tensor";
+        case DataType::Number:return "Number";
+        case DataType::Bool:  return "Bool";
+        case DataType::Any:   return "Any";
         }
         return "?";
+    }
+    static bool compatible(DataType a, DataType b){
+        return a == b || a == DataType::Any || b == DataType::Any;
     }
     QPointF position() const { return m_position; }
     BaseNode* father() const { return m_father; }

@@ -14,6 +14,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/utils/DAGraph.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Edge.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Snapshot.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/GraphExecutor.hpp
     ${PROJECT_SOURCE_DIR}/include/command/Command.h
     ${PROJECT_SOURCE_DIR}/include/command/AddNode.hpp
     ${PROJECT_SOURCE_DIR}/include/command/AddEdge.hpp
@@ -34,6 +35,7 @@ foreach(src ${TEST_SOURCES})
     target_link_libraries(${name} PRIVATE
         Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test
         ${OpenCV_LIBRARIES}
+        Tensorvia::tensorvia
     )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -17,6 +17,8 @@
 #include "command/RemoveNode.hpp"
 #include "command/CmdManager.hpp"
 #include "utils/Snapshot.hpp"
+#include "engine/GraphExecutor.hpp"
+#include "engine/ImageStore.hpp"
 
 
 class NodeManager : public QObject {
@@ -30,8 +32,35 @@ private:
     Port* m_link_src = nullptr;
     Port* m_link_target = nullptr;
     bool m_link_from_input = false;
-    NodeManager(QObject *parent = nullptr) : QObject(parent) {}
+    GraphExecutor m_executor;
+    int m_image_revision = 0;
+    int m_error_revision = 0;
+    // 每个节点最近一次执行的错误文本（空串表示成功）
+    QHash<QString, QString> m_node_errors;
+    NodeManager(QObject *parent = nullptr) : QObject(parent) {
+        connect(&m_executor, &GraphExecutor::runningChanged, this, &NodeManager::engineChanged);
+        connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
+        QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
+                         [this](const QString& uuid, const QImage& img) {
+            ImageStore::instance()->setImage(uuid, img);
+            ++m_image_revision;
+            emit imageRevisionChanged();
+        });
+        // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
+        QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
+                         [this](const QString& uuid, bool ok, const QString& error) {
+            m_node_errors[uuid] = ok ? QString() : error;
+            ++m_error_revision;
+            emit errorRevisionChanged();
+        });
+    }
 
+    void clearNodeErrors(){
+        if(m_node_errors.isEmpty()) return;
+        m_node_errors.clear();
+        ++m_error_revision;
+        emit errorRevisionChanged();
+    }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
     void setSelectedNode(BaseNode* n){
         if(m_selected_node == n) return;
@@ -53,7 +82,7 @@ private:
     static bool compatible(Port* src, Port* dst){
         if(!src || !dst) return false;
         if(src->father() == dst->father()) return false;
-        if(src->dataType() != dst->dataType()) return false;
+        if(!Port::compatible(src->dataType(), dst->dataType())) return false;
         if(dst->isConnected()) return false;
         return true;
     }
@@ -69,6 +98,33 @@ public:
     Q_PROPERTY(int edgeCount READ edgeCount NOTIFY graphChanged)
     Q_PROPERTY(BaseNode* selectedNode READ selectedNode NOTIFY selectionChanged)
     Q_PROPERTY(QVariantMap selectedEdge READ selectedEdge NOTIFY selectionChanged)
+    Q_PROPERTY(bool engineRunning READ engineRunning NOTIFY engineChanged)
+    Q_PROPERTY(QString engineStatus READ engineStatus NOTIFY engineChanged)
+    Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
+    Q_PROPERTY(int errorRevision READ errorRevision NOTIFY errorRevisionChanged)
+
+    bool engineRunning() const { return m_executor.running(); }
+    QString engineStatus() const { return m_executor.status(); }
+    int imageRevision() const { return m_image_revision; }
+    int errorRevision() const { return m_error_revision; }
+    Q_INVOKABLE QString nodeError(const QString& uuid) const {
+        return m_node_errors.value(uuid);
+    }
+    Q_INVOKABLE bool run() {
+        if (engineRunning()) return false;
+        clearNodeErrors();
+        // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
+        // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
+        return m_executor.run();
+    }
+    Q_INVOKABLE void cancelRun() { m_executor.cancel(); }
+    Q_INVOKABLE bool hasImage(const QString& uuid) const {
+        return ImageStore::instance()->has(uuid);
+    }
+    Q_INVOKABLE QString imageUrl(const QString& uuid) const {
+        return QStringLiteral("image://nodeimage/") + uuid + QStringLiteral("?v=")
+               + QString::number(ImageStore::instance()->rev(uuid));
+    }
 
     int nodeCount() const { return m_paint_board ? int(m_paint_board->m_graph.getAllNodes().size()) : 0; }
     int edgeCount() const { return m_paint_board ? int(m_paint_board->m_graph.getAllEdges().size()) : 0; }
@@ -185,7 +241,6 @@ public:
         if(!node || !m_paint_board) return false;
         auto command = std::make_unique<AddNodeCMD>(node, m_paint_board);
         bool ok = m_cmd_manager.executeCommand(std::move(command));
-        if(ok) std::println("创建节点成功");
         refresh();
         return ok;
     }
@@ -237,11 +292,17 @@ public:
     }
     Q_INVOKABLE void clearGraph(){
         if(!m_paint_board) return;
+        // 清空图前先取消正在运行的求值，避免工作线程在节点已删除后回写图像/错误
+        m_executor.cancel();
         const auto all = m_paint_board->m_graph.getAllNodes();
         for(auto* n : all){
             auto cmd = std::make_unique<RemoveNodeCMD>(n, m_paint_board);
             m_cmd_manager.executeCommand(std::move(cmd));
         }
+        ImageStore::instance()->clear();
+        ++m_image_revision;
+        emit imageRevisionChanged();
+        clearNodeErrors();
         setSelectedNode(nullptr);
         refresh();
     }
@@ -266,7 +327,10 @@ public:
         setSelectedNode(hit_node);
         refresh();
     }
-    Q_INVOKABLE void setPaintBoard(PaintBoard *board) { m_paint_board = board; }
+    Q_INVOKABLE void setPaintBoard(PaintBoard *board) {
+        m_paint_board = board;
+        if(board) m_executor.setGraph(&board->m_graph);
+    }
 
     Q_INVOKABLE void nodeMoveEvent(QUuid node_uid, qreal dx, qreal dy){
         if(!m_paint_board) return;
@@ -348,27 +412,22 @@ public:
         if(!src){ m_paint_board->cancelDrawing(); refresh(); return; }
         if(port->isConnected()){
             m_paint_board->cancelDrawing();
-            std::println("这个节点已经被连接");
             refresh();
             return;
         }
         if(port->father() == src->father()){
             m_paint_board->cancelDrawing();
-            std::println("节点不能自己相连");
             refresh();
             return;
         }
-        if(port->dataType() != src->dataType()){
+        if(!Port::compatible(port->dataType(), src->dataType())){
             m_paint_board->cancelDrawing();
-            std::println("两端数据类型不匹配");
             refresh();
             return;
         }
         port->setPosition(QPointF(x, y));
         auto command = std::make_unique<AddEdgeCMD>(src, port, m_paint_board);
-        bool ok = m_cmd_manager.executeCommand(std::move(command));
-        if(ok) std::println("连接成功");
-        else   std::println("有回路或连线无效");
+        m_cmd_manager.executeCommand(std::move(command));
         m_paint_board->finishDrawing();
         refresh();
     }
@@ -406,9 +465,7 @@ public:
         }
         if(src && dst){
             auto command = std::make_unique<AddEdgeCMD>(src, dst, m_paint_board);
-            bool ok = m_cmd_manager.executeCommand(std::move(command));
-            if(ok) std::println("连接成功");
-            else   std::println("有回路或连线无效");
+            m_cmd_manager.executeCommand(std::move(command));
         }
         m_paint_board->finishDrawing();
         setLinkTarget(nullptr);
@@ -427,6 +484,9 @@ public:
 signals:
     void graphChanged();
     void selectionChanged();
+    void engineChanged();
+    void imageRevisionChanged();
+    void errorRevisionChanged();
 
 public:
     NodeManager(const NodeManager&) = delete;

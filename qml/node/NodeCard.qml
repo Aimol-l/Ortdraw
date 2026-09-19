@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Controls as Controls
 import Theme
 import NodeManager
 import UiBus
@@ -10,10 +11,25 @@ Item {
 
     property var node
     property var coordItem
-    // 输出预览图（空则隐藏）；暂无执行引擎，先用占位图
+    // 无执行结果时使用的占位图（空则隐藏预览）
     property url previewSource: ""
+    // 有执行结果时优先显示 ImageStore 中的真实图像；imageRevision 变化触发重算
+    readonly property url effectivePreview: {
+        var r = NodeManager.imageRevision
+        var u = card.node ? ("" + card.node.uuid) : ""
+        return (u !== "" && NodeManager.hasImage(u))
+               ? NodeManager.imageUrl(u)
+               : card.previewSource
+    }
     // 节点自定义内容（参数控件）注入点，位于端口行下方
     default property alias extraContent: extraHost.data
+
+    // 最近一次执行的错误文本；读取 errorRevision 以便运行后重新求值
+    readonly property string nodeErrorText: {
+        var rev = NodeManager.errorRevision
+        var u = card.node ? ("" + card.node.uuid) : ""
+        return u === "" ? "" : NodeManager.nodeError(u)
+    }
 
     readonly property color accent: node && node.category === "input"  ? Theme.catInput
                                   : node && node.category === "math"   ? Theme.catMath
@@ -212,6 +228,52 @@ Item {
                     }
                     NodeManager.clickNodeEvent(card.node.uuid,
                         (mouse.modifiers & Qt.ControlModifier) !== 0)
+                }
+            }
+
+            // 执行错误标记：右上角红点，悬停显示错误文本
+            Rectangle {
+                id: errorBadge
+                visible: card.nodeErrorText !== ""
+                width: 10
+                height: 10
+                radius: 5
+                color: Theme.red
+                border.width: 1
+                border.color: Theme.bgElev
+                anchors.right: parent.right
+                anchors.rightMargin: 5
+                anchors.top: parent.top
+                anchors.topMargin: 5
+                z: 6
+
+                HoverHandler { id: badgeHover }
+            }
+
+            Controls.ToolTip {
+                id: errorTip
+                text: card.nodeErrorText
+                visible: errorBadge.visible && badgeHover.hovered
+                delay: 300
+                padding: 0
+                width: errorTipText.implicitWidth + 16
+                height: errorTipText.implicitHeight + 8
+                x: Math.round((head.width - width) / 2)
+                y: head.height + 4
+                background: Rectangle {
+                    color: Theme.bgElev
+                    border.width: 1
+                    border.color: Theme.red
+                    radius: 5
+                }
+                contentItem: Text {
+                    id: errorTipText
+                    text: errorTip.text
+                    color: Theme.fg
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
@@ -474,14 +536,15 @@ Item {
         // 输出预览缩略图（暂时用占位图）；点击放大查看
         Rectangle {
             id: previewBox
-            visible: card.previewSource !== "" && Settings.showPreview
+            visible: card.effectivePreview !== "" && Settings.showPreview
             anchors.top: extraHost.bottom
+            anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: 10
             anchors.rightMargin: 10
             anchors.topMargin: 8
-            height: Settings.previewHeight
+            anchors.bottomMargin: 10
             radius: Math.max(0, Settings.cornerRadius - 4)
             color: Theme.bg
             border.width: 1
@@ -491,7 +554,7 @@ Item {
             Image {
                 anchors.fill: parent
                 anchors.margins: 1
-                source: card.previewSource
+                source: card.effectivePreview
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
             }
@@ -499,7 +562,7 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: UiBus.previewRequested(card.previewSource)
+                onClicked: UiBus.previewRequested(card.effectivePreview)
             }
         }
 
@@ -526,7 +589,8 @@ Item {
                 lastPos = p
                 var oldW = card.node.width
                 var newW = Math.max(card.node.getMinWidth(), oldW + dx)
-                var newH = Math.max(card.node.getMinHeight(), card.node.height + dy)
+                // 最小高度不低于内容（避免缩略图被压扁）
+                var newH = Math.max(card.node.getMinHeight(), card.contentHeight, card.node.height + dy)
                 var dw = newW - oldW
                 card.node.width = newW
                 card.node.height = newH
