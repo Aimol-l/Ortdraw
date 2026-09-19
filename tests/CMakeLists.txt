@@ -9,7 +9,10 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/Resize.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Blur.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Threshold.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/Gray.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Conv.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp
     ${PROJECT_SOURCE_DIR}/include/port/Port.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/DAGraph.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Edge.hpp

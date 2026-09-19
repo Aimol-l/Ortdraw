@@ -14,12 +14,12 @@ Item {
     // 无执行结果时使用的占位图（空则隐藏预览）
     property url previewSource: ""
     // 有执行结果时优先显示 ImageStore 中的真实图像；imageRevision 变化触发重算
-    readonly property url effectivePreview: {
+    readonly property string effectivePreview: {
         var r = NodeManager.imageRevision
         var u = card.node ? ("" + card.node.uuid) : ""
         return (u !== "" && NodeManager.hasImage(u))
                ? NodeManager.imageUrl(u)
-               : card.previewSource
+               : ("" + card.previewSource)
     }
     // 节点自定义内容（参数控件）注入点，位于端口行下方
     default property alias extraContent: extraHost.data

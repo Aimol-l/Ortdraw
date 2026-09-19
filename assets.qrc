@@ -6,7 +6,9 @@
         <file alias="ResizeNode.qml">qml/node/ResizeNode.qml</file>
         <file alias="BlurNode.qml">qml/node/BlurNode.qml</file>
         <file alias="ThresholdNode.qml">qml/node/ThresholdNode.qml</file>
+        <file alias="GrayNode.qml">qml/node/GrayNode.qml</file>
         <file alias="ConvNode.qml">qml/node/ConvNode.qml</file>
+        <file alias="TensorNode.qml">qml/node/TensorNode.qml</file>
         <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>
         <file alias="preview_placeholder.png">assets/images/preview_placeholder.png</file>
         <file alias="TopBar.qml">qml/chrome/TopBar.qml</file>

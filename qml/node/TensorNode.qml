@@ -1,0 +1,201 @@
+import QtQuick
+import TensorNode
+import Theme
+import Settings
+
+TensorNode {
+    id: root
+    width: 220
+    height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
+
+    function fmt(v) {
+        return "" + (Math.round(v * 1000) / 1000)
+    }
+
+    readonly property real cellWidth: Math.max(28, Math.floor((card.width - 40) / root.cols))
+
+    NodeCard {
+        id: card
+        anchors.fill: parent
+        node: root
+        coordItem: root.parent
+        previewSource: ""
+
+        Column {
+            width: parent.width
+            spacing: 6
+
+            // ---- 预设 ----
+            Row {
+                spacing: 6
+                Repeater {
+                    model: [
+                        { t: "单位", a: "identity" },
+                        { t: "均值", a: "mean" },
+                        { t: "锐化", a: "sharpen" }
+                    ]
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: 52
+                        height: 20
+                        radius: 5
+                        color: "transparent"
+                        border.width: 1
+                        border.color: Theme.border
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.t
+                            color: Theme.fg
+                            font.pixelSize: 10
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (modelData.a === "identity") root.presetIdentity()
+                                else if (modelData.a === "mean") root.presetMean()
+                                else root.presetSharpen()
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- 形状 ----
+            Row {
+                spacing: 10
+
+                Row {
+                    spacing: 3
+                    Text {
+                        height: 18
+                        verticalAlignment: Text.AlignVCenter
+                        text: "行"
+                        color: Theme.fgDim
+                        font.pixelSize: 10
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+                    Rectangle {
+                        width: 18; height: 18; radius: 4
+                        color: "transparent"; border.width: 1; border.color: Theme.border
+                        Text { anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setShape(root.rows - 1, root.cols)
+                        }
+                    }
+                    Text {
+                        width: 14; height: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        text: "" + root.rows
+                        color: Theme.fg
+                        font.pixelSize: 11
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+                    Rectangle {
+                        width: 18; height: 18; radius: 4
+                        color: "transparent"; border.width: 1; border.color: Theme.border
+                        Text { anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setShape(root.rows + 1, root.cols)
+                        }
+                    }
+                }
+
+                Row {
+                    spacing: 3
+                    Text {
+                        height: 18
+                        verticalAlignment: Text.AlignVCenter
+                        text: "列"
+                        color: Theme.fgDim
+                        font.pixelSize: 10
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+                    Rectangle {
+                        width: 18; height: 18; radius: 4
+                        color: "transparent"; border.width: 1; border.color: Theme.border
+                        Text { anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setShape(root.rows, root.cols - 1)
+                        }
+                    }
+                    Text {
+                        width: 14; height: 18
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        text: "" + root.cols
+                        color: Theme.fg
+                        font.pixelSize: 11
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+                    Rectangle {
+                        width: 18; height: 18; radius: 4
+                        color: "transparent"; border.width: 1; border.color: Theme.border
+                        Text { anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.setShape(root.rows, root.cols + 1)
+                        }
+                    }
+                }
+            }
+
+            // ---- 数值网格 ----
+            Grid {
+                columns: root.cols
+                spacing: 2
+
+                Repeater {
+                    model: root.rows * root.cols
+                    delegate: Rectangle {
+                        required property int index
+                        readonly property int r: Math.floor(index / root.cols)
+                        readonly property int c: index % root.cols
+
+                        width: root.cellWidth
+                        height: 22
+                        radius: 4
+                        color: Theme.bg
+                        border.width: 1
+                        border.color: cell.activeFocus ? Theme.blue : Theme.border
+
+                        TextInput {
+                            id: cell
+                            anchors.fill: parent
+                            horizontalAlignment: TextInput.AlignHCenter
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Theme.fg
+                            font.pixelSize: 10
+                            selectByMouse: true
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                            text: root.fmt(root.value(r, c))
+                            onEditingFinished: {
+                                var v = parseFloat(text)
+                                if (isNaN(v)) v = root.value(r, c)
+                                root.setValue(r, c, v)
+                                text = root.fmt(root.value(r, c))
+                            }
+                            Connections {
+                                target: root
+                                function onParamsChanged() {
+                                    if (!cell.activeFocus)
+                                        cell.text = root.fmt(root.value(r, c))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

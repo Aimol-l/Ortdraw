@@ -8,7 +8,9 @@
 #include "node/Resize.hpp"
 #include "node/Blur.hpp"
 #include "node/Threshold.hpp"
+#include "node/Gray.hpp"
 #include "node/Conv.hpp"
+#include "node/Tensor.hpp"
 #include "engine/BuiltinExecutors.hpp"
 #include "engine/ImageStore.hpp"
 #include <QApplication>
@@ -38,7 +40,9 @@ int main(int argc, char *argv[]){
     qmlRegisterType<ResizeNode>("ResizeNode", 1, 0, "ResizeNode");
     qmlRegisterType<BlurNode>("BlurNode", 1, 0, "BlurNode");
     qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");
+    qmlRegisterType<GrayNode>("GrayNode", 1, 0, "GrayNode");
     qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
+    qmlRegisterType<TensorNode>("TensorNode", 1, 0, "TensorNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
     qmlRegisterSingletonInstance("Settings", 1, 0, "Settings", Settings::instance());
     qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());

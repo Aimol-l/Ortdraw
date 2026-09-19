@@ -6,6 +6,7 @@
 #include "engine/BuiltinExecutors.hpp"
 #include "engine/executors/BlurExecutor.hpp"
 #include "engine/executors/ConvExecutor.hpp"
+#include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
 #include "engine/executors/ResizeExecutor.hpp"
@@ -18,6 +19,16 @@ cv::Mat makeGray(int rows = 8, int cols = 8) {
     for (int r = 0; r < rows; ++r)
         for (int c = 0; c < cols; ++c)
             m.at<uchar>(r, c) = uchar(((r * cols + c) * 4) % 256);
+    return m;
+}
+
+cv::Mat makeBGR(int rows = 8, int cols = 8) {
+    cv::Mat m(rows, cols, CV_8UC3);
+    for (int r = 0; r < rows; ++r)
+        for (int c = 0; c < cols; ++c)
+            m.at<cv::Vec3b>(r, c) = cv::Vec3b(uchar((r * 31 + c * 7) % 256),
+                                              uchar((r * 17 + c * 53) % 256),
+                                              uchar((r * 91 + c * 3) % 256));
     return m;
 }
 
@@ -106,6 +117,46 @@ private slots:
         QVERIFY(!r.ok);
     }
 
+    void grayFromColorProducesSingleChannel() {
+        GrayExecutor ex;
+        const cv::Mat in = makeBGR(8, 8);
+        const ExecResult r = ex.execute({}, {}, imageInputs(in));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(r.outputs.size(), 1);
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.channels(), 1);
+
+        cv::Mat ref;
+        cv::cvtColor(in, ref, cv::COLOR_BGR2GRAY);
+        cv::Mat diff;
+        cv::absdiff(out, ref, diff);
+        QCOMPARE(cv::countNonZero(diff.reshape(1)), 0);
+    }
+
+    void graySingleChannelPassthrough() {
+        GrayExecutor ex;
+        const cv::Mat in = makeGray(8, 6);
+        const ExecResult r = ex.execute({}, {}, imageInputs(in));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.channels(), 1);
+        QCOMPARE(out.cols, in.cols);
+        QCOMPARE(out.rows, in.rows);
+    }
+
+    void grayThenThresholdChain() {
+        GrayExecutor gray;
+        const cv::Mat in = makeBGR(8, 8);
+        const ExecResult g = gray.execute({}, {}, imageInputs(in));
+        QVERIFY2(g.ok, qPrintable(g.error));
+
+        ThresholdExecutor thr;
+        const ExecResult r = thr.execute({}, QVariantMap{{"threshold", 128}}, g.outputs);
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.channels(), 1);
+    }
+
     void imageLoadEmptyPathFails() {
         ImageLoadExecutor ex;
         QVERIFY(!ex.execute({}, QVariantMap{{"path", ""}}, {}).ok);
@@ -142,7 +193,7 @@ private slots:
     void registrationCoversBuiltins() {
         registerBuiltinExecutors();
         const QStringList types = NodeRegistry::instance().knownTypes();
-        for (const char* t : {"ImageLoad", "ImageShow", "Resize", "Blur", "Threshold", "Conv"})
+        for (const char* t : {"ImageLoad", "ImageShow", "Resize", "Blur", "Threshold", "Gray", "Conv"})
             QVERIFY(types.contains(t));
     }
 };
