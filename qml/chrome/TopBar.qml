@@ -4,6 +4,7 @@ import Theme
 import UiBus
 import Settings
 import NodeManager
+import Log
 
 Rectangle {
     id: root
@@ -111,6 +112,8 @@ Rectangle {
                                 fileMenu.popup()
                             else if (modelData === "编辑")
                                 editMenu.popup()
+                            else if (modelData === "帮助")
+                                helpMenu.popup()
                         }
                     }
                 }
@@ -245,6 +248,21 @@ Rectangle {
         id: editMenu
 
         MenuRow { text: "设置…"; onTriggered: UiBus.settingsRequested() }
+
+        background: Rectangle {
+            implicitWidth: 170
+            color: Theme.bgElev
+            border.width: 1
+            border.color: Theme.border
+            radius: 8
+        }
+    }
+
+    Controls.Menu {
+        id: helpMenu
+
+        MenuRow { text: "打开日志"; onTriggered: Log.openFolder() }
+        MenuRow { text: "日志路径"; onTriggered: Log.openFolder() }
 
         background: Rectangle {
             implicitWidth: 170

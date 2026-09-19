@@ -60,7 +60,21 @@ Item {
     }
     onWidthChanged: Qt.callLater(syncPorts)
     onHeightChanged: Qt.callLater(syncPorts)
-    Component.onCompleted: Qt.callLater(syncPorts)
+    Component.onCompleted: {
+        Qt.callLater(syncPorts)
+        syncTimer.restart()   // 布局稳定后再同步一次（端口委托可能晚于首次同步创建）
+    }
+    // 端口委托数量变化（如多入/出端口节点）时重新同步
+    Connections {
+        target: portRepeater
+        function onCountChanged() { syncTimer.restart() }
+    }
+    Timer {
+        id: syncTimer
+        interval: 80
+        repeat: false
+        onTriggered: card.syncPorts()
+    }
 
     Rectangle {
         id: glow
@@ -322,7 +336,8 @@ Item {
                         color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
                         border.width: 2
                         border.color: Theme.bgElev
-                        scale: (inArea.containsMouse || (rowItem.inPort && rowItem.inPort.highlighted)) ? 1.45 : 1.0
+                        scale: (rowItem.inPort && rowItem.inPort.highlighted) ? 1.5
+                               : (inArea.containsMouse ? 1.22 : 1.0)
                         Behavior on scale { NumberAnimation { duration: 120 } }
 
                         Rectangle {
@@ -331,7 +346,8 @@ Item {
                             height: parent.height + 8
                             radius: width / 2
                             color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
-                            opacity: (inArea.containsMouse || (rowItem.inPort && rowItem.inPort.highlighted)) ? 0.35 : 0.0
+                            opacity: (rowItem.inPort && rowItem.inPort.highlighted) ? 0.35
+                                     : (inArea.containsMouse ? 0.16 : 0.0)
                             z: -1
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                         }
@@ -463,7 +479,8 @@ Item {
                         color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
                         border.width: 2
                         border.color: Theme.bgElev
-                        scale: (outArea.containsMouse || (rowItem.outPort && rowItem.outPort.highlighted)) ? 1.45 : 1.0
+                        scale: (rowItem.outPort && rowItem.outPort.highlighted) ? 1.5
+                               : (outArea.containsMouse ? 1.22 : 1.0)
                         Behavior on scale { NumberAnimation { duration: 120 } }
 
                         Rectangle {
@@ -472,7 +489,8 @@ Item {
                             height: parent.height + 8
                             radius: width / 2
                             color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
-                            opacity: (outArea.containsMouse || (rowItem.outPort && rowItem.outPort.highlighted)) ? 0.35 : 0.0
+                            opacity: (rowItem.outPort && rowItem.outPort.highlighted) ? 0.35
+                                     : (outArea.containsMouse ? 0.16 : 0.0)
                             z: -1
                             Behavior on opacity { NumberAnimation { duration: 120 } }
                         }

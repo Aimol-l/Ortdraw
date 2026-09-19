@@ -5,6 +5,7 @@
 #include <QString>
 #include <QtQmlIntegration/qqmlintegration.h>
 #include <memory>
+#include "Log.hpp"
 
 class Settings : public QObject {
     Q_OBJECT
@@ -247,6 +248,7 @@ public:
     }
 
     Q_INVOKABLE void resetDefaults() {
+        Log::info(QStringLiteral("恢复默认设置"));
         m_theme = "light"; m_store->setValue("appearance/theme", m_theme);
         m_accentColor = QColor("#2e7de9"); m_accentCustom = false;
         m_store->setValue("appearance/accentColor", m_accentColor.name());

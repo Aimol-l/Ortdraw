@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include "PaintBoard.h"
 #include "Settings.h"
+#include "Log.hpp"
 #include "utils/DAGraph.hpp"
 #include "command/AddNode.hpp"
 #include "command/AddEdge.hpp"
@@ -69,7 +70,7 @@ private:
     Port* portAt(const QPointF& pos, PortType want){
         if(!m_paint_board) return nullptr;
         Port* best = nullptr;
-        qreal best_d = 14.0;
+        qreal best_d = 24.0;
         for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
             auto& ports = (want == PortType::Input) ? node->getInPorts() : node->getOutPorts();
             for(Port* p : ports){
@@ -112,12 +113,17 @@ public:
     }
     Q_INVOKABLE bool run() {
         if (engineRunning()) return false;
+        Log::info(QStringLiteral("运行图求值：节点 %1 个，边 %2 条")
+                      .arg(nodeCount()).arg(edgeCount()));
         clearNodeErrors();
         // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
         // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
         return m_executor.run();
     }
-    Q_INVOKABLE void cancelRun() { m_executor.cancel(); }
+    Q_INVOKABLE void cancelRun() {
+        Log::info(QStringLiteral("取消图求值"));
+        m_executor.cancel();
+    }
     Q_INVOKABLE bool hasImage(const QString& uuid) const {
         return ImageStore::instance()->has(uuid);
     }
@@ -198,21 +204,32 @@ public:
     Q_INVOKABLE bool saveGraph(const QString& path) {
         const QJsonDocument doc(QJsonObject::fromVariantMap(graphToMap()));
         QFile f(path);
-        if(!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+        if(!f.open(QIODevice::WriteOnly | QIODevice::Truncate)){
+            Log::warn(QStringLiteral("保存图失败：%1（无法写入）").arg(path));
+            return false;
+        }
         const QByteArray data = doc.toJson(QJsonDocument::Indented);
         const bool ok = (f.write(data) == data.size());
         f.close();
+        Log::info(QStringLiteral("保存图%1：%2").arg(ok ? QString() : QStringLiteral("失败"), path));
         return ok;
     }
 
     Q_INVOKABLE QVariantMap readGraph(const QString& path) {
         QFile f(path);
-        if(!f.open(QIODevice::ReadOnly)) return {};
+        if(!f.open(QIODevice::ReadOnly)){
+            Log::warn(QStringLiteral("读取图失败：%1（无法打开）").arg(path));
+            return {};
+        }
         const QByteArray data = f.readAll();
         f.close();
         QJsonParseError err;
         const QJsonDocument doc = QJsonDocument::fromJson(data, &err);
-        if(err.error != QJsonParseError::NoError || !doc.isObject()) return {};
+        if(err.error != QJsonParseError::NoError || !doc.isObject()){
+            Log::warn(QStringLiteral("读取图失败：%1（JSON 解析错误）").arg(path));
+            return {};
+        }
+        Log::info(QStringLiteral("读取图：%1").arg(path));
         return doc.object().toVariantMap();
     }
 
@@ -241,6 +258,9 @@ public:
         if(!node || !m_paint_board) return false;
         auto command = std::make_unique<AddNodeCMD>(node, m_paint_board);
         bool ok = m_cmd_manager.executeCommand(std::move(command));
+        if(ok)
+            Log::info(QStringLiteral("创建节点：%1 (%2)")
+                          .arg(node->typeName(), node->uuid().toString()));
         refresh();
         return ok;
     }
@@ -253,6 +273,7 @@ public:
             auto command = std::make_unique<RemoveNodeCMD>(node, m_paint_board);
             any = m_cmd_manager.executeCommand(std::move(command)) || any;
         }
+        if(any) Log::info(QStringLiteral("删除节点：%1 个").arg(nodes.size()));
         refresh();
         return any;
     }
@@ -265,11 +286,22 @@ public:
             auto command = std::make_unique<RemoveEdgeCMD>(edge.start_port, edge.stop_port, m_paint_board);
             any = m_cmd_manager.executeCommand(std::move(command)) || any;
         }
+        if(any) Log::info(QStringLiteral("删除边：%1 条").arg(edges.size()));
         refresh();
         return any;
     }
-    Q_INVOKABLE bool undo() { bool ok = m_cmd_manager.undo(); refresh(); return ok; }
-    Q_INVOKABLE bool redo() { bool ok = m_cmd_manager.redo(); refresh(); return ok; }
+    Q_INVOKABLE bool undo() {
+        bool ok = m_cmd_manager.undo();
+        Log::info(QStringLiteral("撤销%1").arg(ok ? QString() : QStringLiteral("（无可撤销）")));
+        refresh();
+        return ok;
+    }
+    Q_INVOKABLE bool redo() {
+        bool ok = m_cmd_manager.redo();
+        Log::info(QStringLiteral("重做%1").arg(ok ? QString() : QStringLiteral("（无可重做）")));
+        refresh();
+        return ok;
+    }
 
     Q_INVOKABLE void bringToFront(QUuid uid){
         if(!m_paint_board) return;
@@ -293,6 +325,7 @@ public:
     Q_INVOKABLE void clearGraph(){
         if(!m_paint_board) return;
         // 清空图前先取消正在运行的求值，避免工作线程在节点已删除后回写图像/错误
+        Log::info(QStringLiteral("清空画布：节点 %1 个").arg(m_paint_board->m_graph.getAllNodes().size()));
         m_executor.cancel();
         const auto all = m_paint_board->m_graph.getAllNodes();
         for(auto* n : all){
@@ -411,23 +444,28 @@ public:
         auto* src = m_paint_board->m_drawing_edge.start_port;
         if(!src){ m_paint_board->cancelDrawing(); refresh(); return; }
         if(port->isConnected()){
+            Log::warn(QStringLiteral("连接失败：目标输入端口已被占用"));
             m_paint_board->cancelDrawing();
             refresh();
             return;
         }
         if(port->father() == src->father()){
+            Log::warn(QStringLiteral("连接失败：不能连接同一节点的端口"));
             m_paint_board->cancelDrawing();
             refresh();
             return;
         }
         if(!Port::compatible(port->dataType(), src->dataType())){
+            Log::warn(QStringLiteral("连接失败：数据类型不兼容"));
             m_paint_board->cancelDrawing();
             refresh();
             return;
         }
         port->setPosition(QPointF(x, y));
         auto command = std::make_unique<AddEdgeCMD>(src, port, m_paint_board);
-        m_cmd_manager.executeCommand(std::move(command));
+        if(m_cmd_manager.executeCommand(std::move(command)))
+            Log::info(QStringLiteral("连接：%1 → %2")
+                          .arg(src->father()->typeName(), port->father()->typeName()));
         m_paint_board->finishDrawing();
         refresh();
     }
@@ -458,14 +496,22 @@ public:
         if(!m_paint_board || !m_link_src) return;
         Port* src = nullptr;
         Port* dst = nullptr;
-        Port* target = m_link_target;
+        // 以释放落点重新判定目标（落点稍偏也能连上）；其次回退到拖拽中的高亮目标
+        Port* target = m_link_from_input ? portAt(QPointF(x, y), PortType::Output)
+                                         : portAt(QPointF(x, y), PortType::Input);
+        if(!target) target = m_link_target;
         if(target){
-            if(m_link_from_input){ src = target; dst = m_link_src; }
-            else                 { src = m_link_src; dst = target; }
+            Port* s2 = m_link_from_input ? target : m_link_src;
+            Port* d2 = m_link_from_input ? m_link_src : target;
+            if(Port::compatible(s2->dataType(), d2->dataType())){ src = s2; dst = d2; }
         }
         if(src && dst){
             auto command = std::make_unique<AddEdgeCMD>(src, dst, m_paint_board);
-            m_cmd_manager.executeCommand(std::move(command));
+            if(m_cmd_manager.executeCommand(std::move(command)))
+                Log::info(QStringLiteral("连接：%1 → %2")
+                              .arg(src->father()->typeName(), dst->father()->typeName()));
+        } else {
+            Log::warn(QStringLiteral("连接失败：未找到兼容的目标端口"));
         }
         m_paint_board->finishDrawing();
         setLinkTarget(nullptr);

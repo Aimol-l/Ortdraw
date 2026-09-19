@@ -3,6 +3,7 @@
 #include <QColor>
 #include <QtQmlIntegration/qqmlintegration.h>
 #include "Settings.h"
+#include "Log.hpp"
 
 class Theme : public QObject {
     Q_OBJECT
@@ -42,7 +43,10 @@ public:
     static Theme* theme() { return static_cast<Theme*>(instance()); }
 
     bool dark() const { return Settings::settings()->theme() == "dark"; }
-    void setDark(bool d) { Settings::settings()->setTheme(d ? "dark" : "light"); }
+    void setDark(bool d) {
+        Settings::settings()->setTheme(d ? "dark" : "light");
+        Log::info(QStringLiteral("主题切换 → %1").arg(d ? QStringLiteral("暗色") : QStringLiteral("亮色")));
+    }
     Q_INVOKABLE void toggle() { setDark(!dark()); }
 
     QColor bg()        const { static const QColor l("#eef0f7"), d("#1b1f24"); return dark() ? d : l; }

@@ -14,6 +14,27 @@ TensorNode {
 
     readonly property real cellWidth: Math.max(28, Math.floor((card.width - 40) / root.cols))
 
+    readonly property var presets: [
+        { name: "单位",     m: [0,0,0, 0,1,0, 0,0,0] },
+        { name: "均值",     m: [1,1,1, 1,1,1, 1,1,1], scale: 1/9 },
+        { name: "高斯",     m: [1,2,1, 2,4,2, 1,2,1], scale: 1/16 },
+        { name: "锐化",     m: [0,-1,0, -1,5,-1, 0,-1,0] },
+        { name: "拉普拉斯", m: [0,1,0, 1,-4,1, 0,1,0] },
+        { name: "边缘",     m: [-1,-1,-1, -1,8,-1, -1,-1,-1] },
+        { name: "Sobel X",  m: [-1,0,1, -2,0,2, -1,0,1] },
+        { name: "Sobel Y",  m: [-1,-2,-1, 0,0,0, 1,2,1] },
+        { name: "浮雕",     m: [-2,-1,0, -1,1,1, 0,1,2] }
+    ]
+
+    function applyPreset(i) {
+        var p = root.presets[i]
+        root.setShape(3, 3)
+        var s = p.scale !== undefined ? p.scale : 1
+        for (var r = 0; r < 3; ++r)
+            for (var c = 0; c < 3; ++c)
+                root.setValue(r, c, p.m[r * 3 + c] * s)
+    }
+
     NodeCard {
         id: card
         anchors.fill: parent
@@ -26,16 +47,14 @@ TensorNode {
             spacing: 6
 
             // ---- 预设 ----
-            Row {
-                spacing: 6
+            Flow {
+                width: parent.width
+                spacing: 4
                 Repeater {
-                    model: [
-                        { t: "单位", a: "identity" },
-                        { t: "均值", a: "mean" },
-                        { t: "锐化", a: "sharpen" }
-                    ]
+                    model: root.presets
                     delegate: Rectangle {
                         required property var modelData
+                        required property int index
                         width: 52
                         height: 20
                         radius: 5
@@ -45,7 +64,7 @@ TensorNode {
 
                         Text {
                             anchors.centerIn: parent
-                            text: modelData.t
+                            text: modelData.name
                             color: Theme.fg
                             font.pixelSize: 10
                             renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
@@ -53,11 +72,7 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (modelData.a === "identity") root.presetIdentity()
-                                else if (modelData.a === "mean") root.presetMean()
-                                else root.presetSharpen()
-                            }
+                            onClicked: root.applyPreset(index)
                         }
                     }
                 }

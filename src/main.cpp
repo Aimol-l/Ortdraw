@@ -3,6 +3,7 @@
 #include "Settings.h"
 #include "Theme.h"
 #include "FileDialogs.h"
+#include "Log.hpp"
 #include "node/ImageLoad.hpp"
 #include "node/ImageShow.hpp"
 #include "node/Resize.hpp"
@@ -22,7 +23,14 @@ int main(int argc, char *argv[]){
     // 高 DPI 下按真实缩放因子渲染，避免文字被合成器二次缩放而发虚
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+    QCoreApplication::setOrganizationName(QStringLiteral("Ortdraw"));
+    QCoreApplication::setApplicationName(QStringLiteral("Ortdraw"));
     QApplication app(argc, argv);
+    Log::init();
+    Log::info(QStringLiteral("应用启动"));
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, [] {
+        Log::info(QStringLiteral("应用退出"));
+    });
     QQmlApplicationEngine engine;
     const QUrl url("qrc:/main.qml");
     QObject::connect(
@@ -47,6 +55,7 @@ int main(int argc, char *argv[]){
     qmlRegisterSingletonInstance("Settings", 1, 0, "Settings", Settings::instance());
     qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());
     qmlRegisterSingletonInstance("FileDialogs", 1, 0, "FileDialogs", FileDialogs::instance());
+    qmlRegisterSingletonInstance("Log", 1, 0, "Log", Log::instance());
     qmlRegisterSingletonType(QUrl("qrc:/NodeCatalog.qml"), "NodeCatalog", 1, 0, "NodeCatalog");
     qmlRegisterSingletonType(QUrl("qrc:/UiBus.qml"), "UiBus", 1, 0, "UiBus");
     registerBuiltinExecutors();

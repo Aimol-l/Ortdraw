@@ -8,6 +8,7 @@ Item {
     anchors.fill: parent
     visible: src !== ""
     z: 200
+    onVisibleChanged: UiBus.overlayOpen = visible
 
     property string src: ""
 

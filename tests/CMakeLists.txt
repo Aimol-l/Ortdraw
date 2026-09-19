@@ -3,6 +3,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/Settings.h
     ${PROJECT_SOURCE_DIR}/include/NodeManager.h
     ${PROJECT_SOURCE_DIR}/include/PaintBoard.h
+    ${PROJECT_SOURCE_DIR}/include/Log.hpp
     ${PROJECT_SOURCE_DIR}/include/node/BaseNode.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageLoad.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageShow.hpp

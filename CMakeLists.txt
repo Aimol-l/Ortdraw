@@ -40,6 +40,7 @@ include_directories(${PROJECT_DIR}/include/)
 file(GLOB SRC_FILES
     CONFIGURE_DEPENDS
     "${PROJECT_SOURCE_DIR}/include/*.h"
+    "${PROJECT_SOURCE_DIR}/include/*.hpp"
     "${PROJECT_SOURCE_DIR}/include/node/*.hpp"
     "${PROJECT_SOURCE_DIR}/include/port/*.hpp"
     "${PROJECT_SOURCE_DIR}/include/utils/*.hpp"

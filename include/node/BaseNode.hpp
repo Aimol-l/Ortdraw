@@ -21,7 +21,7 @@
 
 class BaseNode:public QQuickItem{
     Q_OBJECT  
-    Q_PROPERTY(QUuid uuid READ uuid)
+    Q_PROPERTY(QUuid uuid READ uuid CONSTANT)
     Q_PROPERTY(QColor color READ color WRITE setColor)   // 背景颜色
 
     Q_PROPERTY(bool selected READ selected  WRITE setSelected NOTIFY selectedChanged)

@@ -11,6 +11,7 @@ Item {
     anchors.fill: parent
     visible: false
     z: 200
+    onVisibleChanged: UiBus.overlayOpen = visible
 
     property string query: ""
     property string activeSection: "appearance"
@@ -939,4 +940,7 @@ Item {
     }
 
     Component.onCompleted: applyFilter()
+
+    // 消费滚轮，避免穿透到画布缩放（弹层内的 ScrollView 仍可正常滚动）
+    WheelHandler { }
 }

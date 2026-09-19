@@ -147,6 +147,7 @@ Item {
         onReleased: panning = false
 
         onWheel: (wheel) => {
+            if (UiBus.overlayOpen) { wheel.accepted = true; return }
             var old = area.zoom
             var factor = wheel.angleDelta.y > 0 ? 1.1 : 1 / 1.1
             var nz = Math.min(Settings.zoomMax, Math.max(Settings.zoomMin, old * factor))

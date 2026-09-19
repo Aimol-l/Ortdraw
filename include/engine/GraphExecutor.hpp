@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <thread>
 
 #include <QHash>
@@ -12,6 +13,7 @@
 #include <QVariantMap>
 #include <opencv2/imgproc.hpp>
 
+#include "Log.hpp"
 #include "engine/NodeRegistry.hpp"
 #include "utils/DAGraph.hpp"
 
@@ -163,8 +165,14 @@ private:
         QSet<BaseNode*> failed;
         bool allOk = true;
         bool aborted = false;
+        const auto startedAt = std::chrono::steady_clock::now();
 
         auto reportNode = [this, runId](const QString& uuid, bool ok, const QString& err) {
+            // 工作线程内直接写日志（Log 线程安全）
+            if (ok)
+                Log::debug(QStringLiteral("节点完成：%1 ok").arg(uuid));
+            else
+                Log::debug(QStringLiteral("节点失败：%1 %2").arg(uuid, err));
             QMetaObject::invokeMethod(this, [this, runId, uuid, ok, err] {
                 if (runId != m_run_id.load()) return;
                 emit nodeFinished(uuid, ok, err);
@@ -252,8 +260,13 @@ private:
         const QString finalStatus = aborted ? QStringLiteral("已取消")
                                             : (ok ? QStringLiteral("完成")
                                                   : QStringLiteral("失败"));
-        QMetaObject::invokeMethod(this, [this, runId, ok, finalStatus] {
+        const qint64 elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                     std::chrono::steady_clock::now() - startedAt).count();
+        QMetaObject::invokeMethod(this, [this, runId, ok, finalStatus, elapsedMs] {
             if (runId != m_run_id.load()) return;
+            Log::info(QStringLiteral("图求值结束：ok=%1，耗时 %2 ms")
+                          .arg(ok ? QStringLiteral("true") : QStringLiteral("false"))
+                          .arg(elapsedMs));
             emit runFinished(ok);
             setStatus(finalStatus);
             setRunning(false);
