@@ -80,6 +80,10 @@ Item {
             ctx.beginPath(); ctx.arc(12, 12, 5.5, Math.PI / 2, -Math.PI / 2, false)
             ctx.closePath(); ctx.fill()
             ctx.beginPath(); ctx.arc(12, 12, 5.5, 0, Math.PI * 2); ctx.stroke()
+        } else if (name === "edge") {
+            rr(3, 4, 18, 16, 2.5); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(5, 16); ctx.lineTo(9, 11)
+            ctx.lineTo(12.5, 14); ctx.lineTo(19, 7); ctx.stroke()
         } else if (name === "conv") {
             rr(4, 4, 16, 16, 2.5); ctx.stroke()
             line(9.3, 4, 9.3, 20)

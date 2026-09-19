@@ -6,6 +6,7 @@
 #include "engine/BuiltinExecutors.hpp"
 #include "engine/executors/BlurExecutor.hpp"
 #include "engine/executors/ConvExecutor.hpp"
+#include "engine/executors/EdgeDetectExecutor.hpp"
 #include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
@@ -19,6 +20,12 @@ cv::Mat makeGray(int rows = 8, int cols = 8) {
     for (int r = 0; r < rows; ++r)
         for (int c = 0; c < cols; ++c)
             m.at<uchar>(r, c) = uchar(((r * cols + c) * 4) % 256);
+    return m;
+}
+
+cv::Mat makeStepEdge(int rows = 16, int cols = 16) {
+    cv::Mat m(rows, cols, CV_8U, cv::Scalar(0));
+    m.colRange(cols / 2, cols).setTo(255);
     return m;
 }
 
@@ -190,10 +197,41 @@ private slots:
         QCOMPARE(out.rows, in.rows);
     }
 
+    void edgeDetectProducesEdges() {
+        EdgeDetectExecutor ex;
+        const cv::Mat in = makeStepEdge(16, 16);
+        for (int method = 0; method <= 3; ++method) {
+            QVariantMap p{{"method", method}, {"kernel", 3}, {"low", 50}, {"high", 150}};
+            const ExecResult r = ex.execute({}, p, imageInputs(in));
+            QVERIFY2(r.ok, qPrintable(r.error));
+            QCOMPARE(r.outputs.size(), 1);
+            const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+            QVERIFY(!out.empty());
+            QCOMPARE(out.channels(), 1);
+            QCOMPARE(out.type(), CV_8U);
+            QVERIFY2(cv::countNonZero(out) > 0,
+                     qPrintable(QString("method %1 produced no edges").arg(method)));
+        }
+    }
+
+    void cannyLowerThresholdDetectsAtLeastAsMany() {
+        EdgeDetectExecutor ex;
+        const cv::Mat in = makeStepEdge(32, 32);
+        const ExecResult rl = ex.execute({}, QVariantMap{{"method", 3}, {"kernel", 3}, {"low", 50}, {"high", 100}}, imageInputs(in));
+        const ExecResult rh = ex.execute({}, QVariantMap{{"method", 3}, {"kernel", 3}, {"low", 200}, {"high", 250}}, imageInputs(in));
+        QVERIFY2(rl.ok, qPrintable(rl.error));
+        QVERIFY2(rh.ok, qPrintable(rh.error));
+        const cv::Mat& lo = std::get<cv::Mat>(rl.outputs[0]);
+        const cv::Mat& hi = std::get<cv::Mat>(rh.outputs[0]);
+        QCOMPARE(lo.type(), CV_8U);
+        QCOMPARE(hi.type(), CV_8U);
+        QVERIFY(cv::countNonZero(lo) >= cv::countNonZero(hi));
+    }
+
     void registrationCoversBuiltins() {
         registerBuiltinExecutors();
         const QStringList types = NodeRegistry::instance().knownTypes();
-        for (const char* t : {"ImageLoad", "ImageShow", "Resize", "Blur", "Threshold", "Gray", "Conv"})
+        for (const char* t : {"ImageLoad", "ImageShow", "Resize", "Blur", "Threshold", "Gray", "EdgeDetect", "Conv"})
             QVERIFY(types.contains(t));
     }
 };

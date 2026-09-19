@@ -2,6 +2,7 @@
 #include "engine/NodeRegistry.hpp"
 #include "engine/executors/ConvExecutor.hpp"
 #include "engine/executors/BlurExecutor.hpp"
+#include "engine/executors/EdgeDetectExecutor.hpp"
 #include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
@@ -17,6 +18,7 @@ inline void registerBuiltinExecutors() {
     r.registerExecutor("Blur",      std::make_shared<BlurExecutor>());
     r.registerExecutor("Gray",      std::make_shared<GrayExecutor>());
     r.registerExecutor("Threshold", std::make_shared<ThresholdExecutor>());
+    r.registerExecutor("EdgeDetect", std::make_shared<EdgeDetectExecutor>());
     r.registerExecutor("Conv",      std::make_shared<ConvExecutor>());
     r.registerExecutor("Tensor",    std::make_shared<TensorExecutor>());
 }

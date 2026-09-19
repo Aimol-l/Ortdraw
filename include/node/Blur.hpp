@@ -27,6 +27,8 @@ public:
 
     BlurNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "高斯模糊";
+
+        m_description = "高斯模糊，核大小可调（取奇数）。";
         m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));
         m_output_ports.push_back(new Port("图像", PortType::Output, DataType::Image, QPointF(0,0), this));
     }

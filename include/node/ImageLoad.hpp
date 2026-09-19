@@ -27,6 +27,8 @@ public:
 
     ImageLoadNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "加载图片";
+
+        m_description = "从磁盘读取图片，输出图像。";
         m_output_ports.push_back(new Port("输出", PortType::Output, DataType::Image, QPointF(0,0), this));
     }
     ~ImageLoadNode(){

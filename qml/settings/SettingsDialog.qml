@@ -796,6 +796,7 @@ Item {
                                         KeyRow { label: "撤销"; keys: "Ctrl + Z" }
                                         KeyRow { label: "重做"; keys: "Ctrl + Y" }
                                         KeyRow { label: "复制选中节点"; keys: "Ctrl + D" }
+                                        KeyRow { label: "运行 / 停止"; keys: "F5" }
                                     }
                                     Column {
                                         width: (parent.width - 26) / 2

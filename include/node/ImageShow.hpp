@@ -12,6 +12,8 @@ public:
 
     ImageShowNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "图片显示";
+
+        m_description = "显示上游图像（透传）。";
         m_input_ports.push_back(new Port("输入",PortType::Input,DataType::Image,QPointF(0,0),this));
     }
     ~ImageShowNode(){

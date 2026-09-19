@@ -11,6 +11,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/Blur.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Threshold.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Gray.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/EdgeDetect.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Conv.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp

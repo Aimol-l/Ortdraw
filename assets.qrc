@@ -7,6 +7,7 @@
         <file alias="BlurNode.qml">qml/node/BlurNode.qml</file>
         <file alias="ThresholdNode.qml">qml/node/ThresholdNode.qml</file>
         <file alias="GrayNode.qml">qml/node/GrayNode.qml</file>
+        <file alias="EdgeDetectNode.qml">qml/node/EdgeDetectNode.qml</file>
         <file alias="ConvNode.qml">qml/node/ConvNode.qml</file>
         <file alias="TensorNode.qml">qml/node/TensorNode.qml</file>
         <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>

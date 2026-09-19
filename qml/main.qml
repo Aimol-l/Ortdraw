@@ -404,6 +404,12 @@ Controls.ApplicationWindow {
     }
 
     Shortcut {
+        sequence: "F5"
+        enabled: !settingsDialog.visible
+        onActivated: NodeManager.engineRunning ? NodeManager.cancelRun() : NodeManager.run()
+    }
+
+    Shortcut {
         sequence: "Ctrl+0"
         enabled: !settingsDialog.visible
         onActivated: canvas.fitView()

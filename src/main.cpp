@@ -10,6 +10,7 @@
 #include "node/Blur.hpp"
 #include "node/Threshold.hpp"
 #include "node/Gray.hpp"
+#include "node/EdgeDetect.hpp"
 #include "node/Conv.hpp"
 #include "node/Tensor.hpp"
 #include "engine/BuiltinExecutors.hpp"
@@ -49,6 +50,7 @@ int main(int argc, char *argv[]){
     qmlRegisterType<BlurNode>("BlurNode", 1, 0, "BlurNode");
     qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");
     qmlRegisterType<GrayNode>("GrayNode", 1, 0, "GrayNode");
+    qmlRegisterType<EdgeDetectNode>("EdgeDetectNode", 1, 0, "EdgeDetectNode");
     qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
     qmlRegisterType<TensorNode>("TensorNode", 1, 0, "TensorNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());

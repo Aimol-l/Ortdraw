@@ -21,6 +21,8 @@ public:
 
     ThresholdNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "阈值二值化";
+
+        m_description = "固定阈值二值化，输出 0/255。";
         m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));
         m_output_ports.push_back(new Port("图像", PortType::Output, DataType::Image, QPointF(0,0), this));
     }
