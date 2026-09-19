@@ -5,6 +5,7 @@
 #include "FileDialogs.h"
 #include "Log.hpp"
 #include "node/ImageLoad.hpp"
+#include "node/ImageSave.hpp"
 #include "node/ImageShow.hpp"
 #include "node/Resize.hpp"
 #include "node/Blur.hpp"
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]){
     qmlRegisterType<PaintBoard>("PaintBoard", 1, 0, "PaintBoard");
     qmlRegisterType<ImageLoadNode>("ImageLoadNode", 1, 0, "ImageLoadNode");
     qmlRegisterType<ImageShowNode>("ImageShowNode", 1, 0, "ImageShowNode");
+    qmlRegisterType<ImageSaveNode>("ImageSaveNode", 1, 0, "ImageSaveNode");
     qmlRegisterType<ResizeNode>("ResizeNode", 1, 0, "ResizeNode");
     qmlRegisterType<BlurNode>("BlurNode", 1, 0, "BlurNode");
     qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");

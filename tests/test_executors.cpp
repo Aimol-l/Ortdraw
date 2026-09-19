@@ -9,6 +9,7 @@
 #include "engine/executors/EdgeDetectExecutor.hpp"
 #include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
+#include "engine/executors/ImageSaveExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
 #include "engine/executors/ResizeExecutor.hpp"
 #include "engine/executors/ThresholdExecutor.hpp"
@@ -197,6 +198,44 @@ private slots:
         QCOMPARE(out.rows, in.rows);
     }
 
+    void imageSaveWritesFileAndPassthrough() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("out.png");
+
+        ImageSaveExecutor ex;
+        const cv::Mat in = makeGray(8, 6);
+        const ExecResult r = ex.execute({}, QVariantMap{{"path", path}}, imageInputs(in));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(r.outputs.size(), 1);
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.cols, in.cols);
+        QCOMPARE(out.rows, in.rows);
+
+        const QFileInfo fi(path);
+        QVERIFY(fi.exists());
+        QVERIFY(fi.size() > 0);
+    }
+
+    void imageSaveAppendsNameToDirectory() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        ImageSaveExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"path", dir.path()}}, imageInputs(makeGray()));
+        QVERIFY2(r.ok, qPrintable(r.error));
+
+        const QDir d(dir.path());
+        const QStringList files = d.entryList(QDir::Files);
+        QCOMPARE(files.size(), 1);
+        QVERIFY(QFileInfo(d.filePath(files.first())).size() > 0);
+    }
+
+    void imageSaveWithoutInputFails() {
+        ImageSaveExecutor ex;
+        QVERIFY(!ex.execute({}, QVariantMap{{"path", "/tmp/x.png"}}, {}).ok);
+    }
+
     void edgeDetectProducesEdges() {
         EdgeDetectExecutor ex;
         const cv::Mat in = makeStepEdge(16, 16);
@@ -231,7 +270,7 @@ private slots:
     void registrationCoversBuiltins() {
         registerBuiltinExecutors();
         const QStringList types = NodeRegistry::instance().knownTypes();
-        for (const char* t : {"ImageLoad", "ImageShow", "Resize", "Blur", "Threshold", "Gray", "EdgeDetect", "Conv"})
+        for (const char* t : {"ImageLoad", "ImageShow", "ImageSave", "Resize", "Blur", "Threshold", "Gray", "EdgeDetect", "Conv"})
             QVERIFY(types.contains(t));
     }
 };

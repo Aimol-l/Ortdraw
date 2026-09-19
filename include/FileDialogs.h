@@ -22,6 +22,13 @@ public:
         return QFileDialog::getOpenFileName(nullptr, tr("选择图片"), startDir,
             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;所有文件 (*)"));
     }
+    Q_INVOKABLE QString saveImage(const QString& startPath = QString()) {
+        QString f = QFileDialog::getSaveFileName(nullptr, tr("保存图片"),
+            startPath.isEmpty() ? QStringLiteral("output.png") : startPath,
+            QStringLiteral("PNG (*.png);;JPEG (*.jpg *.jpeg);;BMP (*.bmp);;TIFF (*.tif *.tiff);;WebP (*.webp);;所有文件 (*)"));
+        if (!f.isEmpty() && QFileInfo(f).suffix().isEmpty()) f += ".png";
+        return f;
+    }
     Q_INVOKABLE QString saveGraph(const QString& startDir = QString(),
                                   const QString& suggested = QStringLiteral("graph.ortdraw")) {
         const QString dir = startDir.isEmpty()

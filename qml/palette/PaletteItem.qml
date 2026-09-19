@@ -55,6 +55,14 @@ Item {
             ctx.beginPath(); ctx.arc(8.5, 9, 1.6, 0, Math.PI * 2); ctx.stroke()
             ctx.beginPath(); ctx.moveTo(4, 17); ctx.lineTo(9, 12); ctx.lineTo(13, 16)
             ctx.lineTo(16, 13); ctx.lineTo(20, 17); ctx.stroke()
+        } else if (name === "save") {
+            // 托盘
+            ctx.beginPath(); ctx.moveTo(4, 15); ctx.lineTo(4, 18.5)
+            ctx.arcTo(4, 20, 5.5, 20, 1.5); ctx.lineTo(18.5, 20)
+            ctx.arcTo(20, 20, 20, 18.5, 1.5); ctx.lineTo(20, 15); ctx.stroke()
+            // 向下箭头
+            line(12, 4, 12, 13.5)
+            ctx.beginPath(); ctx.moveTo(8, 9.5); ctx.lineTo(12, 13.5); ctx.lineTo(16, 9.5); ctx.stroke()
         } else if (name === "monitor") {
             rr(3, 4, 18, 12.5, 2.5); ctx.stroke()
             line(9, 20.5, 15, 20.5)

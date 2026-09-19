@@ -5,6 +5,7 @@
 #include "engine/executors/EdgeDetectExecutor.hpp"
 #include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
+#include "engine/executors/ImageSaveExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
 #include "engine/executors/ResizeExecutor.hpp"
 #include "engine/executors/ThresholdExecutor.hpp"
@@ -13,6 +14,7 @@
 inline void registerBuiltinExecutors() {
     auto& r = NodeRegistry::instance();
     r.registerExecutor("ImageLoad", std::make_shared<ImageLoadExecutor>());
+    r.registerExecutor("ImageSave", std::make_shared<ImageSaveExecutor>());
     r.registerExecutor("ImageShow", std::make_shared<ImageShowExecutor>());
     r.registerExecutor("Resize",    std::make_shared<ResizeExecutor>());
     r.registerExecutor("Blur",      std::make_shared<BlurExecutor>());

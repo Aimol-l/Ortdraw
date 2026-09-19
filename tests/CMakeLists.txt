@@ -7,6 +7,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/BaseNode.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageLoad.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageShow.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/ImageSave.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Resize.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Blur.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Threshold.hpp

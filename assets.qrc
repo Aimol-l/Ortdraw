@@ -3,6 +3,7 @@
         <file alias="main.qml">qml/main.qml</file>
         <file alias="ImageLoadNode.qml">qml/node/ImageLoadNode.qml</file>
         <file alias="ImageShowNode.qml">qml/node/ImageShowNode.qml</file>
+        <file alias="ImageSaveNode.qml">qml/node/ImageSaveNode.qml</file>
         <file alias="ResizeNode.qml">qml/node/ResizeNode.qml</file>
         <file alias="BlurNode.qml">qml/node/BlurNode.qml</file>
         <file alias="ThresholdNode.qml">qml/node/ThresholdNode.qml</file>
