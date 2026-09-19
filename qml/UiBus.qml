@@ -8,6 +8,6 @@ QtObject {
     property bool overlayOpen: false
 
     signal contextMenuRequested(real x, real y, string kind, var data)
-    signal previewRequested(url src)
+    signal previewRequested(url src, string uuid)
     signal settingsRequested()
 }

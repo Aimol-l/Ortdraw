@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -6,6 +7,8 @@
 #include <QHash>
 #include <QImage>
 #include <QMetaObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -56,6 +59,9 @@ public:
         if (m_thread.joinable()) m_thread.join();
         if (!m_graph) return false;
 
+        // 本次运行将重建全分辨率结果缓存，先清空上一轮
+        clearFullImages();
+
         QVector<NodeSnapshot> nodes;
         QHash<BaseNode*, QVector<Incoming>> incoming;
         for (BaseNode* n : m_graph->getAllNodes()) {
@@ -95,6 +101,28 @@ public:
 
     Q_INVOKABLE void cancel() { m_cancel.store(true); }
 
+    // 按需返回某节点上一轮运行的全分辨率结果；无缓存时惰性转换并缓存。
+    // 线程安全：可能由 QML 图像提供者在渲染线程调用。
+    Q_INVOKABLE QImage fullImage(const QString& uuid) {
+        QMutexLocker l(&m_full_mutex);
+        if (m_full_cache.contains(uuid)) return m_full_cache.value(uuid);
+        if (!m_full.contains(uuid)) return {};
+        const QImage img = matToQImage(m_full.value(uuid));
+        if (!img.isNull()) m_full_cache.insert(uuid, img);
+        return img;
+    }
+
+    Q_INVOKABLE bool hasFullImage(const QString& uuid) const {
+        QMutexLocker l(&m_full_mutex);
+        return m_full.contains(uuid) || m_full_cache.contains(uuid);
+    }
+
+    void clearFullImages() {
+        QMutexLocker l(&m_full_mutex);
+        m_full.clear();
+        m_full_cache.clear();
+    }
+
 signals:
     void runningChanged();
     void statusChanged();
@@ -115,7 +143,8 @@ private:
         emit statusChanged();
     }
 
-    // 单通道 → Grayscale8；三通道 BGR → RGB888；结果均深拷贝，与 cv::Mat 生命周期解耦。
+    // 单通道 → Grayscale8；三通道 BGR → RGB888；四通道 BGRA → RGB888。
+    // 结果均深拷贝，与 cv::Mat 生命周期解耦。
     static QImage matToQImage(const cv::Mat& m) {
         if (m.empty()) return {};
         if (m.channels() == 1) {
@@ -129,7 +158,23 @@ private:
             return QImage(rgb.data, rgb.cols, rgb.rows, int(rgb.step),
                           QImage::Format_RGB888).copy();
         }
+        if (m.channels() == 4) {
+            cv::Mat rgb;
+            cv::cvtColor(m, rgb, cv::COLOR_BGRA2RGB);
+            return QImage(rgb.data, rgb.cols, rgb.rows, int(rgb.step),
+                          QImage::Format_RGB888).copy();
+        }
         return {};
+    }
+
+    // 生成缩略图：最长边不超过 kThumbnailMax，避免 GUI 端持有/绘制全分辨率大图。
+    static QImage makeThumbnail(const cv::Mat& m) {
+        const int longest = std::max(m.cols, m.rows);
+        if (longest <= kThumbnailMax) return matToQImage(m);
+        const double scale = double(kThumbnailMax) / double(longest);
+        cv::Mat small;
+        cv::resize(m, small, cv::Size(), scale, scale, cv::INTER_AREA);
+        return matToQImage(small);
     }
 
     void worker(int runId, QVector<NodeSnapshot> nodes,
@@ -233,7 +278,14 @@ private:
                     if (!std::holds_alternative<cv::Mat>(d)) continue;
                     const cv::Mat& m = std::get<cv::Mat>(d);
                     if (m.empty()) continue;
-                    const QImage img = matToQImage(m);
+                    // 保留全分辨率结果（cv::Mat 引用计数拷贝，零拷贝共享像素），
+                    // 供放大查看时按需惰性转换；缩略图仅下采样后发送给 GUI。
+                    {
+                        QMutexLocker l(&m_full_mutex);
+                        m_full.insert(uuid, m);
+                        m_full_cache.remove(uuid);
+                    }
+                    const QImage img = makeThumbnail(m);
                     if (img.isNull()) continue;
                     QMetaObject::invokeMethod(this, [this, runId, uuid, img] {
                         if (runId != m_run_id.load()) return;
@@ -273,10 +325,16 @@ private:
         }, Qt::QueuedConnection);
     }
 
+    static constexpr int kThumbnailMax = 256;
+
     DAGraph* m_graph = nullptr;
     std::thread m_thread;
     std::atomic_bool m_cancel{false};
     std::atomic_int m_run_id{0};
     bool m_running = false;
     QString m_status = QStringLiteral("就绪");
+    // 最近一轮运行的全分辨率结果（工作线程写，fullImage() 读，故加锁）
+    mutable QMutex m_full_mutex;
+    QHash<QString, cv::Mat> m_full;
+    QHash<QString, QImage> m_full_cache;
 };

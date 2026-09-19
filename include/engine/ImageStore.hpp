@@ -1,4 +1,7 @@
 #pragma once
+#include <functional>
+#include <utility>
+
 #include <QQuickImageProvider>
 #include <QImage>
 #include <QHash>
@@ -6,14 +9,14 @@
 #include <QMutexLocker>
 #include <QUrl>
 
-// 节点结果图像的全局缓存，作为 QML 的 image://nodeimage 图像提供者。
+// 节点结果图像（缩略图）的全局缓存，作为 QML 的 image://nodeimage 图像提供者。
 // 工作线程经队列信号回到主线程写入；QML 侧用 rev 触发 URL 变化以刷新预览。
 class ImageStore : public QQuickImageProvider {
 public:
     ImageStore() : QQuickImageProvider(QQuickImageProvider::Image) {}
     static ImageStore* instance() { static ImageStore s; return &s; }
 
-    void setImage(const QString& uuid, const QImage& img) {
+    void setThumbnail(const QString& uuid, const QImage& img) {
         QMutexLocker l(&m_mutex);
         m_images[uuid] = img;
         ++m_rev[uuid];
@@ -53,4 +56,25 @@ public:
     QImage requestImage(const QString& id, QSize* size, const QSize& requested) override {
         return ImageStore::instance()->requestImage(id, size, requested);
     }
+};
+
+// 放大查看用的全分辨率图像提供者（image://nodeimagefull/<uuid>?v=rev）。
+// 不直接依赖 NodeManager，而是在启动时注入一个解析回调，避免循环依赖；
+// 结果在引擎侧按需惰性转换并缓存，无可用图像时返回空 QImage。
+class FullImageProvider : public QQuickImageProvider {
+public:
+    using Resolver = std::function<QImage(const QString&)>;
+    explicit FullImageProvider(Resolver resolver)
+        : QQuickImageProvider(QQuickImageProvider::Image),
+          m_resolver(std::move(resolver)) {}
+
+    QImage requestImage(const QString& id, QSize* size, const QSize&) override {
+        const QString key = QUrl::fromPercentEncoding(id.section('?', 0, 0).toUtf8());
+        const QImage img = m_resolver ? m_resolver(key) : QImage();
+        if (size) *size = img.size();
+        return img;
+    }
+
+private:
+    Resolver m_resolver;
 };

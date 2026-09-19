@@ -580,7 +580,8 @@ Item {
             MouseArea {
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
-                onClicked: UiBus.previewRequested(card.effectivePreview)
+                onClicked: UiBus.previewRequested(card.effectivePreview,
+                    "" + (card.node ? card.node.uuid : ""))
             }
         }
 

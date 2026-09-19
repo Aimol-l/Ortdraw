@@ -43,7 +43,7 @@ private:
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
         QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
                          [this](const QString& uuid, const QImage& img) {
-            ImageStore::instance()->setImage(uuid, img);
+            ImageStore::instance()->setThumbnail(uuid, img);
             ++m_image_revision;
             emit imageRevisionChanged();
         });
@@ -130,6 +130,17 @@ public:
     Q_INVOKABLE QString imageUrl(const QString& uuid) const {
         return QStringLiteral("image://nodeimage/") + uuid + QStringLiteral("?v=")
                + QString::number(ImageStore::instance()->rev(uuid));
+    }
+    // 放大查看用：按需从引擎上一轮结果取全分辨率图，并给出带版本号的 URL
+    Q_INVOKABLE QImage fullImage(const QString& uuid) {
+        return m_executor.fullImage(uuid);
+    }
+    Q_INVOKABLE bool hasFullImage(const QString& uuid) const {
+        return m_executor.hasFullImage(uuid);
+    }
+    Q_INVOKABLE QString fullImageUrl(const QString& uuid) const {
+        return QStringLiteral("image://nodeimagefull/") + uuid + QStringLiteral("?v=")
+               + QString::number(m_image_revision);
     }
 
     int nodeCount() const { return m_paint_board ? int(m_paint_board->m_graph.getAllNodes().size()) : 0; }
@@ -333,6 +344,7 @@ public:
             m_cmd_manager.executeCommand(std::move(cmd));
         }
         ImageStore::instance()->clear();
+        m_executor.clearFullImages();
         ++m_image_revision;
         emit imageRevisionChanged();
         clearNodeErrors();

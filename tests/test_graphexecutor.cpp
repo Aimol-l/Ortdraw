@@ -114,6 +114,44 @@ private slots:
         QVERIFY(!ex.running());
     }
 
+    void thumbnailDownsampledFullImageRetained() {
+        DAGraph g;
+        ImageLoadNode load;
+        QVERIFY(g.addNode(&load));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("big.png");
+        const cv::Mat src(600, 800, CV_8UC3, cv::Scalar(10, 20, 30));
+        QVERIFY(cv::imwrite(path.toStdString(), src));
+        load.setPath(path);
+
+        GraphExecutor ex;
+        ex.setGraph(&g);
+        QSignalSpy finished(&ex, &GraphExecutor::runFinished);
+        QSignalSpy imageSpy(&ex, &GraphExecutor::nodeImageReady);
+
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(finished.count() > 0, 10000);
+        QVERIFY(finished.takeFirst().at(0).toBool());
+
+        QTRY_COMPARE(imageSpy.count(), 1);
+        QCOMPARE(imageSpy.at(0).at(0).toString(), load.uuid().toString());
+        const QImage thumb = imageSpy.at(0).at(1).value<QImage>();
+        QVERIFY(!thumb.isNull());
+        // 缩略图最长边不超过 256
+        QVERIFY(qMax(thumb.width(), thumb.height()) <= 256);
+
+        // 全分辨率结果按需返回，尺寸与源图一致
+        QVERIFY(ex.hasFullImage(load.uuid().toString()));
+        const QImage full = ex.fullImage(load.uuid().toString());
+        QVERIFY(!full.isNull());
+        QCOMPARE(full.width(), 800);
+        QCOMPARE(full.height(), 600);
+        // 再次获取命中缓存
+        QCOMPARE(ex.fullImage(load.uuid().toString()).size(), full.size());
+    }
+
     void errorPropagatesToDownstream() {
         DAGraph g;
         ImageLoadNode load;

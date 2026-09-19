@@ -1,6 +1,7 @@
 import QtQuick
 import Theme
 import UiBus
+import NodeManager
 
 // 点击节点缩略图后放大查看的浮层
 Item {
@@ -11,9 +12,14 @@ Item {
     onVisibleChanged: UiBus.overlayOpen = visible
 
     property string src: ""
+    // 对应节点 uuid；非空且引擎留有全分辨率结果时优先显示它
+    property string uuid: ""
 
-    function open(s) { src = "" + s }
-    function close() { src = "" }
+    function open(s, u) {
+        src = "" + s
+        uuid = (u === undefined || u === null) ? "" : ("" + u)
+    }
+    function close() { src = ""; uuid = "" }
 
     // 半透明遮罩，点击空白处关闭
     Rectangle {
@@ -41,7 +47,9 @@ Item {
             id: img
             anchors.fill: parent
             anchors.margins: 12
-            source: viewer.src
+            source: (viewer.uuid !== "" && NodeManager.hasFullImage(viewer.uuid))
+                    ? NodeManager.fullImageUrl(viewer.uuid)
+                    : viewer.src
             fillMode: Image.PreserveAspectFit
             asynchronous: true
             smooth: true
@@ -85,6 +93,6 @@ Item {
 
     Connections {
         target: UiBus
-        function onPreviewRequested(s) { viewer.open(s) }
+        function onPreviewRequested(s, uuid) { viewer.open(s, uuid) }
     }
 }

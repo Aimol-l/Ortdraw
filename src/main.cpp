@@ -64,6 +64,10 @@ int main(int argc, char *argv[]){
     qmlRegisterSingletonType(QUrl("qrc:/UiBus.qml"), "UiBus", 1, 0, "UiBus");
     registerBuiltinExecutors();
     engine.addImageProvider("nodeimage", new NodeImageProvider());
+    // 放大查看的全分辨率提供者：注入解析回调，惰性向引擎索取并缓存
+    auto* nodeManager = static_cast<NodeManager*>(NodeManager::instance());
+    engine.addImageProvider("nodeimagefull", new FullImageProvider(
+        [nodeManager](const QString& uuid) { return nodeManager->fullImage(uuid); }));
     engine.load(url);
     return app.exec();
 }
