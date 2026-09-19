@@ -3,8 +3,9 @@
 基于节点的深度学习图像处理工具（原型）。使用 Qt 6 / QML 构建可拖拽的节点图编辑器，
 底层集成 OpenCV，规划通过 ONNX Runtime 运行深度学习推理节点。
 
-> 当前状态：**节点图编辑与界面重设计可用**（创建、连线、移动、缩放、删除、撤销/重做、
-> 主题切换、属性编辑、minimap）；**执行引擎尚未实现**，节点暂不进行实际图像处理。
+> 当前状态：**节点图编辑与执行引擎可用**（创建、连线、移动、缩放、删除、撤销/重做、
+> 主题切换、属性编辑、minimap）；内置图像节点通过 OpenCV 进行实际运算，结果缓存并预览；
+> 可扩展的节点执行 SDK 已就绪。
 
 ## 界面
 
@@ -27,6 +28,36 @@
 - 多选：`Ctrl+点击` 节点可多选，批量删除；多选/右键菜单等可在设置中开关。
 - 图文件：新建 / 打开 / 保存（`Ctrl+N` / `Ctrl+O` / `Ctrl+S`，菜单「文件」）使用**系统原生文件对话框**
   （KDE/Dolphin 等桌面环境），文件格式为 `.ortdraw`（JSON），保存时自动补全扩展名。
+
+## 执行引擎
+
+- **运行**：顶栏右上角的「运行 / 停止」按钮触发整图求值。求值在**后台线程**按拓扑序进行，
+  不阻塞界面；运行中按钮变为「停止」，点击可取消。状态栏左侧实时显示引擎状态
+  （`就绪` / `运行中…` / `完成` / `失败` / `已取消`）。
+- **实际运算**：`ImageLoad` 节点内的「选择图片」按钮通过**系统原生文件对话框**选图并读取为图像；
+  `Resize`（线性缩放）、`Blur`（高斯模糊）、`Threshold`（灰度二值化）、`Conv`（`cv::filter2D` 卷积）
+  均调用 **OpenCV** 实际运算。
+- **真实预览**：`ImageShow` 与各节点的缩略图显示该节点最近一次执行的**真实结果**；
+  尚未产生结果时显示占位图。
+- **错误处理**：节点执行失败时，卡片右上角显示红点，悬停红点显示错误文本；状态栏变为「失败」。
+  单个节点失败不会中断其余可求值的分支（其上/下游按依赖跳过）。
+- **拓扑求值**：引擎对图做快照后在线程内用 Kahn 算法做拓扑排序，解析每个节点的输入
+  （沿入边取上游缓存输出），逐节点调用执行器；结果图像经队列信号回到主线程写入缓存，
+  QML 通过 `image://nodeimage/<uuid>` 读取。
+- **SDK**：节点执行抽象为 `NodeExecutor`（执行接口）与 `NodeRegistry`（类型 → 执行器注册表），
+  内置执行器在启动时注册；`GraphExecutor` 负责拓扑、后台求值与错误传播；`ImageStore`
+  （`QQuickImageProvider`）缓存结果图像。
+
+### 端口类型
+
+端口数据类型收敛为 `Image / Tensor / Number / Bool / Any`（原 `Float` 等数值类型统一为 `Number`；
+`Any` 可与任意类型连接）。张量端口使用 **Tensorvia** 的 `via::Tensor`。
+
+### 当前限制
+
+- **手动运行**：修改参数或连线后需重新点击「运行」，尚无自动重算。
+- `Conv` 需要**张量（Tensor）类型的卷积核输入**；当前尚无产生张量的节点，需先提供卷积核数据。
+- **ONNX 推理节点尚未实现**，留待后续基于本执行 SDK 添加。
 
 ## 设置
 
@@ -54,6 +85,8 @@ include/            头文件（大部分实现为 header-only）
   port/             端口
   utils/            DAGraph（邻接表 + 环检测）、Edge（贝塞尔曲线）
   command/          命令模式 undo/redo
+  engine/           执行引擎 SDK（NodeData / NodeExecutor / NodeRegistry / GraphExecutor / ImageStore）
+    executors/      内置执行器（ImageLoad / ImageShow / Resize / Blur / Threshold / Conv）
   Theme.h           Theme 单例（颜色/亮暗主题，读写 Settings）
   Settings.h        Settings 单例（QSettings 持久化偏好设置）
   NodeManager.h     全局单例，QML 事件入口
@@ -77,6 +110,11 @@ docs/               设计与实施文档
 - 支持 C++23 的编译器（GCC 13+ / Clang 16+ / MSVC 19.35+）
 - Qt 6.8+（Core、Gui、Quick、Widgets、Test）
 - OpenCV 4/5
+- **Tensorvia**（张量库；CMake 目标 `Tensorvia::tensorvia`，头文件 `<tensorvia/core/tensor.h>`）
+
+## 开发辅助
+
+`./bin/main --demo` 会创建两个示例节点（加载图片、图片显示），便于无鼠标环境截图/验证。
 
 ## 构建
 
@@ -93,9 +131,6 @@ cmake --build build -j4
 ./bin/main
 ```
 
-开发/验证：`./bin/main --demo` 会额外创建两个示例节点（ImageLoad、ImageShow），
-便于在无鼠标环境下截图核对界面。
-
 ## 测试
 
 ```bash
@@ -106,20 +141,20 @@ ctest --test-dir build --output-on-failure
 
 ## 已知限制
 
-- 已实现 6 种节点，均未执行实际运算；参数在节点内编辑：
+- 已实现 6 种节点，均通过执行引擎实际运算；参数在节点内编辑：
   - 加载图片 ImageLoad：输出 图像(Image)
   - 图片显示 ImageShow：输入 图像(Image)
   - 缩放 Resize：输入 图像(Image)；输出 图像(Image)；节点内显示输入尺寸，可按尺寸(宽/高)或百分比设定输出
   - 高斯模糊 Blur：输入 图像(Image)；输出 图像(Image)；节点内填核大小
   - 阈值二值化 Threshold：输入 图像(Image)；输出 图像(Image)；节点内拖动条设定阈值(0-255)
   - 卷积 Conv：输入 图像(Image)、卷积核(Tensor)；输出 图像(Image)
-- 无执行引擎：节点不会真正处理图像；各图像节点当前显示的是**占位预览图**，接入执行后应替换为真实结果。
+- 需手动点击「运行」触发求值；改动参数或连线后需重新运行（详见「执行引擎 → 当前限制」）。
 - 删除的节点对象会保留在内存中直到画布销毁（撤销所需，编辑器规模下可忽略）。
 - Windows 构建配置未验证。
 
 ## 后续路线
 
-1. 节点图执行引擎：拓扑排序 + 数据流求值。
-2. ImageLoad / ImageShow 实际读写图像。
-3. ONNX Runtime 推理节点。
-4. 图的保存与加载。
+1. 参数 / 连线变化后的**自动重算**（当前为手动运行）。
+2. 更多节点类型：张量生成与运算节点、张量结果预览。
+3. **ONNX Runtime 推理节点**（基于现有执行 SDK 扩展）。
+4. 异步图像加载与更大的图执行性能优化。
