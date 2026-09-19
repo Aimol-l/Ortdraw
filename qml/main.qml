@@ -24,6 +24,7 @@ Controls.ApplicationWindow {
     property string currentPath: ""
     property string savedSnapshot: ""
     property bool allowClose: false
+    property var pendingAction: null   // 未保存提示确认后要执行的动作；null 表示关闭窗口
 
     property real leftPanelWidth: leftCollapsed ? 0 : 250
     property real rightPanelWidth: rightCollapsed ? 0 : 286
@@ -51,16 +52,36 @@ Controls.ApplicationWindow {
             return
         }
         close.accepted = false
-        closePrompt.open()
+        promptThen(null)   // null：确认后关闭窗口
+    }
+
+    // 有未保存修改则先询问，否则直接执行 action
+    function promptThen(action) {
+        if (needsSave()) { pendingAction = action; closePrompt.open() }
+        else action()
+    }
+    // 提示确认后：执行待定动作；若无（关闭场景）则关闭窗口
+    function resolvePending() {
+        var a = pendingAction
+        pendingAction = null
+        closePrompt.close()
+        if (a) a()
+        else { allowClose = true; win.close() }
     }
 
     // ---- 图文件：新建 / 打开 / 保存 ----
-    function newGraph() {
+    function doNew() {
         NodeManager.clearGraph()
         currentPath = ""
         savedSnapshot = NodeManager.graphJsonString()
     }
-    function openGraph() { var p = FileDialogs.openGraph(currentPath); if (p !== "") doLoad(p) }
+    // 新建 / 打开前若有未保存修改，先询问
+    function newGraph() { promptThen(doNew) }
+    function openGraph() {
+        var p = FileDialogs.openGraph(currentPath)
+        if (p === "") return
+        promptThen(function() { doLoad(p) })
+    }
     function saveGraph() { if (currentPath === "") saveGraphAs(); else doSave(currentPath) }
     function saveGraphAs() { var p = FileDialogs.saveGraph(currentPath); if (p !== "") doSave(p) }
     function doSave(path) {
@@ -313,16 +334,12 @@ Controls.ApplicationWindow {
 
                 GhostButton {
                     label: "取消"
-                    onClicked: closePrompt.close()
+                    onClicked: { pendingAction = null; closePrompt.close() }
                 }
 
                 GhostButton {
                     label: "不保存"
-                    onClicked: {
-                        allowClose = true
-                        closePrompt.close()
-                        win.close()
-                    }
+                    onClicked: resolvePending()
                 }
 
                 PrimaryButton {
@@ -333,11 +350,8 @@ Controls.ApplicationWindow {
                             p = FileDialogs.saveGraph(currentPath)
                         if (p === "")
                             return
-                        if (doSave(p)) {
-                            allowClose = true
-                            closePrompt.close()
-                            win.close()
-                        }
+                        if (doSave(p))
+                            resolvePending()
                     }
                 }
             }
