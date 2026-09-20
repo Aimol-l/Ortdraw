@@ -3,6 +3,7 @@ import QtQuick.Controls
 import ThresholdNode
 import Theme
 import Settings
+import NodeManager
 
 ThresholdNode {
     id: root
@@ -49,6 +50,8 @@ ThresholdNode {
                 stepSize: 1
                 value: root.threshold
                 onMoved: root.threshold = Math.round(value)
+                // AbstractSlider 无 released 信号，用 pressed 变 false 表示松开
+                onPressedChanged: if (!pressed) NodeManager.commitNodeParams(root.uuid)
                 Connections {
                     target: root
                     function onParamsChanged() {

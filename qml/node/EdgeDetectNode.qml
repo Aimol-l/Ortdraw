@@ -2,6 +2,7 @@ import QtQuick
 import EdgeDetectNode
 import Theme
 import Settings
+import NodeManager
 
 EdgeDetectNode {
     id: root
@@ -51,7 +52,10 @@ EdgeDetectNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.method = index
+                            onClicked: {
+                                root.method = index
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -93,7 +97,10 @@ EdgeDetectNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.kernel = parent.modelData
+                            onClicked: {
+                                root.kernel = parent.modelData
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -135,6 +142,7 @@ EdgeDetectNode {
                             if (isNaN(v)) v = root.low
                             root.low = v
                             text = "" + root.low
+                            NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
@@ -175,6 +183,7 @@ EdgeDetectNode {
                             if (isNaN(v)) v = root.high
                             root.high = v
                             text = "" + root.high
+                            NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root

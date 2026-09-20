@@ -2,6 +2,7 @@ import QtQuick
 import TensorNode
 import Theme
 import Settings
+import NodeManager
 
 TensorNode {
     id: root
@@ -72,7 +73,10 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.applyPreset(index)
+                            onClicked: {
+                                root.applyPreset(index)
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -99,7 +103,10 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.setShape(root.rows - 1, root.cols)
+                            onClicked: {
+                                root.setShape(root.rows - 1, root.cols)
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                     Text {
@@ -118,7 +125,10 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.setShape(root.rows + 1, root.cols)
+                            onClicked: {
+                                root.setShape(root.rows + 1, root.cols)
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -140,7 +150,10 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.setShape(root.rows, root.cols - 1)
+                            onClicked: {
+                                root.setShape(root.rows, root.cols - 1)
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                     Text {
@@ -159,7 +172,10 @@ TensorNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.setShape(root.rows, root.cols + 1)
+                            onClicked: {
+                                root.setShape(root.rows, root.cols + 1)
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -199,6 +215,7 @@ TensorNode {
                                 if (isNaN(v)) v = root.value(r, c)
                                 root.setValue(r, c, v)
                                 text = root.fmt(root.value(r, c))
+                                NodeManager.commitNodeParams(root.uuid)
                             }
                             Connections {
                                 target: root

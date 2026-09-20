@@ -3,7 +3,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QPointF>
+#include <QSizeF>
 #include <QLineF>
+#include <QPair>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,6 +18,9 @@
 #include "command/AddEdge.hpp"
 #include "command/RemoveEdge.hpp"
 #include "command/RemoveNode.hpp"
+#include "command/MoveNodeCMD.hpp"
+#include "command/ResizeNodeCMD.hpp"
+#include "command/ChangeParamsCMD.hpp"
 #include "command/CmdManager.hpp"
 #include "utils/Snapshot.hpp"
 #include "engine/GraphExecutor.hpp"
@@ -38,6 +43,8 @@ private:
     int m_error_revision = 0;
     // 每个节点最近一次执行的错误文本（空串表示成功）
     QHash<QString, QString> m_node_errors;
+    // 每个节点最近一次提交后的参数与名称快照，用于 diff 出参数/名称变更命令
+    QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {
         connect(&m_executor, &GraphExecutor::runningChanged, this, &NodeManager::engineChanged);
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
@@ -63,6 +70,12 @@ private:
         emit errorRevisionChanged();
     }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    // 撤销/重做恢复图状态后，用当前值刷新提交基线，避免下次误判为变更
+    void syncLastState(){
+        if(!m_paint_board) return;
+        for(BaseNode* n : m_paint_board->m_graph.getAllNodes())
+            m_last_state[n] = { n->params(), n->name() };
+    }
     void setSelectedNode(BaseNode* n){
         if(m_selected_node == n) return;
         m_selected_node = n; emit selectionChanged();
@@ -269,9 +282,11 @@ public:
         if(!node || !m_paint_board) return false;
         auto command = std::make_unique<AddNodeCMD>(node, m_paint_board);
         bool ok = m_cmd_manager.executeCommand(std::move(command));
-        if(ok)
+        if(ok){
+            m_last_state[node] = { node->params(), node->name() };
             Log::info(QStringLiteral("创建节点：%1 (%2)")
                           .arg(node->typeName(), node->uuid().toString()));
+        }
         refresh();
         return ok;
     }
@@ -304,14 +319,66 @@ public:
     Q_INVOKABLE bool undo() {
         bool ok = m_cmd_manager.undo();
         Log::info(QStringLiteral("撤销%1").arg(ok ? QString() : QStringLiteral("（无可撤销）")));
+        syncLastState();
         refresh();
         return ok;
     }
     Q_INVOKABLE bool redo() {
         bool ok = m_cmd_manager.redo();
         Log::info(QStringLiteral("重做%1").arg(ok ? QString() : QStringLiteral("（无可重做）")));
+        syncLastState();
         refresh();
         return ok;
+    }
+
+    // 移动/缩放/参数编辑在 QML 中先实时改值，交互结束后在此提交为一条可撤销命令
+    Q_INVOKABLE void commitNodeMove(QUuid uid, qreal oldX, qreal oldY){
+        if(!m_paint_board) return;
+        for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
+            if(node->uuid() != uid) continue;
+            const QPointF old_pos(oldX, oldY);
+            if(node->position() == old_pos) return;
+            auto cmd = std::make_unique<MoveNodeCMD>(node, old_pos, node->position(), m_paint_board);
+            if(m_cmd_manager.executeCommand(std::move(cmd)))
+                Log::info(QStringLiteral("移动节点：%1").arg(node->typeName()));
+            refresh();
+            return;
+        }
+    }
+    Q_INVOKABLE void commitNodeResize(QUuid uid, qreal oldW, qreal oldH){
+        if(!m_paint_board) return;
+        for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
+            if(node->uuid() != uid) continue;
+            const QSizeF old_size(oldW, oldH);
+            const QSizeF new_size(node->width(), node->height());
+            if(old_size == new_size) return;
+            auto cmd = std::make_unique<ResizeNodeCMD>(node, old_size, new_size, m_paint_board);
+            if(m_cmd_manager.executeCommand(std::move(cmd)))
+                Log::info(QStringLiteral("缩放节点：%1").arg(node->typeName()));
+            refresh();
+            return;
+        }
+    }
+    Q_INVOKABLE void commitNodeParams(QUuid uid){
+        if(!m_paint_board) return;
+        for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
+            if(node->uuid() != uid) continue;
+            // 无基线时先初始化，避免把首次编辑误记成变更
+            if(!m_last_state.contains(node))
+                m_last_state[node] = { node->params(), node->name() };
+            const QVariantMap cur = node->params();
+            const QString cur_name = node->name();
+            const auto last = m_last_state.value(node);
+            if(cur == last.first && cur_name == last.second) return;
+            auto cmd = std::make_unique<ChangeParamsCMD>(
+                node, last.first, cur, last.second, cur_name, m_paint_board);
+            if(m_cmd_manager.executeCommand(std::move(cmd))){
+                m_last_state[node] = { cur, cur_name };
+                Log::info(QStringLiteral("修改参数：%1").arg(node->typeName()));
+            }
+            refresh();
+            return;
+        }
     }
 
     Q_INVOKABLE void bringToFront(QUuid uid){

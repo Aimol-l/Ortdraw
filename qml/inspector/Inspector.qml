@@ -194,7 +194,12 @@ Rectangle {
                         leftPadding: 10
                         rightPadding: 10
                         selectByMouse: true
-                        onEditingFinished: if (root.hasNode) root.node.name = text
+                        onEditingFinished: {
+                            if (root.hasNode) {
+                                root.node.name = text
+                                NodeManager.commitNodeParams(root.node.uuid)
+                            }
+                        }
                         background: Rectangle {
                             color: Theme.bg
                             radius: 7

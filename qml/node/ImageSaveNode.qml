@@ -3,6 +3,7 @@ import ImageSaveNode
 import Settings
 import Theme
 import FileDialogs
+import NodeManager
 
 ImageSaveNode {
     id: root
@@ -47,8 +48,10 @@ ImageSaveNode {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: {
                         var p = FileDialogs.saveImage(root.path)
-                        if (p !== "")
+                        if (p !== "") {
                             root.path = p
+                            NodeManager.commitNodeParams(root.uuid)
+                        }
                     }
                 }
             }

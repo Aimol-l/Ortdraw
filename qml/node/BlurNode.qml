@@ -2,6 +2,7 @@ import QtQuick
 import BlurNode
 import Theme
 import Settings
+import NodeManager
 
 BlurNode {
     id: root
@@ -49,6 +50,7 @@ BlurNode {
                         if (isNaN(v)) v = root.kernel
                         root.kernel = v
                         text = "" + root.kernel
+                        NodeManager.commitNodeParams(root.uuid)
                     }
                     Connections {
                         target: root

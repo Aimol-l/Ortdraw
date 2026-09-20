@@ -2,6 +2,7 @@ import QtQuick
 import ResizeNode
 import Theme
 import Settings
+import NodeManager
 
 ResizeNode {
     id: root
@@ -61,7 +62,10 @@ ResizeNode {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.mode = modelData.m
+                            onClicked: {
+                                root.mode = modelData.m
+                                NodeManager.commitNodeParams(root.uuid)
+                            }
                         }
                     }
                 }
@@ -98,6 +102,7 @@ ResizeNode {
                             if (isNaN(v)) v = root.outWidth
                             root.outWidth = v
                             text = "" + root.outWidth
+                            NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
@@ -133,6 +138,7 @@ ResizeNode {
                             if (isNaN(v)) v = root.outHeight
                             root.outHeight = v
                             text = "" + root.outHeight
+                            NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
@@ -173,6 +179,7 @@ ResizeNode {
                             if (isNaN(v)) v = root.percent
                             root.percent = v
                             text = "" + root.percent
+                            NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root

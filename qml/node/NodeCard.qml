@@ -210,7 +210,11 @@ Item {
                         startNodeY = card.node.y
                     }
                 }
-                onReleased: headArea.dragging = false
+                onReleased: {
+                    if (headArea.dragging && card.node)
+                        NodeManager.commitNodeMove(card.node.uuid, headArea.startNodeX, headArea.startNodeY)
+                    headArea.dragging = false
+                }
                 onPositionChanged: (mouse) => {
                     if (!headArea.dragging || !card.node || !card.coordItem)
                         return
@@ -594,10 +598,19 @@ Item {
             cursorShape: Qt.SizeFDiagCursor
             preventStealing: true
             property point lastPos: Qt.point(0, 0)
+            property real startW: 0
+            property real startH: 0
 
             onPressed: (mouse) => {
-                if (card.coordItem)
+                if (card.coordItem) {
                     lastPos = mapToItem(card.coordItem, mouse.x, mouse.y)
+                    startW = card.node ? card.node.width : 0
+                    startH = card.node ? card.node.height : 0
+                }
+            }
+            onReleased: {
+                if (card.node && startW > 0)
+                    NodeManager.commitNodeResize(card.node.uuid, startW, startH)
             }
             onPositionChanged: (mouse) => {
                 if (!pressed || !card.node || !card.coordItem)

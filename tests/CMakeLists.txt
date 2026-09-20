@@ -27,6 +27,9 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/command/RemoveNode.hpp
     ${PROJECT_SOURCE_DIR}/include/command/RemoveEdge.hpp
     ${PROJECT_SOURCE_DIR}/include/command/CmdManager.hpp
+    ${PROJECT_SOURCE_DIR}/include/command/MoveNodeCMD.hpp
+    ${PROJECT_SOURCE_DIR}/include/command/ResizeNodeCMD.hpp
+    ${PROJECT_SOURCE_DIR}/include/command/ChangeParamsCMD.hpp
 )
 
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp")
