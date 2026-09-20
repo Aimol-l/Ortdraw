@@ -26,6 +26,7 @@
 #include "utils/Snapshot.hpp"
 #include "engine/GraphExecutor.hpp"
 #include "engine/ImageStore.hpp"
+#include "engine/NodeStatus.hpp"
 
 
 class NodeManager : public QObject {
@@ -57,8 +58,8 @@ private:
         });
         // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
         QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
-                         [this](const QString& uuid, bool ok, const QString& error) {
-            m_node_errors[uuid] = ok ? QString() : error;
+                         [this](const QString& uuid, int status, const QString& error, int /*ms*/) {
+            m_node_errors[uuid] = (status == int(NodeStatus::Ok)) ? QString() : error;
             ++m_error_revision;
             emit errorRevisionChanged();
         });
