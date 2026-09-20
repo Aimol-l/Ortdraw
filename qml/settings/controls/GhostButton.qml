@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -15,6 +16,7 @@ Rectangle {
     border.color: ghostArea.containsMouse ? Theme.blue : Theme.border
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         id: ghostText
         anchors.centerIn: parent
         text: ghost.label

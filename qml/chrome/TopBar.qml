@@ -50,6 +50,7 @@ Rectangle {
                 }
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.centerIn: parent
                     text: "O"
                     color: "#ffffff"
@@ -63,6 +64,7 @@ Rectangle {
                 spacing: 0
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     text: "Ortdraw"
                     color: Theme.fgBright
                     font.pixelSize: 14
@@ -70,6 +72,7 @@ Rectangle {
                 }
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     text: "节点式图像处理"
                     color: Theme.fgDim
                     font.pixelSize: 10
@@ -95,6 +98,7 @@ Rectangle {
                     HoverHandler { id: menuHover }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         id: menuLabel
                         anchors.centerIn: parent
                         text: parent.modelData
@@ -295,6 +299,7 @@ Rectangle {
         HoverHandler { id: tbHover }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.centerIn: parent
             text: tb.glyph
             color: tb.active ? Theme.blue
@@ -417,6 +422,7 @@ Rectangle {
             }
 
             Text {
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 id: pillLabel
                 anchors.verticalCenter: parent.verticalCenter
                 text: pill.label

@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -20,6 +21,7 @@ Item {
     }
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         id: keyLabel
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
@@ -42,6 +44,7 @@ Item {
         border.color: Theme.border
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             id: keyText
             anchors.centerIn: parent
             text: kr.keys

@@ -219,6 +219,7 @@ Controls.ApplicationWindow {
                 border.color: leftRailArea.containsMouse ? Theme.blue : Theme.border
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.centerIn: parent
                     text: "›"
                     color: leftRailArea.containsMouse ? Theme.blue : Theme.fgDim
@@ -249,6 +250,7 @@ Controls.ApplicationWindow {
                 border.color: rightRailArea.containsMouse ? Theme.blue : Theme.border
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.centerIn: parent
                     text: "‹"
                     color: rightRailArea.containsMouse ? Theme.blue : Theme.fgDim
@@ -331,6 +333,7 @@ Controls.ApplicationWindow {
                 spacing: 10
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     text: "未保存的更改"
                     color: Theme.fgBright
                     font.pixelSize: 15
@@ -338,6 +341,7 @@ Controls.ApplicationWindow {
                 }
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     width: parent.width
                     text: "当前节点图尚未保存，是否保存？"
                     color: Theme.fg

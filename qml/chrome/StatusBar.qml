@@ -83,6 +83,7 @@ Rectangle {
         }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: root.queueMode ? root.summaryText() : NodeManager.engineStatus
             color: NodeManager.engineStatus === "失败" ? Theme.red : Theme.fgDim
@@ -100,6 +101,7 @@ Rectangle {
         spacing: 16
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: "节点 " + root.nodeCount
             color: Theme.fgDim
@@ -107,6 +109,7 @@ Rectangle {
         }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: "连线 " + root.edgeCount
             color: Theme.fgDim
@@ -182,6 +185,7 @@ Rectangle {
                 spacing: 4
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     id: arrow
                     visible: del.index > 0
                     anchors.verticalCenter: parent.verticalCenter
@@ -271,6 +275,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.verticalCenter: parent.verticalCenter
                             visible: del.status !== "running"
                             text: root.statusGlyph(del.status)
@@ -279,6 +284,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.name
                             color: Theme.fg
@@ -286,6 +292,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.ms > 0 ? del.ms + "ms" : ""
                             color: Theme.fgDim
@@ -347,6 +354,7 @@ Rectangle {
         spacing: 16
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: "选中 " + root.selectedName + " · 坐标[" + root.selectedPos + "]"
             color: Theme.fgDim
@@ -354,6 +362,7 @@ Rectangle {
         }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             visible: root.queueMode
             text: "节点 " + root.nodeCount + " · 连线 " + root.edgeCount
@@ -362,6 +371,7 @@ Rectangle {
         }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: "主题 " + root.themeName
             color: Theme.fgDim
@@ -390,6 +400,7 @@ Rectangle {
                     color: zoomOutArea.containsMouse ? Theme.bgHover : "transparent"
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.centerIn: parent
                         text: "−"
                         color: Theme.fgDim
@@ -458,6 +469,7 @@ Rectangle {
                          : zoomMenu.opened ? Theme.bgHover : "transparent"
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.centerIn: parent
                         text: "▾"
                         color: Theme.fgDim
@@ -501,6 +513,7 @@ Rectangle {
                     color: zoomInArea.containsMouse ? Theme.bgHover : "transparent"
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.centerIn: parent
                         text: "+"
                         color: Theme.fgDim

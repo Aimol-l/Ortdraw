@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -39,6 +40,7 @@ Item {
         spacing: 2
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             width: parent.width
             text: row.title
             color: Theme.fgBright
@@ -47,6 +49,7 @@ Item {
             wrapMode: Text.WordWrap
         }
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             width: parent.width
             visible: row.desc !== ""
             text: row.desc

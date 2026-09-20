@@ -1,4 +1,5 @@
 pragma ComponentBehavior: Bound
+import Settings
 import QtQuick
 import QtQuick.Controls
 import Theme
@@ -65,6 +66,7 @@ Rectangle {
                 color: collapseArea.containsMouse ? Theme.bgHover : "transparent"
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.centerIn: parent
                     text: "›"
                     color: collapseArea.containsMouse ? Theme.fgBright : Theme.fgDim
@@ -81,6 +83,7 @@ Rectangle {
             }
 
             Text {
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 anchors.verticalCenter: parent.verticalCenter
                 text: "属性"
                 color: Theme.fgBright
@@ -99,6 +102,7 @@ Rectangle {
             color: Qt.rgba(Theme.blue.r, Theme.blue.g, Theme.blue.b, 0.12)
 
             Text {
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 id: badgeText
                 anchors.centerIn: parent
                 text: root.typeBadge
@@ -143,6 +147,7 @@ Rectangle {
                     spacing: 8
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "◇"
                         color: Theme.fgDim
@@ -151,6 +156,7 @@ Rectangle {
                     }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: "选择一个节点\n查看并编辑其属性"
                         horizontalAlignment: Text.AlignHCenter
@@ -175,6 +181,7 @@ Rectangle {
                     spacing: 0
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "名称"
                         color: Theme.fgDim
                         font.pixelSize: 11
@@ -218,6 +225,7 @@ Rectangle {
                     Item { width: 1; height: 13 }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "类型"
                         color: Theme.fgDim
                         font.pixelSize: 11
@@ -245,6 +253,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.left: typeDot.right
                             anchors.leftMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
@@ -254,6 +263,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.right: parent.right
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -284,6 +294,7 @@ Rectangle {
                                 border.color: Qt.rgba(Theme.catInput.r, Theme.catInput.g, Theme.catInput.b, 0.32)
 
                                 Text {
+                                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                     id: inChipText
                                     anchors.centerIn: parent
                                     text: parent.port ? parent.port.name + " · " + parent.port.dataTypeName : ""
@@ -320,6 +331,7 @@ Rectangle {
                                 border.color: Qt.rgba(Theme.catOutput.r, Theme.catOutput.g, Theme.catOutput.b, 0.32)
 
                                 Text {
+                                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                     id: outChipText
                                     anchors.centerIn: parent
                                     text: parent.port ? parent.port.name + " · " + parent.port.dataTypeName : ""
@@ -338,6 +350,7 @@ Rectangle {
                     SecTitle { label: "参数" }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "X / Y"
                         color: Theme.fgDim
                         font.pixelSize: 11
@@ -354,6 +367,7 @@ Rectangle {
                         border.color: Theme.border
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.left: parent.left
                             anchors.leftMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -364,6 +378,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.left: parent.left
                             anchors.leftMargin: 40
                             anchors.verticalCenter: parent.verticalCenter
@@ -390,6 +405,7 @@ Rectangle {
                         border.color: Theme.borderSoft
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             id: descText
                             x: 10
                             y: 9
@@ -417,6 +433,7 @@ Rectangle {
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.centerIn: parent
                             text: "删除节点"
                             color: Theme.red
@@ -451,6 +468,7 @@ Rectangle {
                     spacing: 0
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         text: "连接"
                         color: Theme.fgDim
                         font.pixelSize: 11
@@ -467,6 +485,7 @@ Rectangle {
                         border.color: Theme.border
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.left: parent.left
                             anchors.leftMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -477,6 +496,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.centerIn: parent
                             text: "→"
                             color: Theme.fgDim
@@ -484,6 +504,7 @@ Rectangle {
                         }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.right: parent.right
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
@@ -516,6 +537,7 @@ Rectangle {
                         Behavior on color { ColorAnimation { duration: 120 } }
 
                         Text {
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.centerIn: parent
                             text: "删除连线"
                             color: Theme.red
@@ -545,6 +567,7 @@ Rectangle {
         height: 36
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 9
@@ -574,6 +597,7 @@ Rectangle {
         border.color: Theme.borderSoft
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.left: parent.left
             anchors.leftMargin: 11
             anchors.right: parent.right

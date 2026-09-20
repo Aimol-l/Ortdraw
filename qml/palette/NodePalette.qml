@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import QtQuick.Controls
 import Theme
@@ -128,6 +129,7 @@ Rectangle {
         height: 42
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.left: parent.left
             anchors.leftMargin: 13
             anchors.verticalCenter: parent.verticalCenter
@@ -194,6 +196,7 @@ Rectangle {
     }
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         anchors.left: search.left
         anchors.leftMargin: 10
         anchors.verticalCenter: search.verticalCenter
@@ -214,6 +217,7 @@ Rectangle {
         color: clearArea.containsMouse ? Theme.bgHover : "transparent"
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.centerIn: parent
             text: "×"
             color: clearArea.containsMouse ? Theme.fgBright : Theme.fgDim
@@ -254,6 +258,7 @@ Rectangle {
                 border.color: active ? Qt.rgba(Theme.blue.r, Theme.blue.g, Theme.blue.b, 0.36) : Theme.border
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     id: chipText
                     anchors.centerIn: parent
                     text: chip.modelData.name
@@ -347,6 +352,7 @@ Rectangle {
                             }
 
                             Text {
+                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: NodeCatalog.categoryNames[groupCol.modelData] || groupCol.modelData
                                 color: Theme.fgDim
@@ -365,6 +371,7 @@ Rectangle {
                                 border.color: Theme.borderSoft
 
                                 Text {
+                                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                     id: countText
                                     anchors.centerIn: parent
                                     text: groupCol.count
@@ -409,6 +416,7 @@ Rectangle {
     }
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         visible: root.filteredItems.length === 0
         anchors.top: filters.bottom
         anchors.topMargin: 40
@@ -433,6 +441,7 @@ Rectangle {
                       : (mbArea.containsMouse ? Theme.bgHover : "transparent")
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.centerIn: parent
             text: mb.glyph
             color: mb.active ? Theme.blue : Theme.fgDim

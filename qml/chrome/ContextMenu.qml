@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import QtQuick.Controls
 import Theme
@@ -58,6 +59,7 @@ Menu {
                 spacing: 9
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     width: 14
                     anchors.verticalCenter: parent.verticalCenter
                     text: ci.glyph
@@ -67,6 +69,7 @@ Menu {
                 }
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.verticalCenter: parent.verticalCenter
                     text: ci.text
                     color: ci.hovered ? (ci.danger ? Theme.red : Theme.fgBright) : Theme.fg
@@ -75,6 +78,7 @@ Menu {
             }
 
             Text {
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                 anchors.right: parent.right
                 anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter

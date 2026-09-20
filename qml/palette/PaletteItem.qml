@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 import NodeCatalog
@@ -193,6 +194,7 @@ Item {
         y: item.gridMode ? icoBox.y + icoBox.height + 7 : (item.height - height) / 2
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             width: parent.width
             horizontalAlignment: item.gridMode ? Text.AlignHCenter : Text.AlignLeft
             text: item.entry ? item.entry.title : ""
@@ -203,6 +205,7 @@ Item {
         }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             width: parent.width
             horizontalAlignment: item.gridMode ? Text.AlignHCenter : Text.AlignLeft
             text: item.available ? (item.entry ? item.entry.desc : "") : "尚未实现"
@@ -228,6 +231,7 @@ Item {
         Behavior on opacity { NumberAnimation { duration: 120 } }
 
         Text {
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.centerIn: parent
             text: "＋"
             color: addArea.pressed ? Theme.blue : Theme.fgDim

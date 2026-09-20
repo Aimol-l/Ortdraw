@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -12,6 +13,7 @@ Rectangle {
     color: Theme.bgHover
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         id: badgeText
         anchors.centerIn: parent
         text: badge.text

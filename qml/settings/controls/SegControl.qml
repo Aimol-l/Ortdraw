@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -31,6 +32,7 @@ Rectangle {
                 color: seg.value === modelData.value ? Theme.blue : "transparent"
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     id: segLabel
                     anchors.centerIn: parent
                     text: modelData.label

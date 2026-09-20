@@ -76,7 +76,7 @@ MorphologyNode {
                     width: 22; height: 22; radius: 5
                     color: kMinus.pressed ? Theme.bgHover : Theme.bg
                     border.width: 1; border.color: Theme.border
-                    Text { anchors.centerIn: parent; text: "−"; color: Theme.fgDim; font.pixelSize: 12 }
+                    Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "−"; color: Theme.fgDim; font.pixelSize: 12 }
                     MouseArea {
                         id: kMinus
                         anchors.fill: parent
@@ -104,7 +104,7 @@ MorphologyNode {
                     width: 22; height: 22; radius: 5
                     color: kPlus.pressed ? Theme.bgHover : Theme.bg
                     border.width: 1; border.color: Theme.border
-                    Text { anchors.centerIn: parent; text: "+"; color: Theme.fgDim; font.pixelSize: 12 }
+                    Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "+"; color: Theme.fgDim; font.pixelSize: 12 }
                     MouseArea {
                         id: kPlus
                         anchors.fill: parent
@@ -133,7 +133,7 @@ MorphologyNode {
                     width: 22; height: 22; radius: 5
                     color: iMinus.pressed ? Theme.bgHover : Theme.bg
                     border.width: 1; border.color: Theme.border
-                    Text { anchors.centerIn: parent; text: "−"; color: Theme.fgDim; font.pixelSize: 12 }
+                    Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "−"; color: Theme.fgDim; font.pixelSize: 12 }
                     MouseArea {
                         id: iMinus
                         anchors.fill: parent
@@ -161,7 +161,7 @@ MorphologyNode {
                     width: 22; height: 22; radius: 5
                     color: iPlus.pressed ? Theme.bgHover : Theme.bg
                     border.width: 1; border.color: Theme.border
-                    Text { anchors.centerIn: parent; text: "+"; color: Theme.fgDim; font.pixelSize: 12 }
+                    Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "+"; color: Theme.fgDim; font.pixelSize: 12 }
                     MouseArea {
                         id: iPlus
                         anchors.fill: parent

@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -15,6 +16,7 @@ Rectangle {
            : Theme.blue
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         id: primaryText
         anchors.centerIn: parent
         text: primary.label

@@ -203,6 +203,7 @@ Item {
                     spacing: 12
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.verticalCenter: parent.verticalCenter
                         text: "设置"
                         color: Theme.fgBright
@@ -210,6 +211,7 @@ Item {
                         font.bold: true
                     }
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Ortdraw 偏好设置"
                         color: Theme.fgDim
@@ -245,6 +247,7 @@ Item {
                             border.color: searchField.activeFocus ? Theme.blue : Theme.border
                             radius: 8
                             Text {
+                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                 anchors.left: parent.left
                                 anchors.leftMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
@@ -256,6 +259,7 @@ Item {
                     }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         anchors.verticalCenter: parent.verticalCenter
                         width: 28
                         height: 28
@@ -325,6 +329,7 @@ Item {
                                     spacing: 10
 
                                     Text {
+                                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                         width: 16
                                         horizontalAlignment: Text.AlignHCenter
                                         anchors.verticalCenter: parent.verticalCenter
@@ -333,6 +338,7 @@ Item {
                                         font.pixelSize: 13
                                     }
                                     Text {
+                                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: modelData.label
                                         color: root.activeSection === modelData.key ? Theme.blue : Theme.fg
@@ -379,12 +385,22 @@ Item {
                         contentWidth: width
                         contentHeight: contentCol.height + 40
                         boundsBehavior: Flickable.StopAtBounds
-                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                        ScrollBar.vertical: ScrollBar {
+                            id: vbar
+                            policy: ScrollBar.AsNeeded
+                            width: 10
+                            background: Rectangle { color: "transparent" }
+                            contentItem: Rectangle {
+                                implicitWidth: 6
+                                radius: 3
+                                color: vbar.pressed || vbar.hovered ? Theme.fgDim : Theme.border
+                            }
+                        }
 
                         Column {
                             id: contentCol
                             y: 8
-                            width: flick.width - 14
+                            width: flick.width - 26
 
                             // ===== 外观 =====
                             Column {
@@ -890,6 +906,7 @@ Item {
                     }
 
                     Text {
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                         id: emptyState
                         anchors.centerIn: contentWrap
                         visible: false
@@ -915,6 +932,7 @@ Item {
                 }
 
                 Text {
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     anchors.left: parent.left
                     anchors.leftMargin: 18
                     anchors.verticalCenter: parent.verticalCenter

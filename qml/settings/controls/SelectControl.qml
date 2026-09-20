@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import QtQuick.Controls
 import Theme
@@ -23,6 +24,7 @@ Rectangle {
     border.color: Theme.border
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         id: labelText
         anchors.left: parent.left
         anchors.leftMargin: 10
@@ -32,6 +34,7 @@ Rectangle {
         font.pixelSize: 12
     }
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter

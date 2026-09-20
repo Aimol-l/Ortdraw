@@ -1,3 +1,4 @@
+import Settings
 import QtQuick
 import Theme
 
@@ -55,6 +56,7 @@ Item {
     }
 
     Text {
+        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         width: 34

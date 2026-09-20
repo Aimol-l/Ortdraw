@@ -99,7 +99,7 @@ TensorNode {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         color: "transparent"; border.width: 1; border.color: Theme.border
-                        Text { anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
+                        Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
@@ -121,7 +121,7 @@ TensorNode {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         color: "transparent"; border.width: 1; border.color: Theme.border
-                        Text { anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
+                        Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
@@ -146,7 +146,7 @@ TensorNode {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         color: "transparent"; border.width: 1; border.color: Theme.border
-                        Text { anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
+                        Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "−"; color: Theme.fg; font.pixelSize: 12 }
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
@@ -168,7 +168,7 @@ TensorNode {
                     Rectangle {
                         width: 18; height: 18; radius: 4
                         color: "transparent"; border.width: 1; border.color: Theme.border
-                        Text { anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
+                        Text { renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering; anchors.centerIn: parent; text: "+"; color: Theme.fg; font.pixelSize: 12 }
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
