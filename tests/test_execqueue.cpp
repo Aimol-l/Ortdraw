@@ -119,6 +119,46 @@ private slots:
         QCOMPARE(m.countFailed(1), 0);
         QCOMPARE(m.countSkipped(1), 1);
     }
+
+    void defaultArgRowIsUngrouped() {
+        ExecQueueModel m;
+        m.addRunning("x", "X");
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), -1);
+        QVERIFY(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString().isEmpty());
+        m.finishNode("x", int(NodeStatus::Failed), QStringLiteral("e"), 1);
+        QCOMPARE(m.countDone(), 1);
+        QCOMPARE(m.countFailed(), 1);
+        QCOMPARE(m.countDone(0), 0);
+        QCOMPARE(m.countFailed(0), 0);
+    }
+
+    void addFinishedPopulatesGroupRoles() {
+        ExecQueueModel m;
+        m.addFinished("y", "Y", int(NodeStatus::Failed), QStringLiteral("e"), 3, 1, "#8250df");
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), 1);
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString(), QString("#8250df"));
+        QCOMPARE(m.countFailed(1), 1);
+    }
+
+    void perGroupCountDoneExcludesRunning() {
+        ExecQueueModel m;
+        m.addRunning("r", "R", 0, "#0969da");
+        m.addRunning("f", "F", 0, "#0969da");
+        m.finishNode("f", int(NodeStatus::Ok), QString(), 1);
+        m.addRunning("o", "O", 1, "#8250df");
+        m.finishNode("o", int(NodeStatus::Ok), QString(), 2);
+        QCOMPARE(m.countDone(0), 1);
+        QCOMPARE(m.countDone(1), 1);
+        QCOMPARE(m.countDone(), 2);
+    }
+
+    void countCancelledPerGroup() {
+        ExecQueueModel m;
+        m.addFinished("c", "C", int(NodeStatus::Cancelled), QString(), 4, 1, "#8250df");
+        QCOMPARE(m.countCancelled(1), 1);
+        QCOMPARE(m.countCancelled(0), 0);
+        QCOMPARE(m.countCancelled(), 1);
+    }
 };
 
 QTEST_MAIN(TestExecQueue)
