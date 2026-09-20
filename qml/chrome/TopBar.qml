@@ -220,6 +220,8 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             label: NodeManager.engineRunning ? "停止" : "运行"
             dot: true
+            primary: !NodeManager.engineRunning
+            danger: NodeManager.engineRunning
             tooltip: NodeManager.engineRunning ? "停止当前运行" : "运行节点图"
             onActivated: NodeManager.engineRunning ? NodeManager.cancelRun()
                                                    : NodeManager.run()
@@ -374,6 +376,11 @@ Rectangle {
         property string tooltip: ""
         property bool disabled: false
         property bool dot: false
+        property bool primary: false
+        property bool danger: false
+        readonly property color accent: pill.danger ? Theme.red : Theme.success
+        readonly property bool solid: (pill.primary || pill.danger) && !pill.disabled
+        readonly property color onAccent: Theme.dark ? "#0d1117" : "#ffffff"
 
         signal activated()
 
@@ -384,11 +391,15 @@ Rectangle {
         radius: 8
         color: pill.disabled
                ? Qt.rgba(Theme.green.r, Theme.green.g, Theme.green.b, 0.35)
-               : (pillHover.hovered ? Theme.bgHover : Theme.bg)
+               : pill.solid
+                 ? (pillHover.hovered ? Qt.darker(pill.accent, 1.1) : pill.accent)
+                 : (pillHover.hovered ? Theme.bgHover : Theme.bg)
         border.width: 1
         border.color: pill.disabled
                       ? Theme.border
-                      : (pillHover.hovered ? Theme.blue : Theme.border)
+                      : pill.solid
+                        ? pill.accent
+                        : (pillHover.hovered ? Theme.blue : Theme.border)
 
         Row {
             id: contentRow
@@ -401,7 +412,7 @@ Rectangle {
                 width: 7
                 height: 7
                 radius: 3.5
-                color: Theme.green
+                color: pill.solid ? pill.onAccent : Theme.green
                 opacity: 0.9
             }
 
@@ -409,7 +420,7 @@ Rectangle {
                 id: pillLabel
                 anchors.verticalCenter: parent.verticalCenter
                 text: pill.label
-                color: pill.disabled ? Theme.fgDim : Theme.fg
+                color: pill.solid ? pill.onAccent : (pill.disabled ? Theme.fgDim : Theme.fg)
                 font.pixelSize: 12
             }
         }

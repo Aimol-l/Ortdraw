@@ -22,6 +22,7 @@ class Theme : public QObject {
     Q_PROPERTY(QColor blue READ blue NOTIFY changed)
     Q_PROPERTY(QColor cyan READ cyan NOTIFY changed)
     Q_PROPERTY(QColor green READ green NOTIFY changed)
+    Q_PROPERTY(QColor success READ success NOTIFY changed)
     Q_PROPERTY(QColor yellow READ yellow NOTIFY changed)
     Q_PROPERTY(QColor orange READ orange NOTIFY changed)
     Q_PROPERTY(QColor magenta READ magenta NOTIFY changed)
@@ -65,6 +66,7 @@ public:
     }
     QColor cyan()      const { static const QColor l("#007197"), d("#39c5cf"); return dark() ? d : l; }
     QColor green()     const { static const QColor l("#587539"), d("#57ab5a"); return dark() ? d : l; }
+    QColor success()   const { static const QColor l("#2da44e"), d("#3fb950"); return dark() ? d : l; }
     QColor yellow()    const { static const QColor l("#8c6c3e"), d("#c69026"); return dark() ? d : l; }
     QColor orange()    const { static const QColor l("#b15c00"), d("#e0823d"); return dark() ? d : l; }
     QColor magenta()   const { static const QColor l("#9854f1"), d("#b083f0"); return dark() ? d : l; }

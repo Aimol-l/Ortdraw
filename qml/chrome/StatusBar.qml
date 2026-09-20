@@ -26,7 +26,7 @@ Rectangle {
     signal fitRequested()
 
     function statusColor(s) {
-        if (s === "ok") return Theme.green
+        if (s === "ok") return Theme.success
         if (s === "failed") return Theme.red
         if (s === "skipped") return Theme.yellow
         if (s === "cancelled") return Theme.fgDim
@@ -70,7 +70,7 @@ Rectangle {
             height: 7
             radius: 3.5
             color: NodeManager.engineStatus === "失败" ? Theme.red
-                 : NodeManager.engineRunning ? Theme.yellow : Theme.green
+                 : NodeManager.engineRunning ? Theme.yellow : Theme.success
         }
 
         Text {
@@ -189,8 +189,12 @@ Rectangle {
                     implicitWidth: chipRow.implicitWidth + 12
                     radius: 5
                     color: del.status === "failed"
-                           ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.15)
-                           : Theme.bg
+                           ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
+                           : del.status === "ok"
+                               ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.8)
+                             : del.status === "skipped"
+                               ? Qt.rgba(Theme.yellow.r, Theme.yellow.g, Theme.yellow.b, 0.16)
+                               : Theme.bg
                     border.width: 1
                     border.color: root.statusColor(del.status)
                     opacity: 1
