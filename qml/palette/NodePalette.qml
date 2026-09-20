@@ -61,6 +61,10 @@ Rectangle {
         collapsedCats = c
     }
 
+    // 画布（用于把新节点放到可见区域左上角）
+    property var canvasItem: null
+    property int newNodeCounter: 0
+
     // Dev helper: create a node instance from the catalog and register it.
     // Returns the created item, or null when the type is not implemented yet.
     function addNodeAt(type, x, y) {
@@ -97,7 +101,16 @@ Rectangle {
     }
 
     function addNode(type) {
-        return addNodeAt(type, 160, 140)
+        var x = 160, y = 140
+        if (canvasItem) {
+            // 可见画布左上角对应的世界坐标（留 40px 边距），并做级联避免完全重叠
+            var tl = canvasItem.toWorld(40, 40)
+            var off = (newNodeCounter % 6) * 28
+            x = Math.round(tl.x) + off
+            y = Math.round(tl.y) + off
+        }
+        newNodeCounter++
+        return addNodeAt(type, x, y)
     }
 
     Rectangle {

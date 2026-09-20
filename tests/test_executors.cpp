@@ -466,7 +466,7 @@ private slots:
         QVERIFY(!ex.execute({}, QVariantMap{{"alpha", 50}}, {}).ok);
     }
 
-    void blendResizesMismatchedB() {
+    void blendRejectsMismatchedSize() {
         BlendExecutor ex;
         cv::Mat a = cv::Mat(4, 4, CV_8U, cv::Scalar(100));
         cv::Mat b = cv::Mat(8, 8, CV_8U, cv::Scalar(200));
@@ -474,10 +474,35 @@ private slots:
         inputs.push_back(a);
         inputs.push_back(b);
         const ExecResult r = ex.execute({}, QVariantMap{{"alpha", 50}}, inputs);
+        QVERIFY(!r.ok);
+    }
+
+    void blendNormalizesChannels() {
+        BlendExecutor ex;
+        cv::Mat a = cv::Mat(4, 4, CV_8UC3, cv::Scalar(100, 100, 100)); // 3 通道
+        cv::Mat b = cv::Mat(4, 4, CV_8U, cv::Scalar(200));             // 1 通道
+        QVector<NodeData> inputs;
+        inputs.push_back(a);
+        inputs.push_back(b);
+        const ExecResult r = ex.execute({}, QVariantMap{{"alpha", 50}}, inputs);
         QVERIFY2(r.ok, qPrintable(r.error));
         const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
-        QCOMPARE(out.cols, 4);
-        QCOMPARE(out.rows, 4);
+        QCOMPARE(out.channels(), 3);
+        QCOMPARE(int(out.at<cv::Vec3b>(0, 0)[0]), 150);
+    }
+
+    void blendUpcastsGrayAToColorB() {
+        BlendExecutor ex;
+        cv::Mat a = cv::Mat(4, 4, CV_8U, cv::Scalar(100));              // 1 通道
+        cv::Mat b = cv::Mat(4, 4, CV_8UC3, cv::Scalar(200, 200, 200)); // 3 通道
+        QVector<NodeData> inputs;
+        inputs.push_back(a);
+        inputs.push_back(b);
+        const ExecResult r = ex.execute({}, QVariantMap{{"alpha", 50}}, inputs);
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.channels(), 3);
+        QCOMPARE(int(out.at<cv::Vec3b>(0, 0)[0]), 150);
     }
 
     void registrationCoversBuiltins() {

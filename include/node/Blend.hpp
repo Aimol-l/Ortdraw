@@ -23,7 +23,7 @@ public:
     BlendNode(QQuickItem *parent = nullptr): BaseNode(parent){
         m_name = "图像混合";
 
-        m_description = "按比例混合两张图像。";
+        m_description = "按比例混合两张图像（要求尺寸一致；低通道自动对齐到高通道）。";
         m_input_ports.push_back(new Port("图像A", PortType::Input, DataType::Image, QPointF(0,0), this));
         m_input_ports.push_back(new Port("图像B", PortType::Input, DataType::Image, QPointF(0,0), this));
         m_output_ports.push_back(new Port("图像", PortType::Output, DataType::Image, QPointF(0,0), this));

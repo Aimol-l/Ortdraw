@@ -176,6 +176,7 @@ Controls.ApplicationWindow {
                     visible: win.leftPanelWidth > 0
                     z: 1
                     nodeLayer: canvas.nodeLayer
+                    canvasItem: canvas
                     onCollapseRequested: win.leftCollapsed = true
                 }
 

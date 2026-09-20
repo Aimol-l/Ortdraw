@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <print>
 #include <QObject>
 #include <QPointer>
@@ -70,6 +71,13 @@ private:
         emit errorRevisionChanged();
     }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    void raiseNode(BaseNode* node){
+        if(!node || !m_paint_board) return;
+        qreal maxz = 0;
+        for(auto* n : m_paint_board->m_graph.getAllNodes())
+            maxz = std::max(maxz, n->z());
+        node->setZ(maxz + 1);
+    }
     // 撤销/重做恢复图状态后，用当前值刷新提交基线，避免下次误判为变更
     void syncLastState(){
         if(!m_paint_board) return;
@@ -283,6 +291,7 @@ public:
         auto command = std::make_unique<AddNodeCMD>(node, m_paint_board);
         bool ok = m_cmd_manager.executeCommand(std::move(command));
         if(ok){
+            raiseNode(node);
             m_last_state[node] = { node->params(), node->name() };
             Log::info(QStringLiteral("创建节点：%1 (%2)")
                           .arg(node->typeName(), node->uuid().toString()));
@@ -428,11 +437,10 @@ public:
         for(auto* node : m_paint_board->m_graph.getAllNodes()){
             bool hit = (node->uuid() == node_uid);
             if(hit){
-                node->setZ(1);
+                raiseNode(node);
                 node->setSelected(ctrl ? !node->selected() : true);
                 hit_node = node->selected() ? node : nullptr;
             }else{
-                node->setZ(0);
                 if(!ctrl) node->setSelected(false);
             }
         }
