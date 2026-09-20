@@ -73,12 +73,14 @@ private slots:
     void roleNamesMatchQmlContract() {
         ExecQueueModel m;
         const QHash<int, QByteArray> roles = m.roleNames();
-        QCOMPARE(roles.size(), 5);
+        QCOMPARE(roles.size(), 7);
         QCOMPARE(roles.value(ExecQueueModel::UuidRole), QByteArray("uuid"));
         QCOMPARE(roles.value(ExecQueueModel::NameRole), QByteArray("name"));
         QCOMPARE(roles.value(ExecQueueModel::StatusRole), QByteArray("status"));
         QCOMPARE(roles.value(ExecQueueModel::MsRole), QByteArray("ms"));
         QCOMPARE(roles.value(ExecQueueModel::ErrorRole), QByteArray("error"));
+        QCOMPARE(roles.value(ExecQueueModel::GroupRole), QByteArray("group"));
+        QCOMPARE(roles.value(ExecQueueModel::GroupColorRole), QByteArray("groupColor"));
     }
 
     void invalidIndexReturnsEmpty() {
@@ -93,6 +95,29 @@ private slots:
         m.addRunning("b", "B");
         m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
         QCOMPARE(m.countDone(), 1);
+    }
+
+    void groupRolesAndFilteredCounts() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+        m.addRunning("c", "C", 1, "#8250df");
+        m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
+        m.finishNode("b", int(NodeStatus::Failed), QStringLiteral("e"), 2);
+        m.finishNode("c", int(NodeStatus::Skipped), QStringLiteral("上游节点失败"), 0);
+
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), 0);
+        QCOMPARE(m.data(m.index(2), ExecQueueModel::GroupRole).toInt(), 1);
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString(), QString("#0969da"));
+        QVERIFY(m.roleNames().values().contains(QByteArray("group")));
+        QVERIFY(m.roleNames().values().contains(QByteArray("groupColor")));
+
+        QCOMPARE(m.countDone(), 3);
+        QCOMPARE(m.countDone(0), 2);
+        QCOMPARE(m.countDone(1), 1);
+        QCOMPARE(m.countFailed(0), 1);
+        QCOMPARE(m.countFailed(1), 0);
+        QCOMPARE(m.countSkipped(1), 1);
     }
 };
 

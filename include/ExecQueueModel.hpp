@@ -11,7 +11,8 @@
 class ExecQueueModel : public QAbstractListModel {
     Q_OBJECT
 public:
-    enum Roles { UuidRole = Qt::UserRole + 1, NameRole, StatusRole, MsRole, ErrorRole };
+    enum Roles { UuidRole = Qt::UserRole + 1, NameRole, StatusRole, MsRole, ErrorRole,
+                 GroupRole, GroupColorRole };
     Q_ENUM(Roles)
 
     explicit ExecQueueModel(QObject* parent = nullptr) : QAbstractListModel(parent) {}
@@ -30,13 +31,16 @@ public:
         case StatusRole: return r.status;
         case MsRole:     return r.ms;
         case ErrorRole:  return r.error;
+        case GroupRole:      return r.group;
+        case GroupColorRole: return r.groupColor;
         default:         return {};
         }
     }
 
     QHash<int, QByteArray> roleNames() const override {
         return { { UuidRole, "uuid" }, { NameRole, "name" }, { StatusRole, "status" },
-                 { MsRole, "ms" }, { ErrorRole, "error" } };
+                 { MsRole, "ms" }, { ErrorRole, "error" },
+                 { GroupRole, "group" }, { GroupColorRole, "groupColor" } };
     }
 
     void beginRun() {
@@ -46,10 +50,11 @@ public:
         endResetModel();
     }
 
-    void addRunning(const QString& uuid, const QString& name) {
+    void addRunning(const QString& uuid, const QString& name,
+                    int group = -1, const QString& groupColor = QString()) {
         const int row = m_rows.size();
         beginInsertRows(QModelIndex(), row, row);
-        m_rows.push_back(Row{ uuid, name, runningStatus(), QString(), 0 });
+        m_rows.push_back(Row{ uuid, name, runningStatus(), QString(), groupColor, 0, group });
         endInsertRows();
     }
 
@@ -69,10 +74,11 @@ public:
 
     // 追加一条已终结的行：用于“跳过/环”等从未发过 nodeStarted 的节点。
     void addFinished(const QString& uuid, const QString& name, int status,
-                     const QString& error, int ms) {
+                     const QString& error, int ms,
+                     int group = -1, const QString& groupColor = QString()) {
         const int row = m_rows.size();
         beginInsertRows(QModelIndex(), row, row);
-        m_rows.push_back(Row{ uuid, name, statusText(status), error, ms });
+        m_rows.push_back(Row{ uuid, name, statusText(status), error, groupColor, ms, group });
         endInsertRows();
     }
 
@@ -90,27 +96,28 @@ public:
         if (row < 0 || row >= m_rows.size()) return false;
         return m_rows.at(row).status != runningStatus();
     }
-    int countDone() const {
+    int countDone(int group = -1) const {
         int n = 0;
-        for (int i = 0; i < m_rows.size(); ++i) if (isTerminal(i)) ++n;
+        for (const Row& r : m_rows) if (inGroup(r, group) && r.status != runningStatus()) ++n;
         return n;
     }
-    int countFailed() const { return count([](const Row& r){ return r.status == "failed"; }); }
-    int countSkipped() const { return count([](const Row& r){ return r.status == "skipped"; }); }
-    int countCancelled() const { return count([](const Row& r){ return r.status == "cancelled"; }); }
+    int countFailed(int group = -1) const { return countIn(group, QStringLiteral("failed")); }
+    int countSkipped(int group = -1) const { return countIn(group, QStringLiteral("skipped")); }
+    int countCancelled(int group = -1) const { return countIn(group, QStringLiteral("cancelled")); }
 
 private:
+    struct Row { QString uuid, name, status, error, groupColor; int ms = 0; int group = -1; };
+
+    static bool inGroup(const Row& r, int group) { return group < 0 || r.group == group; }
+
     static const QString& runningStatus() {
         static const QString s = QStringLiteral("running");
         return s;
     }
 
-    struct Row { QString uuid, name, status, error; int ms = 0; };
-
-    template <typename Pred>
-    int count(Pred pred) const {
+    int countIn(int group, const QString& status) const {
         int n = 0;
-        for (const Row& r : m_rows) if (pred(r)) ++n;
+        for (const Row& r : m_rows) if (inGroup(r, group) && r.status == status) ++n;
         return n;
     }
 
