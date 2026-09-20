@@ -50,6 +50,17 @@ private slots:
         { Settings s2(path); QCOMPARE(s2.theme(), QString("dark"));
           QVERIFY(s2.accentCustom()); QCOMPARE(s2.accentColor().name(), QString("#9854f1")); }
     }
+    void queueAnimationDefaultsAndPersists() {
+        QTemporaryFile f; QVERIFY(f.open());
+        Settings s(f.fileName());
+        QVERIFY(s.queueAnimation());
+        QSignalSpy spy(&s, &Settings::queueAnimationChanged);
+        s.setQueueAnimation(false);
+        QCOMPARE(spy.count(), 1);
+        QVERIFY(!s.queueAnimation());
+        Settings s2(f.fileName());
+        QVERIFY(!s2.queueAnimation());
+    }
     void resetDefaultsRestoresAndSignals() {
         QTemporaryFile f; QVERIFY(f.open());
         Settings s(f.fileName());
