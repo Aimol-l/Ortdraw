@@ -185,7 +185,7 @@ public:
     }
     void setQueueAnimation(bool v) {
         if (m_queueAnimation == v) return;
-        m_queueAnimation = v; m_store->setValue("performance/queueAnimation", v); emit queueAnimationChanged();
+        m_queueAnimation = v; m_store->setValue("perf/queueAnimation", v); emit queueAnimationChanged();
     }
     void setShowPortTypeTags(bool v) {
         if (m_showPortTypeTags == v) return;
@@ -277,7 +277,7 @@ public:
         m_showPreview = true; m_store->setValue("nodes/showPreview", m_showPreview);
         m_previewHeight = 88; m_store->setValue("nodes/previewHeight", m_previewHeight);
         m_previewFullRes = false; m_store->setValue("nodes/previewFullRes", m_previewFullRes);
-        m_queueAnimation = true; m_store->setValue("performance/queueAnimation", m_queueAnimation);
+        m_queueAnimation = true; m_store->setValue("perf/queueAnimation", m_queueAnimation);
         m_showPortTypeTags = true; m_store->setValue("nodes/showPortTypeTags", m_showPortTypeTags);
         m_autoHeight = true; m_store->setValue("nodes/autoHeight", m_autoHeight);
         m_textRender = "curve"; m_store->setValue("nodes/textRender", m_textRender);
@@ -396,7 +396,7 @@ private:
         m_showPreview = m_store->value("nodes/showPreview", true).toBool();
         m_previewHeight = qBound(60, m_store->value("nodes/previewHeight", 88).toInt(), 160);
         m_previewFullRes = m_store->value("nodes/previewFullRes", false).toBool();
-        m_queueAnimation = m_store->value("performance/queueAnimation", true).toBool();
+        m_queueAnimation = m_store->value("perf/queueAnimation", true).toBool();
         m_showPortTypeTags = m_store->value("nodes/showPortTypeTags", true).toBool();
         m_autoHeight = m_store->value("nodes/autoHeight", true).toBool();
         m_textRender = oneOf(m_store->value("nodes/textRender", "curve").toString(),
