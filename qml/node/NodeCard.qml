@@ -16,10 +16,12 @@ Item {
     // 有执行结果时优先显示 ImageStore 中的真实图像；imageRevision 变化触发重算
     readonly property string effectivePreview: {
         var r = NodeManager.imageRevision
+        var q = Settings.previewFullRes     // 开关：预览用原图还是缩略图
         var u = card.node ? ("" + card.node.uuid) : ""
-        return (u !== "" && NodeManager.hasImage(u))
-               ? NodeManager.imageUrl(u)
-               : ("" + card.previewSource)
+        if (u !== "" && NodeManager.hasImage(u))
+            return (q && NodeManager.hasFullImage(u)) ? NodeManager.fullImageUrl(u)
+                                                      : NodeManager.imageUrl(u)
+        return "" + card.previewSource
     }
     // 节点自定义内容（参数控件）注入点，位于端口行下方
     default property alias extraContent: extraHost.data

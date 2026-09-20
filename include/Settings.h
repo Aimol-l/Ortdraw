@@ -25,6 +25,7 @@ class Settings : public QObject {
     Q_PROPERTY(qreal zoomMax READ zoomMax WRITE setZoomMax NOTIFY zoomRangeChanged)
     Q_PROPERTY(bool showPreview READ showPreview WRITE setShowPreview NOTIFY showPreviewChanged)
     Q_PROPERTY(int previewHeight READ previewHeight WRITE setPreviewHeight NOTIFY previewHeightChanged)
+    Q_PROPERTY(bool previewFullRes READ previewFullRes WRITE setPreviewFullRes NOTIFY previewFullResChanged)
     Q_PROPERTY(bool showPortTypeTags READ showPortTypeTags WRITE setShowPortTypeTags NOTIFY showPortTypeTagsChanged)
     Q_PROPERTY(bool autoHeight READ autoHeight WRITE setAutoHeight NOTIFY autoHeightChanged)
     Q_PROPERTY(QString textRender READ textRender WRITE setTextRender NOTIFY textRenderChanged)
@@ -88,6 +89,7 @@ public:
     qreal zoomMax() const { return m_zoomMax; }
     bool showPreview() const { return m_showPreview; }
     int previewHeight() const { return m_previewHeight; }
+    bool previewFullRes() const { return m_previewFullRes; }
     bool showPortTypeTags() const { return m_showPortTypeTags; }
     bool autoHeight() const { return m_autoHeight; }
     QString textRender() const { return m_textRender; }
@@ -174,6 +176,10 @@ public:
         v = qBound(60, v, 160);
         if (m_previewHeight == v) return;
         m_previewHeight = v; m_store->setValue("nodes/previewHeight", v); emit previewHeightChanged();
+    }
+    void setPreviewFullRes(bool v) {
+        if (m_previewFullRes == v) return;
+        m_previewFullRes = v; m_store->setValue("nodes/previewFullRes", v); emit previewFullResChanged();
     }
     void setShowPortTypeTags(bool v) {
         if (m_showPortTypeTags == v) return;
@@ -264,6 +270,7 @@ public:
         m_zoomMax = 2.4; m_store->setValue("canvas/zoomMax", m_zoomMax);
         m_showPreview = true; m_store->setValue("nodes/showPreview", m_showPreview);
         m_previewHeight = 88; m_store->setValue("nodes/previewHeight", m_previewHeight);
+        m_previewFullRes = false; m_store->setValue("nodes/previewFullRes", m_previewFullRes);
         m_showPortTypeTags = true; m_store->setValue("nodes/showPortTypeTags", m_showPortTypeTags);
         m_autoHeight = true; m_store->setValue("nodes/autoHeight", m_autoHeight);
         m_textRender = "curve"; m_store->setValue("nodes/textRender", m_textRender);
@@ -293,6 +300,7 @@ public:
         emit zoomRangeChanged();
         emit showPreviewChanged();
         emit previewHeightChanged();
+        emit previewFullResChanged();
         emit showPortTypeTagsChanged();
         emit autoHeightChanged();
         emit textRenderChanged();
@@ -336,6 +344,7 @@ signals:
     void zoomRangeChanged();
     void showPreviewChanged();
     void previewHeightChanged();
+    void previewFullResChanged();
     void showPortTypeTagsChanged();
     void autoHeightChanged();
     void textRenderChanged();
@@ -377,6 +386,7 @@ private:
         if (m_zoomMin >= m_zoomMax) m_zoomMax = qMin(m_zoomMin + 0.1, 8.0);
         m_showPreview = m_store->value("nodes/showPreview", true).toBool();
         m_previewHeight = qBound(60, m_store->value("nodes/previewHeight", 88).toInt(), 160);
+        m_previewFullRes = m_store->value("nodes/previewFullRes", false).toBool();
         m_showPortTypeTags = m_store->value("nodes/showPortTypeTags", true).toBool();
         m_autoHeight = m_store->value("nodes/autoHeight", true).toBool();
         m_textRender = oneOf(m_store->value("nodes/textRender", "curve").toString(),
@@ -416,6 +426,7 @@ private:
     qreal m_zoomMax = 2.4;
     bool m_showPreview = true;
     int m_previewHeight = 88;
+    bool m_previewFullRes = false;
     bool m_showPortTypeTags = true;
     bool m_autoHeight = true;
     QString m_textRender = "curve";

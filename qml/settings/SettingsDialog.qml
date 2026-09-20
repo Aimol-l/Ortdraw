@@ -51,6 +51,7 @@ Item {
             zoomMax: Settings.zoomMax,
             showPreview: Settings.showPreview,
             previewHeight: Settings.previewHeight,
+            previewFullRes: Settings.previewFullRes,
             showPortTypeTags: Settings.showPortTypeTags,
             autoHeight: Settings.autoHeight,
             textRender: Settings.textRender,
@@ -88,6 +89,7 @@ Item {
         Settings.zoomMax = s.zoomMax
         Settings.showPreview = s.showPreview
         Settings.previewHeight = s.previewHeight
+        Settings.previewFullRes = s.previewFullRes
         Settings.showPortTypeTags = s.showPortTypeTags
         Settings.autoHeight = s.autoHeight
         Settings.textRender = s.textRender
@@ -552,6 +554,16 @@ Item {
                                     SwitchControl {
                                         checked: Settings.showPreview
                                         onToggled: (v) => Settings.showPreview = v
+                                    }
+                                }
+
+                                SettingRow {
+                                    title: "预览使用原图"
+                                    desc: "预览显示原分辨率（更清晰，更占内存）"
+                                    keywords: "preview 原图 清晰 full"
+                                    SwitchControl {
+                                        checked: Settings.previewFullRes
+                                        onToggled: (v) => Settings.previewFullRes = v
                                     }
                                 }
 
