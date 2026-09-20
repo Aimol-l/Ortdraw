@@ -186,6 +186,31 @@ private slots:
         for (int i = 0; i < p.rowCount(); ++i)
             QCOMPARE(p.data(p.index(i, 0), ExecQueueModel::GroupRole).toInt(), 1);
     }
+
+    void proxyDynamicFilteringAndRolePassthrough() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+
+        QueueFilterProxyModel p;
+        p.setSourceModel(&m);
+        p.setGroup(0);
+        QCOMPARE(p.rowCount(), 2);
+
+        m.addRunning("e", "E", 1, "#8250df");
+        QCOMPARE(p.rowCount(), 2);
+
+        m.addRunning("f", "F", 0, "#0969da");
+        QCOMPARE(p.rowCount(), 3);
+
+        QVERIFY(!p.data(p.index(0, 0), ExecQueueModel::GroupColorRole).toString().isEmpty());
+
+        p.setGroup(-1);
+        QCOMPARE(p.rowCount(), 4);
+
+        m.beginRun();
+        QCOMPARE(p.rowCount(), 0);
+    }
 };
 
 QTEST_MAIN(TestExecQueue)

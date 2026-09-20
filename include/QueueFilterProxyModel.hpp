@@ -12,8 +12,14 @@ public:
     int group() const { return m_group; }
     void setGroup(int g) {
         if (m_group == g) return;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+        beginFilterChange();
+        m_group = g;
+        endFilterChange();
+#else
         m_group = g;
         invalidateFilter();
+#endif
     }
 protected:
     bool filterAcceptsRow(int row, const QModelIndex& parent) const override {

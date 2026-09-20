@@ -70,7 +70,8 @@ private:
         });
         QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
                          [this](const QString& uuid) {
-            m_exec_queue.addRunning(uuid, nameOf(uuid), groupOf(uuid), colorOf(groupOf(uuid)));
+            const int grp = groupOf(uuid);
+            m_exec_queue.addRunning(uuid, nameOf(uuid), grp, colorOf(grp));
             emit queueChanged();
         });
         // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
