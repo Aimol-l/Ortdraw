@@ -196,6 +196,8 @@ public:
     // 选中节点并请求画布把该节点居中
     Q_INVOKABLE void focusNode(const QString& uuid) {
         if (!m_paint_board) return;
+        for (Edge& edge : m_paint_board->m_graph.getAllEdges())
+            edge.seleected = false;
         BaseNode* target = nullptr;
         for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
             const bool hit = (n->uuid().toString() == uuid);
