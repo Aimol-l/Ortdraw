@@ -27,6 +27,7 @@
 #include "engine/GraphExecutor.hpp"
 #include "engine/ImageStore.hpp"
 #include "engine/NodeStatus.hpp"
+#include "ExecQueueModel.hpp"
 
 
 class NodeManager : public QObject {
@@ -41,6 +42,9 @@ private:
     Port* m_link_target = nullptr;
     bool m_link_from_input = false;
     GraphExecutor m_executor;
+    ExecQueueModel m_exec_queue;
+    int m_queue_total = 0;
+    bool m_queue_has_result = false;
     int m_image_revision = 0;
     int m_error_revision = 0;
     // 每个节点最近一次执行的错误文本（空串表示成功）
@@ -48,7 +52,6 @@ private:
     // 每个节点最近一次提交后的参数与名称快照，用于 diff 出参数/名称变更命令
     QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {
-        connect(&m_executor, &GraphExecutor::runningChanged, this, &NodeManager::engineChanged);
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
         QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
                          [this](const QString& uuid, const QImage& img) {
@@ -56,12 +59,30 @@ private:
             ++m_image_revision;
             emit imageRevisionChanged();
         });
+        QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
+                         [this](const QString& uuid) {
+            m_exec_queue.addRunning(uuid, nameOf(uuid));
+            emit queueChanged();
+        });
         // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
         QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
-                         [this](const QString& uuid, int status, const QString& error, int /*ms*/) {
+                         [this](const QString& uuid, int status, const QString& error, int ms) {
+            // 跳过/环等节点从不发 nodeStarted，此时补建终结行
+            if (!m_exec_queue.finishNode(uuid, status, error, ms))
+                m_exec_queue.addFinished(uuid, nameOf(uuid), status, error, ms);
             m_node_errors[uuid] = (status == int(NodeStatus::Ok)) ? QString() : error;
             ++m_error_revision;
             emit errorRevisionChanged();
+            emit queueChanged();
+        });
+        connect(&m_executor, &GraphExecutor::runningChanged, this, [this] {
+            if (m_executor.running()) {
+                m_exec_queue.beginRun();
+                m_queue_total = nodeCount();
+                m_queue_has_result = true;
+                emit queueChanged();
+            }
+            emit engineChanged();
         });
     }
 
@@ -72,6 +93,12 @@ private:
         emit errorRevisionChanged();
     }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    QString nameOf(const QString& uuid) const {
+        if (!m_paint_board) return uuid;
+        for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+            if (n->uuid().toString() == uuid) return n->name();
+        return uuid;
+    }
     void raiseNode(BaseNode* node){
         if(!node || !m_paint_board) return;
         qreal maxz = 0;
@@ -125,9 +152,23 @@ public:
     Q_PROPERTY(QString engineStatus READ engineStatus NOTIFY engineChanged)
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
     Q_PROPERTY(int errorRevision READ errorRevision NOTIFY errorRevisionChanged)
+    Q_PROPERTY(QAbstractListModel* execQueue READ execQueue CONSTANT)
+    Q_PROPERTY(bool queueHasResult READ queueHasResult NOTIFY queueChanged)
+    Q_PROPERTY(int queueTotal READ queueTotal NOTIFY queueChanged)
+    Q_PROPERTY(int queueDone READ queueDone NOTIFY queueChanged)
+    Q_PROPERTY(int queueFailed READ queueFailed NOTIFY queueChanged)
+    Q_PROPERTY(int queueSkipped READ queueSkipped NOTIFY queueChanged)
+    Q_PROPERTY(int queueCancelled READ queueCancelled NOTIFY queueChanged)
 
     bool engineRunning() const { return m_executor.running(); }
     QString engineStatus() const { return m_executor.status(); }
+    QAbstractListModel* execQueue() { return &m_exec_queue; }
+    bool queueHasResult() const { return m_queue_has_result; }
+    int queueTotal() const { return m_queue_total; }
+    int queueDone() const { return m_exec_queue.countDone(); }
+    int queueFailed() const { return m_exec_queue.countFailed(); }
+    int queueSkipped() const { return m_exec_queue.countSkipped(); }
+    int queueCancelled() const { return m_exec_queue.countCancelled(); }
     int imageRevision() const { return m_image_revision; }
     int errorRevision() const { return m_error_revision; }
     Q_INVOKABLE QString nodeError(const QString& uuid) const {
@@ -621,6 +662,7 @@ signals:
     void engineChanged();
     void imageRevisionChanged();
     void errorRevisionChanged();
+    void queueChanged();
 
 public:
     NodeManager(const NodeManager&) = delete;
