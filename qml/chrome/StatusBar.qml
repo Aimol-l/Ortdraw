@@ -349,7 +349,7 @@ Rectangle {
 
                     // 「全部组」时：同组同色左边条
                     Rectangle {
-                        visible: NodeManager.selectedGroup < 0 && del.group >= 0
+                        visible: NodeManager.queueGroups.length >= 2 && NodeManager.selectedGroup < 0 && del.group >= 0
                         anchors.left: parent.left
                         anchors.top: parent.top
                         anchors.bottom: parent.bottom
