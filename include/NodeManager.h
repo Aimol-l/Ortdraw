@@ -26,6 +26,8 @@
 #include "utils/Snapshot.hpp"
 #include "engine/GraphExecutor.hpp"
 #include "engine/ImageStore.hpp"
+#include "engine/NodeStatus.hpp"
+#include "ExecQueueModel.hpp"
 
 
 class NodeManager : public QObject {
@@ -40,6 +42,9 @@ private:
     Port* m_link_target = nullptr;
     bool m_link_from_input = false;
     GraphExecutor m_executor;
+    ExecQueueModel m_exec_queue;
+    int m_queue_total = 0;
+    bool m_queue_has_result = false;
     int m_image_revision = 0;
     int m_error_revision = 0;
     // 每个节点最近一次执行的错误文本（空串表示成功）
@@ -47,7 +52,6 @@ private:
     // 每个节点最近一次提交后的参数与名称快照，用于 diff 出参数/名称变更命令
     QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {
-        connect(&m_executor, &GraphExecutor::runningChanged, this, &NodeManager::engineChanged);
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
         QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
                          [this](const QString& uuid, const QImage& img) {
@@ -55,12 +59,30 @@ private:
             ++m_image_revision;
             emit imageRevisionChanged();
         });
+        QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
+                         [this](const QString& uuid) {
+            m_exec_queue.addRunning(uuid, nameOf(uuid));
+            emit queueChanged();
+        });
         // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
         QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
-                         [this](const QString& uuid, bool ok, const QString& error) {
-            m_node_errors[uuid] = ok ? QString() : error;
+                         [this](const QString& uuid, int status, const QString& error, int ms) {
+            // 跳过/环等节点从不发 nodeStarted，此时补建终结行
+            if (!m_exec_queue.finishNode(uuid, status, error, ms))
+                m_exec_queue.addFinished(uuid, nameOf(uuid), status, error, ms);
+            m_node_errors[uuid] = (status == int(NodeStatus::Ok)) ? QString() : error;
             ++m_error_revision;
             emit errorRevisionChanged();
+            emit queueChanged();
+        });
+        connect(&m_executor, &GraphExecutor::runningChanged, this, [this] {
+            if (m_executor.running()) {
+                m_exec_queue.beginRun();
+                m_queue_total = nodeCount();
+                m_queue_has_result = true;
+                emit queueChanged();
+            }
+            emit engineChanged();
         });
     }
 
@@ -70,7 +92,19 @@ private:
         ++m_error_revision;
         emit errorRevisionChanged();
     }
+    void resetQueue(){
+        m_exec_queue.beginRun();
+        m_queue_total = 0;
+        m_queue_has_result = false;
+        emit queueChanged();
+    }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    QString nameOf(const QString& uuid) const {
+        if (!m_paint_board) return uuid;
+        for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+            if (n->uuid().toString() == uuid) return n->name();
+        return uuid;
+    }
     void raiseNode(BaseNode* node){
         if(!node || !m_paint_board) return;
         qreal maxz = 0;
@@ -124,9 +158,23 @@ public:
     Q_PROPERTY(QString engineStatus READ engineStatus NOTIFY engineChanged)
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
     Q_PROPERTY(int errorRevision READ errorRevision NOTIFY errorRevisionChanged)
+    Q_PROPERTY(QAbstractListModel* execQueue READ execQueue CONSTANT)
+    Q_PROPERTY(bool queueHasResult READ queueHasResult NOTIFY queueChanged)
+    Q_PROPERTY(int queueTotal READ queueTotal NOTIFY queueChanged)
+    Q_PROPERTY(int queueDone READ queueDone NOTIFY queueChanged)
+    Q_PROPERTY(int queueFailed READ queueFailed NOTIFY queueChanged)
+    Q_PROPERTY(int queueSkipped READ queueSkipped NOTIFY queueChanged)
+    Q_PROPERTY(int queueCancelled READ queueCancelled NOTIFY queueChanged)
 
     bool engineRunning() const { return m_executor.running(); }
     QString engineStatus() const { return m_executor.status(); }
+    QAbstractListModel* execQueue() { return &m_exec_queue; }
+    bool queueHasResult() const { return m_queue_has_result; }
+    int queueTotal() const { return m_queue_total; }
+    int queueDone() const { return m_exec_queue.countDone(); }
+    int queueFailed() const { return m_exec_queue.countFailed(); }
+    int queueSkipped() const { return m_exec_queue.countSkipped(); }
+    int queueCancelled() const { return m_exec_queue.countCancelled(); }
     int imageRevision() const { return m_image_revision; }
     int errorRevision() const { return m_error_revision; }
     Q_INVOKABLE QString nodeError(const QString& uuid) const {
@@ -144,6 +192,23 @@ public:
     Q_INVOKABLE void cancelRun() {
         Log::info(QStringLiteral("取消图求值"));
         m_executor.cancel();
+    }
+    // 选中节点并请求画布把该节点居中
+    Q_INVOKABLE void focusNode(const QString& uuid) {
+        if (!m_paint_board) return;
+        for (Edge& edge : m_paint_board->m_graph.getAllEdges())
+            edge.seleected = false;
+        BaseNode* target = nullptr;
+        for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
+            const bool hit = (n->uuid().toString() == uuid);
+            n->setSelected(hit);
+            if (hit) { target = n; raiseNode(n); }
+        }
+        setSelectedNode(target);
+        if (target)
+            emit nodeFocusRequested(target->x() + target->width() / 2.0,
+                                    target->y() + target->height() / 2.0);
+        refresh();
     }
     Q_INVOKABLE bool hasImage(const QString& uuid) const {
         return ImageStore::instance()->has(uuid);
@@ -424,6 +489,7 @@ public:
         ++m_image_revision;
         emit imageRevisionChanged();
         clearNodeErrors();
+        resetQueue();
         setSelectedNode(nullptr);
         refresh();
     }
@@ -620,6 +686,8 @@ signals:
     void engineChanged();
     void imageRevisionChanged();
     void errorRevisionChanged();
+    void queueChanged();
+    void nodeFocusRequested(qreal wx, qreal wy);
 
 public:
     NodeManager(const NodeManager&) = delete;

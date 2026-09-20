@@ -5,6 +5,7 @@
 
 #include "engine/BuiltinExecutors.hpp"
 #include "engine/GraphExecutor.hpp"
+#include "engine/NodeStatus.hpp"
 #include "node/ImageLoad.hpp"
 #include "node/ImageShow.hpp"
 #include "node/Resize.hpp"
@@ -75,7 +76,8 @@ private slots:
 
         QTRY_COMPARE(nodeSpy.count(), 3);
         for (const QVariantList& args : nodeSpy) {
-            QVERIFY2(args.at(1).toBool(), qPrintable(args.at(2).toString()));
+            QCOMPARE(args.at(1).toInt(), int(NodeStatus::Ok));
+            QVERIFY(args.at(3).toInt() >= 0);
         }
         // 拓扑顺序：load → resize → show
         QCOMPARE(nodeSpy.at(0).at(0).toString(), load.uuid().toString());
@@ -121,7 +123,7 @@ private slots:
 
         QTRY_COMPARE(nodeSpy.count(), 4);
         for (const QVariantList& args : nodeSpy)
-            QVERIFY2(args.at(1).toBool(), qPrintable(args.at(2).toString()));
+            QCOMPARE(args.at(1).toInt(), int(NodeStatus::Ok));
 
         QTRY_VERIFY_WITH_TIMEOUT(imageSpy.count() >= 3, 10000);
         bool convImage = false, showImage = false;
@@ -198,10 +200,74 @@ private slots:
 
         QTRY_COMPARE(nodeSpy.count(), 3);
         QCOMPARE(nodeSpy.at(0).at(0).toString(), load.uuid().toString());
-        QVERIFY(!nodeSpy.at(0).at(1).toBool());
-        QVERIFY(!nodeSpy.at(1).at(1).toBool());
-        QVERIFY(!nodeSpy.at(2).at(1).toBool());
+        QCOMPARE(nodeSpy.at(0).at(1).toInt(), int(NodeStatus::Failed));
+        QCOMPARE(nodeSpy.at(1).at(1).toInt(), int(NodeStatus::Skipped));
+        QCOMPARE(nodeSpy.at(2).at(1).toInt(), int(NodeStatus::Skipped));
         QCOMPARE(nodeSpy.at(1).at(2).toString(), QStringLiteral("上游节点失败"));
+    }
+
+    void nodeStartedPrecedesFinishWithDuration() {
+        DAGraph g;
+        ImageLoadNode load;
+        ResizeNode resize;
+        ImageShowNode show;
+        QVERIFY(g.addNode(&load));
+        QVERIFY(g.addNode(&resize));
+        QVERIFY(g.addNode(&show));
+        QVERIFY(g.addEdge(load.getOutPorts()[0], resize.getInPorts()[0]));
+        QVERIFY(g.addEdge(resize.getOutPorts()[0], show.getInPorts()[0]));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("t.png");
+        QVERIFY(cv::imwrite(path.toStdString(), cv::Mat(8, 8, CV_8UC3, cv::Scalar(1, 2, 3))));
+        load.setPath(path);
+
+        GraphExecutor ex;
+        ex.setGraph(&g);
+        QSignalSpy started(&ex, &GraphExecutor::nodeStarted);
+        QSignalSpy finished(&ex, &GraphExecutor::nodeFinished);
+        QSignalSpy done(&ex, &GraphExecutor::runFinished);
+
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QTRY_COMPARE(started.count(), 3);
+        QTRY_COMPARE(finished.count(), 3);
+        QCOMPARE(started.at(0).at(0).toString(), load.uuid().toString());
+        for (const QVariantList& a : finished) {
+            QCOMPARE(a.at(1).toInt(), int(NodeStatus::Ok));
+            QVERIFY(a.at(3).toInt() >= 0);
+        }
+    }
+
+    void selfCancelReportsCancelled() {
+        struct SelfCancelExecutor : NodeExecutor {
+            ExecResult execute(const ExecuteContext& ctx, const QVariantMap&,
+                               const QVector<NodeData>&) const override {
+                if (ctx.cancel) ctx.cancel->store(true);
+                return {true, QString(), {}};
+            }
+        };
+        struct CancelTestNode : BaseNode {
+            QString typeName() const override { return "CancelTest"; }
+            CancelTestNode(QQuickItem* parent = nullptr) : BaseNode(parent) {}
+        };
+        NodeRegistry::instance().registerExecutor("CancelTest",
+                                                  std::make_shared<SelfCancelExecutor>());
+
+        DAGraph g;
+        CancelTestNode n;
+        QVERIFY(g.addNode(&n));
+
+        GraphExecutor ex;
+        ex.setGraph(&g);
+        QSignalSpy finished(&ex, &GraphExecutor::nodeFinished);
+        QSignalSpy done(&ex, &GraphExecutor::runFinished);
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QVERIFY(!done.takeFirst().at(0).toBool());
+        QTRY_COMPARE(finished.count(), 1);
+        QCOMPARE(finished.at(0).at(1).toInt(), int(NodeStatus::Cancelled));
     }
 };
 

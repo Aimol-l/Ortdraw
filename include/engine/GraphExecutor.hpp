@@ -18,6 +18,7 @@
 
 #include "Log.hpp"
 #include "engine/NodeRegistry.hpp"
+#include "engine/NodeStatus.hpp"
 #include "utils/DAGraph.hpp"
 
 // 在后台线程按拓扑序求值整张图，结果经队列信号回主线程。
@@ -126,7 +127,8 @@ public:
 signals:
     void runningChanged();
     void statusChanged();
-    void nodeFinished(const QString& uuid, bool ok, const QString& error);
+    void nodeStarted(const QString& uuid);
+    void nodeFinished(const QString& uuid, int status, const QString& error, int durationMs);
     void nodeImageReady(const QString& uuid, const QImage& image);
     void runFinished(bool ok);
 
@@ -212,15 +214,21 @@ private:
         bool aborted = false;
         const auto startedAt = std::chrono::steady_clock::now();
 
-        auto reportNode = [this, runId](const QString& uuid, bool ok, const QString& err) {
-            // 工作线程内直接写日志（Log 线程安全）
-            if (ok)
-                Log::debug(QStringLiteral("节点完成：%1 ok").arg(uuid));
-            else
-                Log::debug(QStringLiteral("节点失败：%1 %2").arg(uuid, err));
-            QMetaObject::invokeMethod(this, [this, runId, uuid, ok, err] {
+        auto reportStarted = [this, runId](const QString& uuid) {
+            QMetaObject::invokeMethod(this, [this, runId, uuid] {
                 if (runId != m_run_id.load()) return;
-                emit nodeFinished(uuid, ok, err);
+                emit nodeStarted(uuid);
+            }, Qt::QueuedConnection);
+        };
+
+        auto reportNode = [this, runId](const QString& uuid, int status,
+                                        const QString& err, int ms) {
+            // 工作线程内直接写日志（Log 线程安全）
+            Log::debug(QStringLiteral("节点完成：%1 status=%2 %3")
+                           .arg(uuid).arg(status).arg(ms));
+            QMetaObject::invokeMethod(this, [this, runId, uuid, status, err, ms] {
+                if (runId != m_run_id.load()) return;
+                emit nodeFinished(uuid, status, err, ms);
             }, Qt::QueuedConnection);
         };
 
@@ -252,10 +260,12 @@ private:
             if (upstreamFailed) {
                 failed.insert(n);
                 allOk = false;
-                reportNode(uuid, false, QStringLiteral("上游节点失败"));
+                reportNode(uuid, int(NodeStatus::Skipped), QStringLiteral("上游节点失败"), 0);
                 continue;
             }
 
+            reportStarted(uuid);
+            const auto nodeT0 = std::chrono::steady_clock::now();
             ExecResult r;
             auto exec = NodeRegistry::instance().executorFor(ns.type);
             if (!exec) {
@@ -265,13 +275,21 @@ private:
                 ExecuteContext ctx{ns.uuid, &m_cancel, [](const QString&) {}};
                 r = exec->execute(ctx, ns.params, inputs);
             }
+            const int nodeMs = int(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - nodeT0).count());
 
+            const bool cancelled = m_cancel.load();
+            const int status = cancelled ? int(NodeStatus::Cancelled)
+                                         : (r.ok ? int(NodeStatus::Ok) : int(NodeStatus::Failed));
             if (!r.ok) {
                 failed.insert(n);
                 allOk = false;
             }
-            cache.insert(n, r.outputs);
-            reportNode(uuid, r.ok, r.error);
+            if (status == int(NodeStatus::Ok))
+                cache.insert(n, r.outputs);
+            reportNode(uuid, status, r.error, nodeMs);
+
+            if (cancelled) { aborted = true; break; }
 
             if (r.ok) {
                 for (const NodeData& d : r.outputs) {
@@ -302,7 +320,7 @@ private:
                 if (order.contains(s.node)) continue;
                 failed.insert(s.node);
                 allOk = false;
-                reportNode(s.uuid, false, QStringLiteral("图中存在环"));
+                reportNode(s.uuid, int(NodeStatus::Failed), QStringLiteral("图中存在环"), 0);
             }
         }
 

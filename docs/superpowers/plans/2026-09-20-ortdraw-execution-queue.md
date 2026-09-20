@@ -370,9 +370,20 @@ private slots:
     void finishUnknownUuidIsSafe() {
         ExecQueueModel m;
         m.addRunning("u1", "节点A");
-        m.finishNode("nope", int(NodeStatus::Failed), QStringLiteral("err"), 3);
+        QVERIFY(!m.finishNode("nope", int(NodeStatus::Failed), QStringLiteral("err"), 3));
         QCOMPARE(m.rowCount(), 1);
         QCOMPARE(m.data(m.index(0), ExecQueueModel::StatusRole).toString(), QString("running"));
+    }
+
+    // 跳过节点从不发 nodeStarted，凭 nodeFinished 直接补建终结行
+    void addFinishedAppendsTerminalRow() {
+        ExecQueueModel m;
+        m.addFinished("s1", "边缘检测", int(NodeStatus::Skipped), QStringLiteral("上游节点失败"), 0);
+        QCOMPARE(m.rowCount(), 1);
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::UuidRole).toString(), QString("s1"));
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::NameRole).toString(), QString("边缘检测"));
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::StatusRole).toString(), QString("skipped"));
+        QCOMPARE(m.countSkipped(), 1);
     }
 
     void countsStatuses() {
@@ -477,8 +488,8 @@ public:
         endInsertRows();
     }
 
-    // 更新该 uuid 最后一行；未知 uuid 安全忽略。
-    void finishNode(const QString& uuid, int status, const QString& error, int ms) {
+    // 更新该 uuid 最后一行；返回是否命中（未知 uuid 安全忽略并返回 false）。
+    bool finishNode(const QString& uuid, int status, const QString& error, int ms) {
         for (int i = m_rows.size() - 1; i >= 0; --i) {
             if (m_rows.at(i).uuid != uuid) continue;
             m_rows[i].status = statusText(status);
@@ -486,8 +497,18 @@ public:
             m_rows[i].ms = ms;
             const QModelIndex idx = index(i);
             emit dataChanged(idx, idx, { StatusRole, ErrorRole, MsRole });
-            return;
+            return true;
         }
+        return false;
+    }
+
+    // 追加一条已终结的行：用于“跳过/环”等从未发过 nodeStarted 的节点。
+    void addFinished(const QString& uuid, const QString& name, int status,
+                     const QString& error, int ms) {
+        const int row = m_rows.size();
+        beginInsertRows(QModelIndex(), row, row);
+        m_rows.push_back(Row{ uuid, name, statusText(status), error, ms });
+        endInsertRows();
     }
 
     static QString statusText(int status) {
@@ -582,7 +603,9 @@ git commit -m "feat: add ExecQueueModel for execution queue"
         });
         QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
                          [this](const QString& uuid, int status, const QString& error, int ms) {
-            m_exec_queue.finishNode(uuid, status, error, ms);
+            // 跳过/环等节点从不发 nodeStarted，此时补建终结行
+            if (!m_exec_queue.finishNode(uuid, status, error, ms))
+                m_exec_queue.addFinished(uuid, nameOf(uuid), status, error, ms);
             m_node_errors[uuid] = (status == int(NodeStatus::Ok)) ? QString() : error;
             ++m_error_revision;
             emit errorRevisionChanged();
@@ -706,7 +729,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```cpp
     void setQueueAnimation(bool v) {                            // setter 区
         if (m_queueAnimation == v) return;
-        m_queueAnimation = v; m_store->setValue("performance/queueAnimation", v); emit queueAnimationChanged();
+        m_queueAnimation = v; m_store->setValue("perf/queueAnimation", v); emit queueAnimationChanged();
     }
 ```
 
@@ -719,7 +742,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```
 
 ```cpp
-    m_queueAnimation = true; m_store->setValue("performance/queueAnimation", m_queueAnimation);   // resetDefaults() 内
+    m_queueAnimation = true; m_store->setValue("perf/queueAnimation", m_queueAnimation);   // resetDefaults() 内
 ```
 
 ```cpp
@@ -727,7 +750,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```
 
 ```cpp
-    m_queueAnimation = m_store->value("performance/queueAnimation", true).toBool();   // load() 内
+    m_queueAnimation = m_store->value("perf/queueAnimation", true).toBool();   // load() 内
 ```
 
 - [ ] **Step 4: 在 SettingsDialog.qml 加开关**
@@ -1158,4 +1181,4 @@ git add -A && git commit -m "chore: polish execution queue after live verificati
 
 - **Spec 覆盖**：信号与数据（Task 1）、队列模型与摘要（Task 2/3）、设置项（Task 4）、UI/动效/交互（Task 6）、点击定位（Task 5）、测试（Task 1/2/4）、风险提示（ListView 手动滚动策略——Task 6 的 `onCountChanged` 重新跟随）。全部有对应任务。
 - **占位符**：无 TBD/TODO；每个代码步骤均给出完整代码。
-- **类型一致性**：`NodeStatus` 值（Ok/Failed/Skipped/Cancelled）在 Task 1 定义，Task 2/3 复用；`finishNode(uuid, int, QString, int)` 与 Task 1 的 `nodeFinished(uuid, int, QString, int)` 一致；模型角色名（uuid/name/status/ms/error）在 Task 2 定义、Task 6 的 delegate 使用一致；`execQueue/queueTotal/queueDone/queueFailed/queueSkipped/queueCancelled/queueHasResult/focusNode` 在 Task 3/5 定义、Task 6 使用一致。
+- **类型一致性**：`NodeStatus` 值（Ok/Failed/Skipped/Cancelled）在 Task 1 定义，Task 2/3 复用；`finishNode(uuid, int, QString, int) -> bool` 与 Task 1 的 `nodeFinished(uuid, int, QString, int)` 一致；Task 3 用 `addFinished` 补建“跳过/环”节点的终结行（Important 审查项修复）。模型角色名（uuid/name/status/ms/error）在 Task 2 定义、Task 6 的 delegate 使用一致；`execQueue/queueTotal/queueDone/queueFailed/queueSkipped/queueCancelled/queueHasResult/focusNode` 在 Task 3/5 定义、Task 6 使用一致。

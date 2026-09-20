@@ -52,6 +52,7 @@ Item {
             showPreview: Settings.showPreview,
             previewHeight: Settings.previewHeight,
             previewFullRes: Settings.previewFullRes,
+            queueAnimation: Settings.queueAnimation,
             showPortTypeTags: Settings.showPortTypeTags,
             autoHeight: Settings.autoHeight,
             textRender: Settings.textRender,
@@ -90,6 +91,7 @@ Item {
         Settings.showPreview = s.showPreview
         Settings.previewHeight = s.previewHeight
         Settings.previewFullRes = s.previewFullRes
+        Settings.queueAnimation = s.queueAnimation
         Settings.showPortTypeTags = s.showPortTypeTags
         Settings.autoHeight = s.autoHeight
         Settings.textRender = s.textRender
@@ -786,6 +788,16 @@ Item {
                                     SwitchControl {
                                         checked: Settings.antialias
                                         onToggled: (v) => Settings.antialias = v
+                                    }
+                                }
+
+                                SettingRow {
+                                    title: "运行队列动画"
+                                    desc: "状态条运行队列的滑入与状态脉冲动效"
+                                    keywords: "队列 动画 queue animation run"
+                                    SwitchControl {
+                                        checked: Settings.queueAnimation
+                                        onToggled: (v) => Settings.queueAnimation = v
                                     }
                                 }
                             }
