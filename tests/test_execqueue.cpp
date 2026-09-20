@@ -1,5 +1,6 @@
 #include <QtTest>
 #include "ExecQueueModel.hpp"
+#include "QueueFilterProxyModel.hpp"
 #include "engine/NodeStatus.hpp"
 
 class TestExecQueue : public QObject {
@@ -158,6 +159,32 @@ private slots:
         QCOMPARE(m.countCancelled(1), 1);
         QCOMPARE(m.countCancelled(0), 0);
         QCOMPARE(m.countCancelled(), 1);
+    }
+
+    void proxyFiltersByGroup() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+        m.addRunning("c", "C", 1, "#8250df");
+        m.addRunning("d", "D", 1, "#8250df");
+        m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
+        m.finishNode("c", int(NodeStatus::Failed), QStringLiteral("e"), 2);
+
+        QueueFilterProxyModel p;
+        p.setSourceModel(&m);
+
+        p.setGroup(-1);
+        QCOMPARE(p.rowCount(), 4);
+
+        p.setGroup(0);
+        QCOMPARE(p.rowCount(), 2);
+        QCOMPARE(p.data(p.index(0, 0), ExecQueueModel::GroupRole).toInt(), 0);
+        QCOMPARE(p.data(p.index(1, 0), ExecQueueModel::GroupRole).toInt(), 0);
+
+        p.setGroup(1);
+        QCOMPARE(p.rowCount(), 2);
+        for (int i = 0; i < p.rowCount(); ++i)
+            QCOMPARE(p.data(p.index(i, 0), ExecQueueModel::GroupRole).toInt(), 1);
     }
 };
 
