@@ -7,7 +7,7 @@ import Settings
 Rectangle {
     id: root
 
-    height: 30
+    height: 40
     color: Theme.bgPanel
 
     property int nodeCount: 0
@@ -19,6 +19,15 @@ Rectangle {
     readonly property bool queueMode: NodeManager.queueHasResult
     readonly property string themeName: Theme.dark ? "暗色" : "亮色"
     readonly property var zoomPresets: [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 4.0]
+
+    // 内部尺寸都按状态条高度等比推导，便于调整高度
+    readonly property real chipH: Math.round(root.height * 0.6)
+    readonly property real dotS: Math.round(root.height * 0.22)
+    readonly property real runDotS: Math.round(root.height * 0.18)
+    readonly property int fMain: Math.max(11, Math.round(root.height * 0.33))
+    readonly property int fSmall: Math.max(10, Math.round(root.height * 0.28))
+    readonly property real zoomH: Math.round(root.height * 0.6)
+    readonly property real zoomInnerH: Math.round(root.height * 0.5)
 
     signal zoomInRequested()
     signal zoomOutRequested()
@@ -66,9 +75,9 @@ Rectangle {
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
-            width: 7
-            height: 7
-            radius: 3.5
+            width: root.dotS
+            height: root.dotS
+            radius: root.dotS / 2
             color: NodeManager.engineStatus === "失败" ? Theme.red
                  : NodeManager.engineRunning ? Theme.yellow : Theme.success
         }
@@ -77,7 +86,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: root.queueMode ? root.summaryText() : NodeManager.engineStatus
             color: NodeManager.engineStatus === "失败" ? Theme.red : Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
     }
 
@@ -94,14 +103,14 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: "节点 " + root.nodeCount
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: "连线 " + root.edgeCount
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
     }
 
@@ -114,7 +123,7 @@ Rectangle {
         anchors.right: rightGroup.left
         anchors.rightMargin: 14
         anchors.verticalCenter: parent.verticalCenter
-        height: 20
+        height: root.chipH
         orientation: ListView.Horizontal
         spacing: 4
         clip: true
@@ -178,16 +187,16 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "→"
                     color: Theme.fgDim
-                    font.pixelSize: 10
+                    font.pixelSize: root.fSmall
                 }
 
                 Rectangle {
                     id: chip
                     anchors.verticalCenter: parent.verticalCenter
-                    height: 18
+                    height: root.chipH
                     width: implicitWidth
                     implicitWidth: chipRow.implicitWidth + 12
-                    radius: 5
+                    radius: Math.round(root.chipH * 0.28)
                     color: del.status === "failed"
                            ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
                            : del.status === "ok"
@@ -223,7 +232,7 @@ Rectangle {
                         id: slideAnim
                         target: slide
                         property: "x"
-                        from: 18
+                        from: Math.round(root.height * 0.45)
                         to: 0
                         duration: 320
                         easing.type: Easing.OutCubic
@@ -241,7 +250,7 @@ Rectangle {
                     Component.onCompleted: {
                         if (Settings.queueAnimation) {
                             chip.opacity = 0
-                            slide.x = 18
+                            slide.x = Math.round(root.height * 0.45)
                             slideAnim.start()
                             fadeAnim.start()
                         }
@@ -255,9 +264,9 @@ Rectangle {
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: del.status === "running"
-                            width: 6
-                            height: 6
-                            radius: 3
+                            width: root.runDotS
+                            height: root.runDotS
+                            radius: root.runDotS / 2
                             color: Theme.blue
                         }
 
@@ -266,21 +275,21 @@ Rectangle {
                             visible: del.status !== "running"
                             text: root.statusGlyph(del.status)
                             color: root.statusColor(del.status)
-                            font.pixelSize: 10
+                            font.pixelSize: root.fSmall
                         }
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.name
                             color: Theme.fg
-                            font.pixelSize: 11
+                            font.pixelSize: root.fMain
                         }
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.ms > 0 ? del.ms + "ms" : ""
                             color: Theme.fgDim
-                            font.pixelSize: 10
+                            font.pixelSize: root.fSmall
                             opacity: del.ms > 0 ? 1 : 0
                             Behavior on opacity {
                                 enabled: Settings.queueAnimation
@@ -319,7 +328,7 @@ Rectangle {
                             id: errTipText
                             text: errTip.text
                             color: Theme.fg
-                            font.pixelSize: 11
+                            font.pixelSize: root.fMain
                             renderType: Text.NativeRendering
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -341,7 +350,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: "选中 " + root.selectedName + " · 坐标[" + root.selectedPos + "]"
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
 
         Text {
@@ -349,21 +358,21 @@ Rectangle {
             visible: root.queueMode
             text: "节点 " + root.nodeCount + " · 连线 " + root.edgeCount
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: "主题 " + root.themeName
             color: Theme.fgDim
-            font.pixelSize: 11
+            font.pixelSize: root.fMain
         }
 
         Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: zoomRow.width + 8
-            height: 22
-            radius: 6
+            height: root.zoomH
+            radius: Math.round(root.height * 0.15)
             color: Theme.bg
             border.width: 1
             border.color: Theme.border
@@ -376,15 +385,15 @@ Rectangle {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 20
-                    height: 18
-                    radius: 4
+                    height: root.zoomInnerH
+                    radius: Math.round(root.height * 0.1)
                     color: zoomOutArea.containsMouse ? Theme.bgHover : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "−"
                         color: Theme.fgDim
-                        font.pixelSize: 12
+                        font.pixelSize: root.fMain
                     }
 
                     MouseArea {
@@ -400,8 +409,8 @@ Rectangle {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 46
-                    height: 18
-                    radius: 4
+                    height: root.zoomInnerH
+                    radius: Math.round(root.height * 0.1)
                     color: zoomInput.activeFocus ? Theme.bgPanel : "transparent"
                     border.width: zoomInput.activeFocus ? 1 : 0
                     border.color: Theme.blue
@@ -412,7 +421,7 @@ Rectangle {
                         horizontalAlignment: TextInput.AlignHCenter
                         verticalAlignment: TextInput.AlignVCenter
                         color: Theme.fg
-                        font.pixelSize: 11
+                        font.pixelSize: root.fMain
                         selectByMouse: true
                         selectionColor: Theme.blue
                         selectedTextColor: "#ffffff"
@@ -443,8 +452,8 @@ Rectangle {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 18
-                    height: 18
-                    radius: 4
+                    height: root.zoomInnerH
+                    radius: Math.round(root.height * 0.1)
                     color: zoomMenuArea.containsMouse ? Theme.bgHover
                          : zoomMenu.opened ? Theme.bgHover : "transparent"
 
@@ -452,7 +461,7 @@ Rectangle {
                         anchors.centerIn: parent
                         text: "▾"
                         color: Theme.fgDim
-                        font.pixelSize: 10
+                        font.pixelSize: root.fSmall
                     }
 
                     MouseArea {
@@ -487,15 +496,15 @@ Rectangle {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 20
-                    height: 18
-                    radius: 4
+                    height: root.zoomInnerH
+                    radius: Math.round(root.height * 0.1)
                     color: zoomInArea.containsMouse ? Theme.bgHover : "transparent"
 
                     Text {
                         anchors.centerIn: parent
                         text: "+"
                         color: Theme.fgDim
-                        font.pixelSize: 12
+                        font.pixelSize: root.fMain
                     }
 
                     MouseArea {

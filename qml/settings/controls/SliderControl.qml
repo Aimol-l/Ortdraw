@@ -7,6 +7,7 @@ Item {
     property int from: 0
     property int to: 100
     property int value: 0
+    property string suffix: ""
     signal moved(int v)
 
     implicitWidth: 152
@@ -58,7 +59,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: 34
         horizontalAlignment: Text.AlignRight
-        text: slider.value
+        text: slider.value + slider.suffix
         color: Theme.fg
         font.pixelSize: 12
     }

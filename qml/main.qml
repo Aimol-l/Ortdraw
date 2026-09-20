@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Window
 import QtQuick.Controls as Controls
 import Theme
+import Settings
 import NodeManager
 import NodeCatalog
 import FileDialogs
@@ -142,6 +143,14 @@ Controls.ApplicationWindow {
         rightCollapsed = width < 1180
     }
 
+    Item {
+        id: uiRoot
+        width: win.width / Settings.uiScale
+        height: win.height / Settings.uiScale
+        transformOrigin: Item.TopLeft
+        scale: Settings.uiScale
+        clip: true
+
     Column {
         anchors.fill: parent
 
@@ -161,7 +170,7 @@ Controls.ApplicationWindow {
         Item {
             id: mid
             width: parent.width
-            height: win.height - topbar.height - statusbar.height
+            height: uiRoot.height - topbar.height - statusbar.height
             clip: true
 
             Row {
@@ -271,6 +280,7 @@ Controls.ApplicationWindow {
             onZoomSetRequested: (z) => canvas.setZoom(z)
             onFitRequested: canvas.fitView()
         }
+    }
     }
 
     Connections {
@@ -410,6 +420,21 @@ Controls.ApplicationWindow {
         sequence: "Ctrl+D"
         enabled: NodeManager.selectedNode !== null && !settingsDialog.visible
         onActivated: ctx.cloneNode(NodeManager.selectedNode.uuid)
+    }
+
+    Shortcut {
+        sequence: "Ctrl+="
+        onActivated: Settings.uiScale += 0.1
+    }
+
+    Shortcut {
+        sequence: "Ctrl++"
+        onActivated: Settings.uiScale += 0.1
+    }
+
+    Shortcut {
+        sequence: "Ctrl+-"
+        onActivated: Settings.uiScale -= 0.1
     }
 
     Shortcut {

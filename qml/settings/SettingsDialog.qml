@@ -53,6 +53,7 @@ Item {
             previewHeight: Settings.previewHeight,
             previewFullRes: Settings.previewFullRes,
             queueAnimation: Settings.queueAnimation,
+            uiScale: Settings.uiScale,
             showPortTypeTags: Settings.showPortTypeTags,
             autoHeight: Settings.autoHeight,
             textRender: Settings.textRender,
@@ -92,6 +93,7 @@ Item {
         Settings.previewHeight = s.previewHeight
         Settings.previewFullRes = s.previewFullRes
         Settings.queueAnimation = s.queueAnimation
+        Settings.uiScale = s.uiScale
         Settings.showPortTypeTags = s.showPortTypeTags
         Settings.autoHeight = s.autoHeight
         Settings.textRender = s.textRender
@@ -259,24 +261,6 @@ Item {
                         height: 28
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
-                        text: Theme.dark ? "☀" : "☾"
-                        color: themeArea.containsMouse ? Theme.fgBright : Theme.fgDim
-                        font.pixelSize: 15
-                        MouseArea {
-                            id: themeArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Theme.toggle()
-                        }
-                    }
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 28
-                        height: 28
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
                         text: "×"
                         color: closeArea.containsMouse ? Theme.red : Theme.fgDim
                         font.pixelSize: 18
@@ -433,6 +417,18 @@ Item {
                                 }
 
                                 GroupTitle { text: "界面" }
+
+                                SettingRow {
+                                    title: "界面缩放"
+                                    desc: "缩放整个界面（快捷键 Ctrl+= / Ctrl+-）"
+                                    keywords: "缩放 界面 ui scale zoom"
+                                    SliderControl {
+                                        from: 50; to: 250
+                                        value: Math.round(Settings.uiScale * 100)
+                                        suffix: "%"
+                                        onMoved: (v) => Settings.uiScale = v / 100
+                                    }
+                                }
 
                                 SettingRow {
                                     title: "界面密度"

@@ -27,6 +27,7 @@ class Settings : public QObject {
     Q_PROPERTY(int previewHeight READ previewHeight WRITE setPreviewHeight NOTIFY previewHeightChanged)
     Q_PROPERTY(bool previewFullRes READ previewFullRes WRITE setPreviewFullRes NOTIFY previewFullResChanged)
     Q_PROPERTY(bool queueAnimation READ queueAnimation WRITE setQueueAnimation NOTIFY queueAnimationChanged)
+    Q_PROPERTY(qreal uiScale READ uiScale WRITE setUiScale NOTIFY uiScaleChanged)
     Q_PROPERTY(bool showPortTypeTags READ showPortTypeTags WRITE setShowPortTypeTags NOTIFY showPortTypeTagsChanged)
     Q_PROPERTY(bool autoHeight READ autoHeight WRITE setAutoHeight NOTIFY autoHeightChanged)
     Q_PROPERTY(QString textRender READ textRender WRITE setTextRender NOTIFY textRenderChanged)
@@ -92,6 +93,7 @@ public:
     int previewHeight() const { return m_previewHeight; }
     bool previewFullRes() const { return m_previewFullRes; }
     bool queueAnimation() const { return m_queueAnimation; }
+    qreal uiScale() const { return m_uiScale; }
     bool showPortTypeTags() const { return m_showPortTypeTags; }
     bool autoHeight() const { return m_autoHeight; }
     QString textRender() const { return m_textRender; }
@@ -187,6 +189,11 @@ public:
         if (m_queueAnimation == v) return;
         m_queueAnimation = v; m_store->setValue("perf/queueAnimation", v); emit queueAnimationChanged();
     }
+    void setUiScale(qreal v) {
+        v = qBound(0.5, qRound(v * 100.0) / 100.0, 2.5);
+        if (qFuzzyCompare(m_uiScale, v)) return;
+        m_uiScale = v; m_store->setValue("ui/scale", v); emit uiScaleChanged();
+    }
     void setShowPortTypeTags(bool v) {
         if (m_showPortTypeTags == v) return;
         m_showPortTypeTags = v; m_store->setValue("nodes/showPortTypeTags", v); emit showPortTypeTagsChanged();
@@ -278,6 +285,7 @@ public:
         m_previewHeight = 88; m_store->setValue("nodes/previewHeight", m_previewHeight);
         m_previewFullRes = false; m_store->setValue("nodes/previewFullRes", m_previewFullRes);
         m_queueAnimation = true; m_store->setValue("perf/queueAnimation", m_queueAnimation);
+        m_uiScale = 1.0; m_store->setValue("ui/scale", m_uiScale);
         m_showPortTypeTags = true; m_store->setValue("nodes/showPortTypeTags", m_showPortTypeTags);
         m_autoHeight = true; m_store->setValue("nodes/autoHeight", m_autoHeight);
         m_textRender = "curve"; m_store->setValue("nodes/textRender", m_textRender);
@@ -309,6 +317,7 @@ public:
         emit previewHeightChanged();
         emit previewFullResChanged();
         emit queueAnimationChanged();
+        emit uiScaleChanged();
         emit showPortTypeTagsChanged();
         emit autoHeightChanged();
         emit textRenderChanged();
@@ -354,6 +363,7 @@ signals:
     void previewHeightChanged();
     void previewFullResChanged();
     void queueAnimationChanged();
+    void uiScaleChanged();
     void showPortTypeTagsChanged();
     void autoHeightChanged();
     void textRenderChanged();
@@ -397,6 +407,7 @@ private:
         m_previewHeight = qBound(60, m_store->value("nodes/previewHeight", 88).toInt(), 160);
         m_previewFullRes = m_store->value("nodes/previewFullRes", false).toBool();
         m_queueAnimation = m_store->value("perf/queueAnimation", true).toBool();
+        m_uiScale = qBound(0.5, m_store->value("ui/scale", 1.0).toReal(), 2.5);
         m_showPortTypeTags = m_store->value("nodes/showPortTypeTags", true).toBool();
         m_autoHeight = m_store->value("nodes/autoHeight", true).toBool();
         m_textRender = oneOf(m_store->value("nodes/textRender", "curve").toString(),
@@ -438,6 +449,7 @@ private:
     int m_previewHeight = 88;
     bool m_previewFullRes = false;
     bool m_queueAnimation = true;
+    qreal m_uiScale = 1.0;
     bool m_showPortTypeTags = true;
     bool m_autoHeight = true;
     QString m_textRender = "curve";
