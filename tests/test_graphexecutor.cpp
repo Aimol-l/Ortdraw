@@ -18,6 +18,28 @@ private slots:
         registerBuiltinExecutors();
     }
 
+    void imageLoadInfoTextReportsSizeAndFormat() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("img.png");
+        const cv::Mat src(10, 20, CV_8UC3, cv::Scalar(10, 20, 30)); // 宽20 高10
+        QVERIFY(cv::imwrite(path.toStdString(), src));
+
+        ImageLoadNode load;
+        QSignalSpy spy(&load, &ImageLoadNode::infoChanged);
+        load.setPath(path);
+        QCOMPARE(spy.count(), 1);
+        const QString info = load.infoText();
+        QVERIFY2(info.contains(QStringLiteral("20 × 10")), qPrintable(info));
+        QVERIFY2(info.contains("PNG"), qPrintable(info));
+
+        load.setPath(dir.filePath("nope.png"));
+        QVERIFY(load.infoText().contains(QStringLiteral("不存在")));
+
+        load.setPath("");
+        QCOMPARE(load.infoText(), QString());
+    }
+
     void pipelineRunsInTopologicalOrder() {
         DAGraph g;
         ImageLoadNode load;
