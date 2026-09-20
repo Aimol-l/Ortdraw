@@ -304,6 +304,35 @@ private slots:
         QVERIFY(!r.ok);
     }
 
+    void cropOverflowWidthFails() {
+        CropExecutor ex;
+        const cv::Mat in = makeGray(8, 8);
+        QVERIFY(!ex.execute({}, QVariantMap{{"x", 4}, {"y", 0}, {"w", 5}, {"h", 2}}, imageInputs(in)).ok);
+    }
+
+    void cropOverflowHeightFails() {
+        CropExecutor ex;
+        const cv::Mat in = makeGray(8, 8);
+        QVERIFY(!ex.execute({}, QVariantMap{{"x", 0}, {"y", 4}, {"w", 2}, {"h", 5}}, imageInputs(in)).ok);
+    }
+
+    void cropExactBoundaryOk() {
+        CropExecutor ex;
+        const cv::Mat in = makeGray(8, 8);
+        const ExecResult r = ex.execute({}, QVariantMap{{"x", 4}, {"y", 2}, {"w", 4}, {"h", 6}}, imageInputs(in));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.cols, 4);
+        QCOMPARE(out.rows, 6);
+    }
+
+    void cropNegativeOriginFails() {
+        CropExecutor ex;
+        const cv::Mat in = makeGray(8, 8);
+        QVERIFY(!ex.execute({}, QVariantMap{{"x", -1}, {"y", 0}, {"w", 4}, {"h", 4}}, imageInputs(in)).ok);
+        QVERIFY(!ex.execute({}, QVariantMap{{"x", 0}, {"y", -2}, {"w", 4}, {"h", 4}}, imageInputs(in)).ok);
+    }
+
     void flipHorizontalSwapsPixels() {
         FlipRotateExecutor ex;
         cv::Mat in(1, 2, CV_8U);

@@ -42,17 +42,17 @@ CropNode {
                         font.pixelSize: 10
                         selectByMouse: true
                         renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        text: "" + root.x
+                        text: "" + root.cropX
                         onEditingFinished: {
                             var v = parseInt(text, 10)
-                            if (isNaN(v)) v = root.x
-                            root.x = v
-                            text = "" + root.x
+                            if (isNaN(v)) v = root.cropX
+                            root.cropX = v
+                            text = "" + root.cropX
                             NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
-                            function onParamsChanged() { if (!xIn.activeFocus) xIn.text = "" + root.x }
+                            function onParamsChanged() { if (!xIn.activeFocus) xIn.text = "" + root.cropX }
                         }
                     }
                 }
@@ -76,17 +76,17 @@ CropNode {
                         font.pixelSize: 10
                         selectByMouse: true
                         renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        text: "" + root.y
+                        text: "" + root.cropY
                         onEditingFinished: {
                             var v = parseInt(text, 10)
-                            if (isNaN(v)) v = root.y
-                            root.y = v
-                            text = "" + root.y
+                            if (isNaN(v)) v = root.cropY
+                            root.cropY = v
+                            text = "" + root.cropY
                             NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
-                            function onParamsChanged() { if (!yIn.activeFocus) yIn.text = "" + root.y }
+                            function onParamsChanged() { if (!yIn.activeFocus) yIn.text = "" + root.cropY }
                         }
                     }
                 }
@@ -114,17 +114,17 @@ CropNode {
                         font.pixelSize: 10
                         selectByMouse: true
                         renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        text: "" + root.w
+                        text: "" + root.cropW
                         onEditingFinished: {
                             var v = parseInt(text, 10)
-                            if (isNaN(v)) v = root.w
-                            root.w = v
-                            text = "" + root.w
+                            if (isNaN(v)) v = root.cropW
+                            root.cropW = v
+                            text = "" + root.cropW
                             NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
-                            function onParamsChanged() { if (!wIn.activeFocus) wIn.text = "" + root.w }
+                            function onParamsChanged() { if (!wIn.activeFocus) wIn.text = "" + root.cropW }
                         }
                     }
                 }
@@ -148,24 +148,24 @@ CropNode {
                         font.pixelSize: 10
                         selectByMouse: true
                         renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        text: "" + root.h
+                        text: "" + root.cropH
                         onEditingFinished: {
                             var v = parseInt(text, 10)
-                            if (isNaN(v)) v = root.h
-                            root.h = v
-                            text = "" + root.h
+                            if (isNaN(v)) v = root.cropH
+                            root.cropH = v
+                            text = "" + root.cropH
                             NodeManager.commitNodeParams(root.uuid)
                         }
                         Connections {
                             target: root
-                            function onParamsChanged() { if (!hIn.activeFocus) hIn.text = "" + root.h }
+                            function onParamsChanged() { if (!hIn.activeFocus) hIn.text = "" + root.cropH }
                         }
                     }
                 }
             }
 
             Text {
-                text: "宽/高为 0 时取到边界"
+                text: "宽/高 >0；为 0 取到边界；x+w>宽 或 y+h>高 时报错"
                 color: Theme.fgDim
                 font.pixelSize: 9
                 renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
