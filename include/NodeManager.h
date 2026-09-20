@@ -92,6 +92,12 @@ private:
         ++m_error_revision;
         emit errorRevisionChanged();
     }
+    void resetQueue(){
+        m_exec_queue.beginRun();
+        m_queue_total = 0;
+        m_queue_has_result = false;
+        emit queueChanged();
+    }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
     QString nameOf(const QString& uuid) const {
         if (!m_paint_board) return uuid;
@@ -466,6 +472,7 @@ public:
         ++m_image_revision;
         emit imageRevisionChanged();
         clearNodeErrors();
+        resetQueue();
         setSelectedNode(nullptr);
         refresh();
     }
