@@ -91,6 +91,90 @@ Rectangle {
         }
     }
 
+    // 组数 ≥ 2 时出现：选择要查看的链
+    Rectangle {
+        id: groupSel
+        visible: root.queueMode && NodeManager.queueGroups.length >= 2
+        anchors.left: leftGroup.right
+        anchors.leftMargin: 12
+        anchors.verticalCenter: parent.verticalCenter
+        height: Math.round(root.height * 0.62)
+        width: selRow.implicitWidth + 16
+        radius: Math.round(root.height * 0.15)
+        color: selHover.hovered || groupMenu.opened ? Theme.bgHover : Theme.bg
+        border.width: 1
+        border.color: Theme.border
+
+        function currentLabel() {
+            if (NodeManager.selectedGroup < 0) return "全部组 (" + NodeManager.queueGroups.length + ")"
+            var gs = NodeManager.queueGroups
+            for (var i = 0; i < gs.length; ++i)
+                if (gs[i].id === NodeManager.selectedGroup) return gs[i].name
+            return "全部组 (" + gs.length + ")"
+        }
+        function currentColor() {
+            if (NodeManager.selectedGroup < 0) return Theme.fgDim
+            for (var i = 0; i < NodeManager.queueGroups.length; ++i)
+                if (NodeManager.queueGroups[i].id === NodeManager.selectedGroup)
+                    return NodeManager.queueGroups[i].color
+            return Theme.fgDim
+        }
+
+        Row {
+            id: selRow
+            anchors.centerIn: parent
+            spacing: 6
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.round(root.height * 0.2); height: width; radius: width / 2
+                color: groupSel.currentColor()
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: groupSel.currentLabel()
+                color: Theme.fg
+                font.pixelSize: root.fSmall
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "▾"; color: Theme.fgDim; font.pixelSize: root.fSmall
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+            }
+        }
+
+        HoverHandler { id: selHover }
+        TapHandler { onTapped: groupMenu.opened ? groupMenu.close() : groupMenu.open() }
+
+        Menu {
+            id: groupMenu
+            y: -(height + 6)
+            Instantiator {
+                model: NodeManager.queueGroups
+                delegate: MenuItem {
+                    required property var modelData
+                    text: {
+                        var s = (modelData.id === NodeManager.selectedGroup ? "● " : "") + modelData.name
+                        var parts = []
+                        if (modelData.failed > 0) parts.push("失败" + modelData.failed)
+                        if (modelData.skipped > 0) parts.push("跳过" + modelData.skipped)
+                        s += "  · " + modelData.count + " 节点"
+                        if (parts.length) s += " · " + parts.join(" ")
+                        return s
+                    }
+                    onTriggered: NodeManager.selectedGroup = modelData.id
+                }
+                onObjectAdded: (index, object) => groupMenu.insertItem(index, object)
+                onObjectRemoved: (index, object) => groupMenu.removeItem(object)
+            }
+            MenuSeparator {}
+            MenuItem {
+                text: "全部组"
+                onTriggered: NodeManager.selectedGroup = -1
+            }
+        }
+    }
+
     // 未运行过：中间显示「节点 / 连线」统计（坐标在右侧）。
     Row {
         id: statsGroup
@@ -121,7 +205,7 @@ Rectangle {
     ListView {
         id: queue
         visible: root.queueMode
-        anchors.left: leftGroup.right
+        anchors.left: groupSel.visible ? groupSel.right : leftGroup.right
         anchors.leftMargin: 16
         anchors.right: rightGroup.left
         anchors.rightMargin: 14
@@ -175,6 +259,8 @@ Rectangle {
             required property string status
             required property int ms
             required property string error
+            required property int group
+            required property string groupColor
 
             height: queue.height
             width: layout.width
@@ -260,6 +346,16 @@ Rectangle {
                         }
                     }
 
+                    // 「全部组」时：同组同色左边条
+                    Rectangle {
+                        visible: NodeManager.selectedGroup < 0 && del.group >= 0
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 3
+                        color: del.groupColor
+                    }
+
                     Row {
                         id: chipRow
                         anchors.centerIn: parent
@@ -341,6 +437,14 @@ Rectangle {
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
+                }
+            }
+
+            Connections {
+                target: NodeManager
+                function onFocusQueueNode(uuid) {
+                    if (del.uuid === uuid)
+                        queue.positionViewAtIndex(del.index, ListView.Contain)
                 }
             }
         }
