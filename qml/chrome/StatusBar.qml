@@ -80,7 +80,7 @@ Rectangle {
         }
     }
 
-    // 未运行过：中间沿用「节点 / 连线 / 坐标」统计。
+    // 未运行过：中间显示「节点 / 连线」统计（坐标在右侧）。
     Row {
         id: statsGroup
         visible: !root.queueMode
@@ -102,13 +102,6 @@ Rectangle {
             color: Theme.fgDim
             font.pixelSize: 11
         }
-
-        Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "坐标[" + root.selectedPos + "]"
-            color: Theme.fgDim
-            font.pixelSize: 11
-        }
     }
 
     // 运行过：中间常驻运行队列。
@@ -126,7 +119,10 @@ Rectangle {
         clip: true
         model: NodeManager.execQueue
 
+        property bool userFollowPaused: false
+
         function scrollToEnd() {
+            if (userFollowPaused) return
             var target = Math.max(0, contentWidth - width)
             if (Settings.queueAnimation) {
                 followAnim.to = target
@@ -136,8 +132,10 @@ Rectangle {
             }
         }
 
-        onCountChanged: scrollToEnd()
-        onContentWidthChanged: scrollToEnd()
+        onCountChanged: {
+            userFollowPaused = false
+            Qt.callLater(scrollToEnd)
+        }
 
         NumberAnimation {
             id: followAnim
@@ -149,6 +147,7 @@ Rectangle {
 
         WheelHandler {
             onWheel: (event) => {
+                queue.userFollowPaused = true
                 var maxX = Math.max(0, queue.contentWidth - queue.width)
                 queue.contentX = Math.max(0, Math.min(maxX, queue.contentX - event.angleDelta.y * 0.5))
             }
@@ -192,11 +191,11 @@ Rectangle {
                            : Theme.bg
                     border.width: 1
                     border.color: root.statusColor(del.status)
-                    opacity: Settings.queueAnimation ? 0 : 1
+                    opacity: 1
 
                     transform: Translate {
                         id: slide
-                        x: Settings.queueAnimation ? 18 : 0
+                        x: 0
                     }
 
                     Behavior on border.color {
@@ -235,6 +234,8 @@ Rectangle {
 
                     Component.onCompleted: {
                         if (Settings.queueAnimation) {
+                            chip.opacity = 0
+                            slide.x = 18
                             slideAnim.start()
                             fadeAnim.start()
                         }
