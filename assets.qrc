@@ -6,9 +6,15 @@
         <file alias="ImageSaveNode.qml">qml/node/ImageSaveNode.qml</file>
         <file alias="ResizeNode.qml">qml/node/ResizeNode.qml</file>
         <file alias="BlurNode.qml">qml/node/BlurNode.qml</file>
+        <file alias="MedianNode.qml">qml/node/MedianNode.qml</file>
+        <file alias="MorphologyNode.qml">qml/node/MorphologyNode.qml</file>
+        <file alias="BlendNode.qml">qml/node/BlendNode.qml</file>
         <file alias="ThresholdNode.qml">qml/node/ThresholdNode.qml</file>
         <file alias="GrayNode.qml">qml/node/GrayNode.qml</file>
         <file alias="EdgeDetectNode.qml">qml/node/EdgeDetectNode.qml</file>
+        <file alias="CropNode.qml">qml/node/CropNode.qml</file>
+        <file alias="FlipRotateNode.qml">qml/node/FlipRotateNode.qml</file>
+        <file alias="BrightnessContrastNode.qml">qml/node/BrightnessContrastNode.qml</file>
         <file alias="ConvNode.qml">qml/node/ConvNode.qml</file>
         <file alias="TensorNode.qml">qml/node/TensorNode.qml</file>
         <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>

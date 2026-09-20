@@ -92,12 +92,41 @@ Item {
             rr(3, 4, 18, 16, 2.5); ctx.stroke()
             ctx.beginPath(); ctx.moveTo(5, 16); ctx.lineTo(9, 11)
             ctx.lineTo(12.5, 14); ctx.lineTo(19, 7); ctx.stroke()
+        } else if (name === "crop") {
+            ctx.beginPath(); ctx.moveTo(7, 3); ctx.lineTo(7, 17); ctx.lineTo(21, 17); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(3, 7); ctx.lineTo(17, 7); ctx.lineTo(17, 21); ctx.stroke()
+        } else if (name === "rotate") {
+            ctx.beginPath(); ctx.arc(12, 12, 7, Math.PI * 0.15, Math.PI * 1.55); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(17.5, 6.5); ctx.lineTo(19.5, 3.5); ctx.lineTo(15, 3.5)
+            ctx.closePath(); ctx.fill()
+        } else if (name === "adjust") {
+            ctx.beginPath(); ctx.arc(12, 12, 3.6, 0, Math.PI * 2); ctx.stroke()
+            for (var a = 0; a < 8; ++a) {
+                var ang = a * Math.PI / 4
+                line(12 + Math.cos(ang) * 6, 12 + Math.sin(ang) * 6,
+                     12 + Math.cos(ang) * 9, 12 + Math.sin(ang) * 9)
+            }
         } else if (name === "conv") {
             rr(4, 4, 16, 16, 2.5); ctx.stroke()
             line(9.3, 4, 9.3, 20)
             line(14.7, 4, 14.7, 20)
             line(4, 9.3, 20, 9.3)
             line(4, 14.7, 20, 14.7)
+        } else if (name === "median") {
+            for (var my = 0; my < 3; ++my)
+                for (var mx = 0; mx < 3; ++mx) {
+                    var cxx = 7 + mx * 5, cyy = 7 + my * 5
+                    ctx.beginPath()
+                    ctx.arc(cxx, cyy, 1.9, 0, Math.PI * 2)
+                    if (mx === 1 && my === 1) ctx.fill()
+                    else ctx.stroke()
+                }
+        } else if (name === "morph") {
+            rr(4, 4, 9, 9, 1.5); ctx.stroke()
+            rr(11, 11, 9, 9, 1.5); ctx.fill()
+        } else if (name === "blend") {
+            ctx.beginPath(); ctx.arc(9.5, 12, 5.5, 0, Math.PI * 2); ctx.stroke()
+            ctx.beginPath(); ctx.arc(14.5, 12, 5.5, 0, Math.PI * 2); ctx.stroke()
         } else {
             ctx.beginPath()
             ctx.moveTo(12, 4.5); ctx.lineTo(19.5, 12); ctx.lineTo(12, 19.5); ctx.lineTo(4.5, 12)

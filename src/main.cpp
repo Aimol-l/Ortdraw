@@ -9,9 +9,15 @@
 #include "node/ImageShow.hpp"
 #include "node/Resize.hpp"
 #include "node/Blur.hpp"
+#include "node/Median.hpp"
+#include "node/Morphology.hpp"
+#include "node/Blend.hpp"
 #include "node/Threshold.hpp"
 #include "node/Gray.hpp"
 #include "node/EdgeDetect.hpp"
+#include "node/Crop.hpp"
+#include "node/FlipRotate.hpp"
+#include "node/BrightnessContrast.hpp"
 #include "node/Conv.hpp"
 #include "node/Tensor.hpp"
 #include "engine/BuiltinExecutors.hpp"
@@ -50,9 +56,15 @@ int main(int argc, char *argv[]){
     qmlRegisterType<ImageSaveNode>("ImageSaveNode", 1, 0, "ImageSaveNode");
     qmlRegisterType<ResizeNode>("ResizeNode", 1, 0, "ResizeNode");
     qmlRegisterType<BlurNode>("BlurNode", 1, 0, "BlurNode");
+    qmlRegisterType<MedianNode>("MedianNode", 1, 0, "MedianNode");
+    qmlRegisterType<MorphologyNode>("MorphologyNode", 1, 0, "MorphologyNode");
+    qmlRegisterType<BlendNode>("BlendNode", 1, 0, "BlendNode");
     qmlRegisterType<ThresholdNode>("ThresholdNode", 1, 0, "ThresholdNode");
     qmlRegisterType<GrayNode>("GrayNode", 1, 0, "GrayNode");
     qmlRegisterType<EdgeDetectNode>("EdgeDetectNode", 1, 0, "EdgeDetectNode");
+    qmlRegisterType<CropNode>("CropNode", 1, 0, "CropNode");
+    qmlRegisterType<FlipRotateNode>("FlipRotateNode", 1, 0, "FlipRotateNode");
+    qmlRegisterType<BrightnessContrastNode>("BrightnessContrastNode", 1, 0, "BrightnessContrastNode");
     qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
     qmlRegisterType<TensorNode>("TensorNode", 1, 0, "TensorNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
