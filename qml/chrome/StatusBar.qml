@@ -43,7 +43,8 @@ Rectangle {
         var done = NodeManager.queueDone, total = NodeManager.queueTotal
         if (NodeManager.engineRunning) return "运行中… " + done + "/" + total
         if (NodeManager.queueCancelled > 0) return "已取消 " + done + "/" + total
-        var t = "完成 " + done + "/" + total
+        var ok = done - NodeManager.queueFailed - NodeManager.queueSkipped - NodeManager.queueCancelled
+        var t = "完成 " + ok + "/" + total
         if (NodeManager.queueFailed > 0) t += " · 失败" + NodeManager.queueFailed
         if (NodeManager.queueSkipped > 0) t += " · 跳过" + NodeManager.queueSkipped
         return t
@@ -148,6 +149,7 @@ Rectangle {
         WheelHandler {
             onWheel: (event) => {
                 queue.userFollowPaused = true
+                followAnim.stop()
                 var maxX = Math.max(0, queue.contentWidth - queue.width)
                 queue.contentX = Math.max(0, Math.min(maxX, queue.contentX - event.angleDelta.y * 0.5))
             }
@@ -292,10 +294,33 @@ Rectangle {
                         onTapped: NodeManager.focusNode(del.uuid)
                     }
 
-                    ToolTip.visible: (del.status === "failed" || del.status === "skipped")
-                                     && hoverArea.hovered && del.error !== ""
-                    ToolTip.text: del.error
-                    ToolTip.delay: 300
+                    ToolTip {
+                        id: errTip
+                        text: del.error
+                        visible: (del.status === "failed" || del.status === "skipped")
+                                 && hoverArea.hovered && del.error !== ""
+                        delay: 300
+                        padding: 0
+                        width: errTipText.implicitWidth + 16
+                        height: errTipText.implicitHeight + 8
+                        x: Math.round((chip.width - width) / 2)
+                        y: chip.height + 4
+                        background: Rectangle {
+                            color: Theme.bgElev
+                            border.width: 1
+                            border.color: Theme.border
+                            radius: 5
+                        }
+                        contentItem: Text {
+                            id: errTipText
+                            text: errTip.text
+                            color: Theme.fg
+                            font.pixelSize: 11
+                            renderType: Text.NativeRendering
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
                 }
             }
         }
