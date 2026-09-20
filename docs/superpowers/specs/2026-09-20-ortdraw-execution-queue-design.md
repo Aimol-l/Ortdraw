@@ -100,7 +100,7 @@ class ExecQueueModel : public QAbstractListModel {
 
 ## 7. 设置项
 
-- `Settings` 新增 `queueAnimation`（bool，默认 `true`），key `performance/queueAnimation`；`resetDefaults`/load/save 同步，新增 `queueAnimationChanged` 信号。
+- `Settings` 新增 `queueAnimation`（bool，默认 `true`），key `perf/queueAnimation`；`resetDefaults`/load/save 同步，新增 `queueAnimationChanged` 信号。
 - `SettingsDialog` → 性能 分组新增开关「运行队列动画」，含描述/关键词/快照回滚，沿用 `SwitchControl`。
 
 ## 8. 测试

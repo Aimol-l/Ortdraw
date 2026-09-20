@@ -56,6 +56,7 @@ private slots:
         QVERIFY(s.queueAnimation());
         QSignalSpy spy(&s, &Settings::queueAnimationChanged);
         s.setQueueAnimation(false);
+        s.sync();
         QCOMPARE(spy.count(), 1);
         QVERIFY(!s.queueAnimation());
         Settings s2(f.fileName());

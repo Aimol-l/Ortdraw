@@ -729,7 +729,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```cpp
     void setQueueAnimation(bool v) {                            // setter 区
         if (m_queueAnimation == v) return;
-        m_queueAnimation = v; m_store->setValue("performance/queueAnimation", v); emit queueAnimationChanged();
+        m_queueAnimation = v; m_store->setValue("perf/queueAnimation", v); emit queueAnimationChanged();
     }
 ```
 
@@ -742,7 +742,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```
 
 ```cpp
-    m_queueAnimation = true; m_store->setValue("performance/queueAnimation", m_queueAnimation);   // resetDefaults() 内
+    m_queueAnimation = true; m_store->setValue("perf/queueAnimation", m_queueAnimation);   // resetDefaults() 内
 ```
 
 ```cpp
@@ -750,7 +750,7 @@ Expected: 编译失败（`queueAnimation` 未声明）。
 ```
 
 ```cpp
-    m_queueAnimation = m_store->value("performance/queueAnimation", true).toBool();   // load() 内
+    m_queueAnimation = m_store->value("perf/queueAnimation", true).toBool();   // load() 内
 ```
 
 - [ ] **Step 4: 在 SettingsDialog.qml 加开关**
