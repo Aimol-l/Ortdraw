@@ -149,6 +149,11 @@ Rectangle {
         Menu {
             id: groupMenu
             y: -(height + 6)
+            MenuItem {
+                text: "全部组 (" + NodeManager.queueGroups.length + ")"
+                onTriggered: NodeManager.selectedGroup = -1
+            }
+            MenuSeparator {}
             Instantiator {
                 model: NodeManager.queueGroups
                 delegate: MenuItem {
@@ -164,13 +169,8 @@ Rectangle {
                     }
                     onTriggered: NodeManager.selectedGroup = modelData.id
                 }
-                onObjectAdded: (index, object) => groupMenu.insertItem(index, object)
+                onObjectAdded: (index, object) => groupMenu.insertItem(index + 2, object)
                 onObjectRemoved: (index, object) => groupMenu.removeItem(object)
-            }
-            MenuSeparator {}
-            MenuItem {
-                text: "全部组"
-                onTriggered: NodeManager.selectedGroup = -1
             }
         }
     }

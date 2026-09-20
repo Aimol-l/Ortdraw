@@ -270,6 +270,12 @@ public:
     QVariantList queueGroups() const { return m_group_summary; }
     int selectedGroup() const { return m_selected_group; }
     void setSelectedGroup(int g) {
+        if (g >= 0) {
+            bool known = false;
+            for (const QVariant& v : m_group_summary)
+                if (v.toMap().value("id").toInt() == g) { known = true; break; }
+            if (!known) g = -1;
+        }
         if (m_selected_group == g) return;
         m_selected_group = g;
         m_queue_proxy.setGroup(g);
