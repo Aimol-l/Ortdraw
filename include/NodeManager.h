@@ -193,6 +193,21 @@ public:
         Log::info(QStringLiteral("取消图求值"));
         m_executor.cancel();
     }
+    // 选中节点并请求画布把该节点居中
+    Q_INVOKABLE void focusNode(const QString& uuid) {
+        if (!m_paint_board) return;
+        BaseNode* target = nullptr;
+        for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
+            const bool hit = (n->uuid().toString() == uuid);
+            n->setSelected(hit);
+            if (hit) { target = n; raiseNode(n); }
+        }
+        setSelectedNode(target);
+        if (target)
+            emit nodeFocusRequested(target->x() + target->width() / 2.0,
+                                    target->y() + target->height() / 2.0);
+        refresh();
+    }
     Q_INVOKABLE bool hasImage(const QString& uuid) const {
         return ImageStore::instance()->has(uuid);
     }
@@ -670,6 +685,7 @@ signals:
     void imageRevisionChanged();
     void errorRevisionChanged();
     void queueChanged();
+    void nodeFocusRequested(qreal wx, qreal wy);
 
 public:
     NodeManager(const NodeManager&) = delete;

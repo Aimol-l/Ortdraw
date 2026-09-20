@@ -273,6 +273,14 @@ Controls.ApplicationWindow {
         }
     }
 
+    Connections {
+        target: NodeManager
+        function onNodeFocusRequested(wx, wy) {
+            canvas.panX = canvas.width / 2 - wx * canvas.zoom
+            canvas.panY = canvas.height / 2 - wy * canvas.zoom
+        }
+    }
+
     ContextMenu {
         id: ctx
         nodeLayer: canvas.nodeLayer
