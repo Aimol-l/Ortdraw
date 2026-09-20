@@ -28,6 +28,8 @@
 #include "engine/ImageStore.hpp"
 #include "engine/NodeStatus.hpp"
 #include "ExecQueueModel.hpp"
+#include "QueueFilterProxyModel.hpp"
+#include "utils/QueueGroups.hpp"
 
 
 class NodeManager : public QObject {
@@ -43,6 +45,12 @@ private:
     bool m_link_from_input = false;
     GraphExecutor m_executor;
     ExecQueueModel m_exec_queue;
+    QueueFilterProxyModel m_queue_proxy;
+    QVariantList m_group_summary;          // [{id,name,color,count,ok,failed,skipped}]
+    QHash<QString, int> m_uuid_group;      // uuid -> group id
+    QHash<int, QString> m_group_color;     // group id -> color string
+    int m_selected_group = -1;             // -1 = 全部组
+    bool m_auto_switched = false;
     int m_queue_total = 0;
     bool m_queue_has_result = false;
     int m_image_revision = 0;
@@ -52,6 +60,7 @@ private:
     // 每个节点最近一次提交后的参数与名称快照，用于 diff 出参数/名称变更命令
     QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {
+        m_queue_proxy.setSourceModel(&m_exec_queue);
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
         QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
                          [this](const QString& uuid, const QImage& img) {
@@ -61,25 +70,40 @@ private:
         });
         QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
                          [this](const QString& uuid) {
-            m_exec_queue.addRunning(uuid, nameOf(uuid));
+            const int grp = groupOf(uuid);
+            m_exec_queue.addRunning(uuid, nameOf(uuid), grp, colorOf(grp));
             emit queueChanged();
         });
         // nodeFinished 经队列信号回到 GUI 线程，可安全更新错误表
         QObject::connect(&m_executor, &GraphExecutor::nodeFinished, this,
                          [this](const QString& uuid, int status, const QString& error, int ms) {
+            const int grp = groupOf(uuid);
             // 跳过/环等节点从不发 nodeStarted，此时补建终结行
             if (!m_exec_queue.finishNode(uuid, status, error, ms))
-                m_exec_queue.addFinished(uuid, nameOf(uuid), status, error, ms);
+                m_exec_queue.addFinished(uuid, nameOf(uuid), status, error, ms, grp, colorOf(grp));
             m_node_errors[uuid] = (status == int(NodeStatus::Ok)) ? QString() : error;
             ++m_error_revision;
             emit errorRevisionChanged();
+            const bool bad = (status == int(NodeStatus::Failed) || status == int(NodeStatus::Skipped));
+            if (bad && !m_auto_switched && grp >= 0) {
+                m_auto_switched = true;
+                setSelectedGroup(grp);
+                emit focusQueueNode(uuid);
+            }
+            rebuildGroupSummary();
             emit queueChanged();
         });
         connect(&m_executor, &GraphExecutor::runningChanged, this, [this] {
             if (m_executor.running()) {
+                computeGroupsFromGraph();
                 m_exec_queue.beginRun();
                 m_queue_total = nodeCount();
+                m_selected_group = -1;
+                m_queue_proxy.setGroup(-1);
+                m_auto_switched = false;
                 m_queue_has_result = true;
+                rebuildGroupSummary();
+                emit selectedGroupChanged();
                 emit queueChanged();
             }
             emit engineChanged();
@@ -96,6 +120,13 @@ private:
         m_exec_queue.beginRun();
         m_queue_total = 0;
         m_queue_has_result = false;
+        m_selected_group = -1;
+        m_queue_proxy.setGroup(-1);
+        m_auto_switched = false;
+        m_uuid_group.clear();
+        m_group_color.clear();
+        m_group_summary.clear();
+        emit selectedGroupChanged();
         emit queueChanged();
     }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
@@ -104,6 +135,59 @@ private:
         for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
             if (n->uuid().toString() == uuid) return n->name();
         return uuid;
+    }
+    void computeGroupsFromGraph() {
+        m_uuid_group.clear();
+        m_group_color.clear();
+        m_group_summary.clear();
+        if (!m_paint_board) return;
+        const QVector<BaseNode*> nodes = m_paint_board->m_graph.getAllNodes();
+        QHash<BaseNode*, int> indexOf;
+        QStringList names;
+        for (int i = 0; i < nodes.size(); ++i) {
+            indexOf.insert(nodes.at(i), i);
+            names.append(nodes.at(i)->name());
+        }
+        QVector<QPair<int, int>> edges;
+        for (const Edge& e : m_paint_board->m_graph.getAllEdges()) {
+            if (!e.start_port || !e.stop_port) continue;
+            BaseNode* a = e.start_port->father();
+            BaseNode* b = e.stop_port->father();
+            if (!a || !b || !indexOf.contains(a) || !indexOf.contains(b)) continue;
+            edges.append({ indexOf.value(a), indexOf.value(b) });
+        }
+        QVector<int> idxToGroup;
+        const QVector<QueueGroupInfo> groups = computeQueueGroups(names, edges, idxToGroup);
+        QVariantList summary;
+        for (const QueueGroupInfo& g : groups) {
+            m_group_color.insert(g.id, g.color.name());
+            summary.append(QVariantMap{
+                { "id", g.id }, { "name", g.name },
+                { "color", g.color.name() }, { "count", g.count },
+                { "ok", 0 }, { "failed", 0 }, { "skipped", 0 },
+            });
+        }
+        for (int i = 0; i < nodes.size(); ++i) {
+            if (i < idxToGroup.size() && idxToGroup.at(i) >= 0)
+                m_uuid_group.insert(nodes.at(i)->uuid().toString(), idxToGroup.at(i));
+        }
+        m_group_summary = summary;
+    }
+
+    int groupOf(const QString& uuid) const { return m_uuid_group.value(uuid, -1); }
+    QString colorOf(int group) const { return m_group_color.value(group, QString()); }
+
+    void rebuildGroupSummary() {
+        for (int i = 0; i < m_group_summary.size(); ++i) {
+            QVariantMap g = m_group_summary.at(i).toMap();
+            const int id = g.value("id").toInt();
+            const int ok = m_exec_queue.countDone(id) - m_exec_queue.countFailed(id)
+                           - m_exec_queue.countSkipped(id) - m_exec_queue.countCancelled(id);
+            g["ok"] = ok;
+            g["failed"] = m_exec_queue.countFailed(id);
+            g["skipped"] = m_exec_queue.countSkipped(id);
+            m_group_summary[i] = g;
+        }
     }
     void raiseNode(BaseNode* node){
         if(!node || !m_paint_board) return;
@@ -158,23 +242,47 @@ public:
     Q_PROPERTY(QString engineStatus READ engineStatus NOTIFY engineChanged)
     Q_PROPERTY(int imageRevision READ imageRevision NOTIFY imageRevisionChanged)
     Q_PROPERTY(int errorRevision READ errorRevision NOTIFY errorRevisionChanged)
-    Q_PROPERTY(QAbstractListModel* execQueue READ execQueue CONSTANT)
+    Q_PROPERTY(QAbstractItemModel* execQueue READ execQueue CONSTANT)
     Q_PROPERTY(bool queueHasResult READ queueHasResult NOTIFY queueChanged)
     Q_PROPERTY(int queueTotal READ queueTotal NOTIFY queueChanged)
     Q_PROPERTY(int queueDone READ queueDone NOTIFY queueChanged)
     Q_PROPERTY(int queueFailed READ queueFailed NOTIFY queueChanged)
     Q_PROPERTY(int queueSkipped READ queueSkipped NOTIFY queueChanged)
     Q_PROPERTY(int queueCancelled READ queueCancelled NOTIFY queueChanged)
+    Q_PROPERTY(QVariantList queueGroups READ queueGroups NOTIFY queueChanged)
+    Q_PROPERTY(int selectedGroup READ selectedGroup WRITE setSelectedGroup NOTIFY selectedGroupChanged)
 
     bool engineRunning() const { return m_executor.running(); }
     QString engineStatus() const { return m_executor.status(); }
-    QAbstractListModel* execQueue() { return &m_exec_queue; }
+    QAbstractItemModel* execQueue() { return &m_queue_proxy; }
     bool queueHasResult() const { return m_queue_has_result; }
-    int queueTotal() const { return m_queue_total; }
-    int queueDone() const { return m_exec_queue.countDone(); }
-    int queueFailed() const { return m_exec_queue.countFailed(); }
-    int queueSkipped() const { return m_exec_queue.countSkipped(); }
-    int queueCancelled() const { return m_exec_queue.countCancelled(); }
+    int queueTotal() const {
+        if (m_selected_group < 0) return m_queue_total;
+        for (const QVariant& v : m_group_summary)
+            if (v.toMap().value("id").toInt() == m_selected_group)
+                return v.toMap().value("count").toInt();
+        return 0;
+    }
+    int queueDone() const { return m_exec_queue.countDone(m_selected_group); }
+    int queueFailed() const { return m_exec_queue.countFailed(m_selected_group); }
+    int queueSkipped() const { return m_exec_queue.countSkipped(m_selected_group); }
+    int queueCancelled() const { return m_exec_queue.countCancelled(m_selected_group); }
+    QVariantList queueGroups() const { return m_group_summary; }
+    int selectedGroup() const { return m_selected_group; }
+    void setSelectedGroup(int g) {
+        if (g >= 0) {
+            bool known = false;
+            for (const QVariant& v : m_group_summary)
+                if (v.toMap().value("id").toInt() == g) { known = true; break; }
+            if (!known) g = -1;
+        }
+        if (m_selected_group == g) return;
+        m_selected_group = g;
+        m_queue_proxy.setGroup(g);
+        rebuildGroupSummary();
+        emit selectedGroupChanged();
+        emit queueChanged();
+    }
     int imageRevision() const { return m_image_revision; }
     int errorRevision() const { return m_error_revision; }
     Q_INVOKABLE QString nodeError(const QString& uuid) const {
@@ -209,6 +317,15 @@ public:
             emit nodeFocusRequested(target->x() + target->width() / 2.0,
                                     target->y() + target->height() / 2.0);
         refresh();
+    }
+    // 代理模型中该 uuid 的当前行号；未找到返回 -1
+    Q_INVOKABLE int queueIndexOf(const QString& uuid) const {
+        for (int i = 0; i < m_queue_proxy.rowCount(); ++i) {
+            const QModelIndex idx = m_queue_proxy.index(i, 0);
+            if (m_queue_proxy.data(idx, ExecQueueModel::UuidRole).toString() == uuid)
+                return i;
+        }
+        return -1;
     }
     Q_INVOKABLE bool hasImage(const QString& uuid) const {
         return ImageStore::instance()->has(uuid);
@@ -687,6 +804,8 @@ signals:
     void imageRevisionChanged();
     void errorRevisionChanged();
     void queueChanged();
+    void selectedGroupChanged();
+    void focusQueueNode(const QString& uuid);
     void nodeFocusRequested(qreal wx, qreal wy);
 
 public:

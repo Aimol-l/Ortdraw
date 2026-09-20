@@ -1,5 +1,6 @@
 #include <QtTest>
 #include "ExecQueueModel.hpp"
+#include "QueueFilterProxyModel.hpp"
 #include "engine/NodeStatus.hpp"
 
 class TestExecQueue : public QObject {
@@ -73,12 +74,14 @@ private slots:
     void roleNamesMatchQmlContract() {
         ExecQueueModel m;
         const QHash<int, QByteArray> roles = m.roleNames();
-        QCOMPARE(roles.size(), 5);
+        QCOMPARE(roles.size(), 7);
         QCOMPARE(roles.value(ExecQueueModel::UuidRole), QByteArray("uuid"));
         QCOMPARE(roles.value(ExecQueueModel::NameRole), QByteArray("name"));
         QCOMPARE(roles.value(ExecQueueModel::StatusRole), QByteArray("status"));
         QCOMPARE(roles.value(ExecQueueModel::MsRole), QByteArray("ms"));
         QCOMPARE(roles.value(ExecQueueModel::ErrorRole), QByteArray("error"));
+        QCOMPARE(roles.value(ExecQueueModel::GroupRole), QByteArray("group"));
+        QCOMPARE(roles.value(ExecQueueModel::GroupColorRole), QByteArray("groupColor"));
     }
 
     void invalidIndexReturnsEmpty() {
@@ -93,6 +96,120 @@ private slots:
         m.addRunning("b", "B");
         m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
         QCOMPARE(m.countDone(), 1);
+    }
+
+    void groupRolesAndFilteredCounts() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+        m.addRunning("c", "C", 1, "#8250df");
+        m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
+        m.finishNode("b", int(NodeStatus::Failed), QStringLiteral("e"), 2);
+        m.finishNode("c", int(NodeStatus::Skipped), QStringLiteral("上游节点失败"), 0);
+
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), 0);
+        QCOMPARE(m.data(m.index(2), ExecQueueModel::GroupRole).toInt(), 1);
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString(), QString("#0969da"));
+        QVERIFY(m.roleNames().values().contains(QByteArray("group")));
+        QVERIFY(m.roleNames().values().contains(QByteArray("groupColor")));
+
+        QCOMPARE(m.countDone(), 3);
+        QCOMPARE(m.countDone(0), 2);
+        QCOMPARE(m.countDone(1), 1);
+        QCOMPARE(m.countFailed(0), 1);
+        QCOMPARE(m.countFailed(1), 0);
+        QCOMPARE(m.countSkipped(1), 1);
+    }
+
+    void defaultArgRowIsUngrouped() {
+        ExecQueueModel m;
+        m.addRunning("x", "X");
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), -1);
+        QVERIFY(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString().isEmpty());
+        m.finishNode("x", int(NodeStatus::Failed), QStringLiteral("e"), 1);
+        QCOMPARE(m.countDone(), 1);
+        QCOMPARE(m.countFailed(), 1);
+        QCOMPARE(m.countDone(0), 0);
+        QCOMPARE(m.countFailed(0), 0);
+    }
+
+    void addFinishedPopulatesGroupRoles() {
+        ExecQueueModel m;
+        m.addFinished("y", "Y", int(NodeStatus::Failed), QStringLiteral("e"), 3, 1, "#8250df");
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupRole).toInt(), 1);
+        QCOMPARE(m.data(m.index(0), ExecQueueModel::GroupColorRole).toString(), QString("#8250df"));
+        QCOMPARE(m.countFailed(1), 1);
+    }
+
+    void perGroupCountDoneExcludesRunning() {
+        ExecQueueModel m;
+        m.addRunning("r", "R", 0, "#0969da");
+        m.addRunning("f", "F", 0, "#0969da");
+        m.finishNode("f", int(NodeStatus::Ok), QString(), 1);
+        m.addRunning("o", "O", 1, "#8250df");
+        m.finishNode("o", int(NodeStatus::Ok), QString(), 2);
+        QCOMPARE(m.countDone(0), 1);
+        QCOMPARE(m.countDone(1), 1);
+        QCOMPARE(m.countDone(), 2);
+    }
+
+    void countCancelledPerGroup() {
+        ExecQueueModel m;
+        m.addFinished("c", "C", int(NodeStatus::Cancelled), QString(), 4, 1, "#8250df");
+        QCOMPARE(m.countCancelled(1), 1);
+        QCOMPARE(m.countCancelled(0), 0);
+        QCOMPARE(m.countCancelled(), 1);
+    }
+
+    void proxyFiltersByGroup() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+        m.addRunning("c", "C", 1, "#8250df");
+        m.addRunning("d", "D", 1, "#8250df");
+        m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
+        m.finishNode("c", int(NodeStatus::Failed), QStringLiteral("e"), 2);
+
+        QueueFilterProxyModel p;
+        p.setSourceModel(&m);
+
+        p.setGroup(-1);
+        QCOMPARE(p.rowCount(), 4);
+
+        p.setGroup(0);
+        QCOMPARE(p.rowCount(), 2);
+        QCOMPARE(p.data(p.index(0, 0), ExecQueueModel::GroupRole).toInt(), 0);
+        QCOMPARE(p.data(p.index(1, 0), ExecQueueModel::GroupRole).toInt(), 0);
+
+        p.setGroup(1);
+        QCOMPARE(p.rowCount(), 2);
+        for (int i = 0; i < p.rowCount(); ++i)
+            QCOMPARE(p.data(p.index(i, 0), ExecQueueModel::GroupRole).toInt(), 1);
+    }
+
+    void proxyDynamicFilteringAndRolePassthrough() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+
+        QueueFilterProxyModel p;
+        p.setSourceModel(&m);
+        p.setGroup(0);
+        QCOMPARE(p.rowCount(), 2);
+
+        m.addRunning("e", "E", 1, "#8250df");
+        QCOMPARE(p.rowCount(), 2);
+
+        m.addRunning("f", "F", 0, "#0969da");
+        QCOMPARE(p.rowCount(), 3);
+
+        QVERIFY(!p.data(p.index(0, 0), ExecQueueModel::GroupColorRole).toString().isEmpty());
+
+        p.setGroup(-1);
+        QCOMPARE(p.rowCount(), 4);
+
+        m.beginRun();
+        QCOMPARE(p.rowCount(), 0);
     }
 };
 

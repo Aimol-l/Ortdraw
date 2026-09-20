@@ -23,11 +23,13 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp
     ${PROJECT_SOURCE_DIR}/include/ExecQueueModel.hpp
+    ${PROJECT_SOURCE_DIR}/include/QueueFilterProxyModel.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/NodeStatus.hpp
     ${PROJECT_SOURCE_DIR}/include/port/Port.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/DAGraph.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Edge.hpp
     ${PROJECT_SOURCE_DIR}/include/utils/Snapshot.hpp
+    ${PROJECT_SOURCE_DIR}/include/utils/QueueGroups.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/GraphExecutor.hpp
     ${PROJECT_SOURCE_DIR}/include/command/Command.h
     ${PROJECT_SOURCE_DIR}/include/command/AddNode.hpp
