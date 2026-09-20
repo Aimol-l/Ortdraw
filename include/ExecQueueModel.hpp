@@ -2,6 +2,7 @@
 #include <QAbstractListModel>
 #include <QByteArray>
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QVector>
 
@@ -12,7 +13,7 @@ class ExecQueueModel : public QAbstractListModel {
     Q_OBJECT
 public:
     enum Roles { UuidRole = Qt::UserRole + 1, NameRole, StatusRole, MsRole, ErrorRole,
-                 GroupRole, GroupColorRole };
+                 GroupRole, GroupColorRole, GroupStartRole };
     Q_ENUM(Roles)
 
     explicit ExecQueueModel(QObject* parent = nullptr) : QAbstractListModel(parent) {}
@@ -33,6 +34,7 @@ public:
         case ErrorRole:  return r.error;
         case GroupRole:      return r.group;
         case GroupColorRole: return r.groupColor;
+        case GroupStartRole: return r.groupStart;
         default:         return {};
         }
     }
@@ -40,10 +42,12 @@ public:
     QHash<int, QByteArray> roleNames() const override {
         return { { UuidRole, "uuid" }, { NameRole, "name" }, { StatusRole, "status" },
                  { MsRole, "ms" }, { ErrorRole, "error" },
-                 { GroupRole, "group" }, { GroupColorRole, "groupColor" } };
+                 { GroupRole, "group" }, { GroupColorRole, "groupColor" },
+                 { GroupStartRole, "groupStart" } };
     }
 
     void beginRun() {
+        m_seenGroups.clear();
         if (m_rows.isEmpty()) return;
         beginResetModel();
         m_rows.clear();
@@ -54,7 +58,8 @@ public:
                     int group = -1, const QString& groupColor = QString()) {
         const int row = m_rows.size();
         beginInsertRows(QModelIndex(), row, row);
-        m_rows.push_back(Row{ uuid, name, runningStatus(), QString(), groupColor, 0, group });
+        m_rows.push_back(Row{ uuid, name, runningStatus(), QString(), groupColor, 0, group,
+                              takeGroupStart(group) });
         endInsertRows();
     }
 
@@ -78,7 +83,8 @@ public:
                      int group = -1, const QString& groupColor = QString()) {
         const int row = m_rows.size();
         beginInsertRows(QModelIndex(), row, row);
-        m_rows.push_back(Row{ uuid, name, statusText(status), error, groupColor, ms, group });
+        m_rows.push_back(Row{ uuid, name, statusText(status), error, groupColor, ms, group,
+                              takeGroupStart(group) });
         endInsertRows();
     }
 
@@ -106,7 +112,7 @@ public:
     int countCancelled(int group = -1) const { return countIn(group, QStringLiteral("cancelled")); }
 
 private:
-    struct Row { QString uuid, name, status, error, groupColor; int ms = 0; int group = -1; };
+    struct Row { QString uuid, name, status, error, groupColor; int ms = 0; int group = -1; bool groupStart = true; };
 
     static bool inGroup(const Row& r, int group) { return group < 0 || r.group == group; }
 
@@ -121,5 +127,14 @@ private:
         return n;
     }
 
+    // 该组首次出现时为 true（用于「全部组」视图的分组边界）
+    bool takeGroupStart(int group) {
+        if (group < 0) return true;
+        const bool first = !m_seenGroups.contains(group);
+        m_seenGroups.insert(group);
+        return first;
+    }
+
     QVector<Row> m_rows;
+    QSet<int> m_seenGroups;
 };

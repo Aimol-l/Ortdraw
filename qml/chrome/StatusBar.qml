@@ -149,14 +149,20 @@ Rectangle {
         Menu {
             id: groupMenu
             y: -(height + 6)
-            MenuItem {
+            background: Rectangle {
+                implicitWidth: 220
+                color: Theme.bgElev
+                border.width: 1
+                border.color: Theme.border
+                radius: 8
+            }
+            StMenuItem {
                 text: "全部组 (" + NodeManager.queueGroups.length + ")"
                 onTriggered: NodeManager.selectedGroup = -1
             }
-            MenuSeparator {}
             Instantiator {
                 model: NodeManager.queueGroups
-                delegate: MenuItem {
+                delegate: StMenuItem {
                     required property var modelData
                     text: {
                         var s = (modelData.id === NodeManager.selectedGroup ? "● " : "") + modelData.name
@@ -261,6 +267,11 @@ Rectangle {
             required property string error
             required property int group
             required property string groupColor
+            required property bool groupStart
+
+            // 该片是否为「组边界」（组间竖线），是则不画箭头
+            readonly property bool showGroupSep: del.index > 0 && del.groupStart
+                && NodeManager.queueGroups.length >= 2 && NodeManager.selectedGroup < 0
 
             height: queue.height
             width: layout.width
@@ -270,10 +281,20 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
 
+                // 「全部组」视图：组与组之间一条竖线（同组同色）
+                Rectangle {
+                    visible: del.showGroupSep
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 2
+                    height: Math.round(root.chipH * 0.8)
+                    radius: 1
+                    color: del.groupColor
+                }
+
                 Text {
                     renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                     id: arrow
-                    visible: del.index > 0
+                    visible: del.index > 0 && !del.showGroupSep
                     anchors.verticalCenter: parent.verticalCenter
                     text: "→"
                     color: Theme.fgDim
@@ -291,7 +312,7 @@ Rectangle {
                     color: del.status === "failed"
                            ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
                            : del.status === "ok"
-                               ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.8)
+                               ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 1)
                              : del.status === "skipped"
                                ? Qt.rgba(Theme.yellow.r, Theme.yellow.g, Theme.yellow.b, 0.16)
                                : Theme.bg
@@ -345,16 +366,6 @@ Rectangle {
                             slideAnim.start()
                             fadeAnim.start()
                         }
-                    }
-
-                    // 「全部组」时：同组同色左边条
-                    Rectangle {
-                        visible: NodeManager.queueGroups.length >= 2 && NodeManager.selectedGroup < 0 && del.group >= 0
-                        anchors.left: parent.left
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 3
-                        color: del.groupColor
                     }
 
                     Row {
@@ -594,9 +605,16 @@ Rectangle {
                     Menu {
                         id: zoomMenu
                         y: -(height + 4)
+                        background: Rectangle {
+                            implicitWidth: 140
+                            color: Theme.bgElev
+                            border.width: 1
+                            border.color: Theme.border
+                            radius: 8
+                        }
                         Instantiator {
                             model: root.zoomPresets
-                            delegate: MenuItem {
+                            delegate: StMenuItem {
                                 required property real modelData
                                 text: Math.round(modelData * 100) + "%"
                                 onTriggered: root.zoomSetRequested(modelData)
@@ -604,8 +622,8 @@ Rectangle {
                             onObjectAdded: (index, object) => zoomMenu.insertItem(index, object)
                             onObjectRemoved: (index, object) => zoomMenu.removeItem(object)
                         }
-                        MenuSeparator {}
-                        MenuItem {
+                        StMenuSep {}
+                        StMenuItem {
                             text: "适应视图"
                             onTriggered: root.fitRequested()
                         }
@@ -636,6 +654,33 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
+
+    // 主题化菜单项/分隔线（暗色下也正确）
+    component StMenuItem: MenuItem {
+        id: stmi
+        implicitHeight: 28
+        contentItem: Text {
+            text: stmi.text
+            color: stmi.hovered ? Theme.fgBright : Theme.fg
+            font.pixelSize: root.fSmall
+            leftPadding: 12
+            rightPadding: 12
+            verticalAlignment: Text.AlignVCenter
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+        }
+        background: Rectangle {
+            radius: 6
+            color: stmi.hovered ? Theme.bgHover : "transparent"
+        }
+    }
+    component StMenuSep: MenuSeparator {
+        implicitHeight: 9
+        background: Rectangle {
+            implicitHeight: 1
+            color: Theme.border
+            anchors.verticalCenter: parent.verticalCenter
         }
     }
 }

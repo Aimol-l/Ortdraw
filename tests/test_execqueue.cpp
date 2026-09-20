@@ -74,7 +74,7 @@ private slots:
     void roleNamesMatchQmlContract() {
         ExecQueueModel m;
         const QHash<int, QByteArray> roles = m.roleNames();
-        QCOMPARE(roles.size(), 7);
+        QCOMPARE(roles.size(), 8);
         QCOMPARE(roles.value(ExecQueueModel::UuidRole), QByteArray("uuid"));
         QCOMPARE(roles.value(ExecQueueModel::NameRole), QByteArray("name"));
         QCOMPARE(roles.value(ExecQueueModel::StatusRole), QByteArray("status"));
@@ -82,6 +82,22 @@ private slots:
         QCOMPARE(roles.value(ExecQueueModel::ErrorRole), QByteArray("error"));
         QCOMPARE(roles.value(ExecQueueModel::GroupRole), QByteArray("group"));
         QCOMPARE(roles.value(ExecQueueModel::GroupColorRole), QByteArray("groupColor"));
+        QCOMPARE(roles.value(ExecQueueModel::GroupStartRole), QByteArray("groupStart"));
+    }
+
+    void groupStartMarksFirstOccurrence() {
+        ExecQueueModel m;
+        m.addRunning("a", "A", 0, "#0969da");
+        m.addRunning("b", "B", 0, "#0969da");
+        m.addRunning("c", "C", 1, "#8250df");
+        m.addRunning("d", "D", 1, "#8250df");
+        m.addRunning("e", "E", 0, "#0969da");   // 组 0 已出现
+        auto gs = [&](int i){ return m.data(m.index(i), ExecQueueModel::GroupStartRole).toBool(); };
+        QCOMPARE(gs(0), true);
+        QCOMPARE(gs(1), false);
+        QCOMPARE(gs(2), true);
+        QCOMPARE(gs(3), false);
+        QCOMPARE(gs(4), false);
     }
 
     void invalidIndexReturnsEmpty() {

@@ -61,6 +61,9 @@ private:
     QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
     NodeManager(QObject *parent = nullptr) : QObject(parent) {
         m_queue_proxy.setSourceModel(&m_exec_queue);
+        // 「全部组」按组连续排列（组内保持执行顺序），便于组间分隔
+        m_queue_proxy.setSortRole(ExecQueueModel::GroupRole);
+        m_queue_proxy.sort(0, Qt::AscendingOrder);
         connect(&m_executor, &GraphExecutor::statusChanged, this, &NodeManager::engineChanged);
         QObject::connect(&m_executor, &GraphExecutor::nodeImageReady, this,
                          [this](const QString& uuid, const QImage& img) {

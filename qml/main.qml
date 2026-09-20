@@ -18,12 +18,13 @@ Controls.ApplicationWindow {
     minimumWidth: 900
     minimumHeight: 600
     color: Theme.bg
-    title: "Ortdraw"
+    title: (dirty ? "• " : "") + docName() + " — Ortdraw"
 
     property bool leftCollapsed: false
     property bool rightCollapsed: false
     property string currentPath: ""
     property string savedSnapshot: ""
+    property bool dirty: false
     property bool allowClose: false
     property var pendingAction: null   // 未保存提示确认后要执行的动作；null 表示关闭窗口
 
@@ -43,6 +44,20 @@ Controls.ApplicationWindow {
 
     // 与上次保存 / 打开 / 新建时的快照比较，判断是否有未保存的修改
     function graphDirty() { return NodeManager.graphJsonString() !== savedSnapshot }
+    // 当前文档名：未保存过的新图显示「未命名」
+    function docName() { return currentPath === "" ? "未命名" : currentPath.split("/").pop() }
+
+    // 图变化后延迟重算「未保存」标记（合并拖动等高频事件）
+    Timer {
+        id: dirtyTimer
+        interval: 300
+        repeat: false
+        onTriggered: win.dirty = win.graphDirty()
+    }
+    Connections {
+        target: NodeManager
+        function onGraphChanged() { dirtyTimer.restart() }
+    }
     // 画布为空时不提示保存
     function needsSave() { return NodeManager.nodeCount > 0 && graphDirty() }
 
@@ -72,6 +87,8 @@ Controls.ApplicationWindow {
 
     // ---- 图文件：新建 / 打开 / 保存 ----
     function doNew() {
+        dirtyTimer.stop()
+        dirty = false
         NodeManager.clearGraph()
         currentPath = ""
         savedSnapshot = NodeManager.graphJsonString()
@@ -89,6 +106,8 @@ Controls.ApplicationWindow {
         if (NodeManager.saveGraph(path)) {
             currentPath = path
             savedSnapshot = NodeManager.graphJsonString()
+            dirtyTimer.stop()
+            dirty = false
             return true
         }
         return false
@@ -128,6 +147,8 @@ Controls.ApplicationWindow {
         }
         currentPath = path
         savedSnapshot = NodeManager.graphJsonString()
+        dirtyTimer.stop()
+        dirty = false
     }
 
     Component.onCompleted: {
@@ -157,6 +178,9 @@ Controls.ApplicationWindow {
         TopBar {
             id: topbar
             width: parent.width
+            docName: win.docName()
+            docDirty: win.dirty
+            docPath: win.currentPath
             onUndoRequested: NodeManager.undo()
             onRedoRequested: NodeManager.redo()
             onFitRequested: canvas.fitView()

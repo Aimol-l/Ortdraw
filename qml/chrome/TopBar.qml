@@ -21,6 +21,10 @@ Rectangle {
     signal saveRequested()
     signal saveAsRequested()
 
+    property string docName: ""
+    property bool docDirty: false
+    property string docPath: ""
+
     Rectangle {
         anchors.bottom: parent.bottom
         width: parent.width
@@ -76,6 +80,53 @@ Rectangle {
                     text: "节点式图像处理"
                     color: Theme.fgDim
                     font.pixelSize: 10
+                }
+            }
+        }
+
+        // 当前文档名（+ 未保存标记），悬停显示完整路径
+        Row {
+            id: docLabel
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 0
+            visible: root.docName !== ""
+
+            Text {
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                anchors.verticalCenter: parent.verticalCenter
+                text: (root.docDirty ? "• " : "") + root.docName
+                color: root.docDirty ? Theme.fg : Theme.fgDim
+                font.pixelSize: 12
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, 320)
+            }
+
+            HoverHandler { id: docHover }
+
+            Controls.ToolTip {
+                id: docTip
+                text: root.docPath
+                visible: docHover.hovered && root.docPath !== ""
+                delay: 400
+                padding: 0
+                width: docTipText.implicitWidth + 16
+                height: docTipText.implicitHeight + 8
+                x: 0
+                y: docLabel.height + 8
+                background: Rectangle {
+                    color: Theme.bgElev
+                    border.width: 1
+                    border.color: Theme.border
+                    radius: 5
+                }
+                contentItem: Text {
+                    id: docTipText
+                    text: docTip.text
+                    color: Theme.fg
+                    font.pixelSize: 11
+                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
                 }
             }
         }
