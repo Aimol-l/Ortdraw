@@ -49,7 +49,7 @@ public:
     void addRunning(const QString& uuid, const QString& name) {
         const int row = m_rows.size();
         beginInsertRows(QModelIndex(), row, row);
-        m_rows.push_back(Row{ uuid, name, QStringLiteral("running"), QString(), 0 });
+        m_rows.push_back(Row{ uuid, name, runningStatus(), QString(), 0 });
         endInsertRows();
     }
 
@@ -83,19 +83,28 @@ public:
         case NodeStatus::Skipped:   return QStringLiteral("skipped");
         case NodeStatus::Cancelled: return QStringLiteral("cancelled");
         }
-        return QStringLiteral("failed");
+        return QStringLiteral("unknown");
     }
 
     bool isTerminal(int row) const {
         if (row < 0 || row >= m_rows.size()) return false;
-        return m_rows.at(row).status != QStringLiteral("running");
+        return m_rows.at(row).status != runningStatus();
     }
-    int countDone() const { return count([](const Row& r){ return r.status != "running"; }); }
+    int countDone() const {
+        int n = 0;
+        for (int i = 0; i < m_rows.size(); ++i) if (isTerminal(i)) ++n;
+        return n;
+    }
     int countFailed() const { return count([](const Row& r){ return r.status == "failed"; }); }
     int countSkipped() const { return count([](const Row& r){ return r.status == "skipped"; }); }
     int countCancelled() const { return count([](const Row& r){ return r.status == "cancelled"; }); }
 
 private:
+    static const QString& runningStatus() {
+        static const QString s = QStringLiteral("running");
+        return s;
+    }
+
     struct Row { QString uuid, name, status, error; int ms = 0; };
 
     template <typename Pred>

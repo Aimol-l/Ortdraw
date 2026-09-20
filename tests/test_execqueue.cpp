@@ -69,6 +69,31 @@ private slots:
         m.beginRun();
         QCOMPARE(m.rowCount(), 0);
     }
+
+    void roleNamesMatchQmlContract() {
+        ExecQueueModel m;
+        const QHash<int, QByteArray> roles = m.roleNames();
+        QCOMPARE(roles.size(), 5);
+        QCOMPARE(roles.value(ExecQueueModel::UuidRole), QByteArray("uuid"));
+        QCOMPARE(roles.value(ExecQueueModel::NameRole), QByteArray("name"));
+        QCOMPARE(roles.value(ExecQueueModel::StatusRole), QByteArray("status"));
+        QCOMPARE(roles.value(ExecQueueModel::MsRole), QByteArray("ms"));
+        QCOMPARE(roles.value(ExecQueueModel::ErrorRole), QByteArray("error"));
+    }
+
+    void invalidIndexReturnsEmpty() {
+        ExecQueueModel m;
+        QVERIFY(!m.data(QModelIndex(), ExecQueueModel::StatusRole).isValid());
+        QVERIFY(!m.data(m.index(5), ExecQueueModel::StatusRole).isValid());
+    }
+
+    void countDoneExcludesRunning() {
+        ExecQueueModel m;
+        m.addRunning("a", "A");
+        m.addRunning("b", "B");
+        m.finishNode("a", int(NodeStatus::Ok), QString(), 1);
+        QCOMPARE(m.countDone(), 1);
+    }
 };
 
 QTEST_MAIN(TestExecQueue)
