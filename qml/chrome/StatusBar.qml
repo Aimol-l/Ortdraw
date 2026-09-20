@@ -287,6 +287,7 @@ Rectangle {
                     width: implicitWidth
                     implicitWidth: chipRow.implicitWidth + 12
                     radius: Math.round(root.chipH * 0.28)
+                    clip: true
                     color: del.status === "failed"
                            ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
                            : del.status === "ok"
@@ -439,14 +440,16 @@ Rectangle {
                     }
                 }
             }
+        }
+    }
 
-            Connections {
-                target: NodeManager
-                function onFocusQueueNode(uuid) {
-                    if (del.uuid === uuid)
-                        queue.positionViewAtIndex(del.index, ListView.Contain)
-                }
-            }
+    Connections {
+        target: NodeManager
+        function onFocusQueueNode(uuid) {
+            Qt.callLater(function() {
+                var i = NodeManager.queueIndexOf(uuid)
+                if (i >= 0) queue.positionViewAtIndex(i, ListView.Contain)
+            })
         }
     }
 

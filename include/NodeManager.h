@@ -312,6 +312,15 @@ public:
                                     target->y() + target->height() / 2.0);
         refresh();
     }
+    // 代理模型中该 uuid 的当前行号；未找到返回 -1
+    Q_INVOKABLE int queueIndexOf(const QString& uuid) const {
+        for (int i = 0; i < m_queue_proxy.rowCount(); ++i) {
+            const QModelIndex idx = m_queue_proxy.index(i, 0);
+            if (m_queue_proxy.data(idx, ExecQueueModel::UuidRole).toString() == uuid)
+                return i;
+        }
+        return -1;
+    }
     Q_INVOKABLE bool hasImage(const QString& uuid) const {
         return ImageStore::instance()->has(uuid);
     }
