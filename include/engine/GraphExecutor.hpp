@@ -130,6 +130,7 @@ signals:
     void nodeStarted(const QString& uuid);
     void nodeFinished(const QString& uuid, int status, const QString& error, int durationMs);
     void nodeImageReady(const QString& uuid, const QImage& image);
+    void nodeDisplay(const QString& uuid, const QVariantMap& data);
     void runFinished(bool ok);
 
 private:
@@ -272,7 +273,13 @@ private:
                 r.ok = false;
                 r.error = QStringLiteral("无执行器");
             } else {
-                ExecuteContext ctx{ns.uuid, &m_cancel, [](const QString&) {}};
+                ExecuteContext ctx{ns.uuid, &m_cancel, [](const QString&) {},
+                                   [this, runId, uuid](const QVariantMap& d) {
+                    QMetaObject::invokeMethod(this, [this, runId, uuid, d] {
+                        if (runId != m_run_id.load()) return;
+                        emit nodeDisplay(uuid, d);
+                    }, Qt::QueuedConnection);
+                }};
                 r = exec->execute(ctx, ns.params, inputs);
             }
             const int nodeMs = int(std::chrono::duration_cast<std::chrono::milliseconds>(

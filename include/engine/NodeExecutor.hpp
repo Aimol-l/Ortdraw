@@ -10,6 +10,7 @@ struct ExecuteContext {
     QString nodeUuid;
     std::atomic_bool* cancel = nullptr;
     std::function<void(const QString&)> log;
+    std::function<void(const QVariantMap&)> display;   // 非端口显示数据
 };
 
 struct ExecResult {

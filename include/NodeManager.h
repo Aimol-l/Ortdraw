@@ -71,6 +71,19 @@ private:
             ++m_image_revision;
             emit imageRevisionChanged();
         });
+        QObject::connect(&m_executor, &GraphExecutor::nodeDisplay, this,
+                         [this](const QString& uuid, const QVariantMap& d) {
+            // m_paint_board 可能为空（尚未挂载画布）或节点未实现 setDisplayData，
+            // 此时 invokeMethod 返回 false，安全忽略即可。
+            if (!m_paint_board) return;
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
+                if (n->uuid().toString() == uuid) {
+                    QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
+                                              Q_ARG(QVariantMap, d));
+                    break;
+                }
+            }
+        });
         QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
                          [this](const QString& uuid) {
             const int grp = groupOf(uuid);
@@ -296,6 +309,11 @@ public:
         Log::info(QStringLiteral("运行图求值：节点 %1 个，边 %2 条")
                       .arg(nodeCount()).arg(edgeCount()));
         clearNodeErrors();
+        // 清空各节点上一轮的显示数据（非端口通道），避免残留过期结果
+        if (m_paint_board)
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+                QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
+                                          Q_ARG(QVariantMap, QVariantMap{}));
         // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
         // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
         return m_executor.run();
@@ -598,6 +616,9 @@ public:
     Q_INVOKABLE void rebuildNodePorts(BaseNode* node, const QVector<PortSpec>& ins,
                                       const QVector<PortSpec>& outs){
         if(!m_paint_board || !node) return;
+        // 旧端口即将被删除，而撤销历史中的 RemoveEdgeCMD 仍持有裸 Port*，
+        // 撤销时会访问悬垂指针；故在删除边之前清空历史，且删除动作本身不入栈。
+        m_cmd_manager.clear();
         QVector<Edge> to_remove;
         for(const Edge& e : m_paint_board->m_graph.getAllEdges()){
             if(!e.start_port || !e.stop_port) continue;
