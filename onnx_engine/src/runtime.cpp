@@ -1,4 +1,5 @@
 #include "impl.hpp"
+#include <format>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -50,12 +51,10 @@ ONNXTensorElementDataType ortElementType(ElementType t) {
 }
 
 std::string shapeStr(const std::vector<int64_t>& shape) {
-    std::string s = "[";
-    for (std::size_t i = 0; i < shape.size(); ++i) {
-        if (i) s += ",";
-        s += std::to_string(shape[i]);
-    }
-    return s + "]";
+    std::string out;
+    for (std::size_t i = 0; i < shape.size(); ++i)
+        out += std::format("{}{}", i ? "," : "", shape[i]);
+    return std::format("[{}]", out);
 }
 
 // Tensorvia 可承载的子集：UInt8/Bool 经映射承载，UInt16+ 与 Unknown 不支持。
@@ -160,7 +159,7 @@ ElementType fromViaDataType(via::DataType t) {
 std::string Runtime::Impl::makeKey(const std::string& path, const SessionOptions& o) const {
     // 归一化线程数：<0 与 0 语义相同（onnxruntime 默认），避免重复建会话
     const int threads = o.intraThreads > 0 ? o.intraThreads : 0;
-    return path + "|" + std::to_string(int(o.device)) + "|" + std::to_string(threads);
+    return std::format("{}|{}|{}", path, int(o.device), threads);
 }
 
 void Runtime::Impl::touch(const std::string& key) {
@@ -253,10 +252,10 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
     const std::string abs = normPath(path);
     const auto mt = std::filesystem::last_write_time(abs, ec);
     const auto sz = std::filesystem::file_size(abs, ec);
-    if (ec) { error = "onnx_engine: 模型文件不存在或不可读: " + path; return nullptr; }
+    if (ec) { error = std::format("onnx_engine: 模型文件不存在或不可读: {}", path); return nullptr; }
     const auto mtime = std::int64_t(mt.time_since_epoch().count());
     const auto size = std::uint64_t(sz);
-    const auto key = makeKey(abs, o) + "|" + std::to_string(mtime) + "|" + std::to_string(size);
+    const auto key = std::format("{}|{}|{}", makeKey(abs, o), mtime, size);
 
     std::shared_ptr<BuildSlot> slot;
     bool leader = false;
@@ -369,99 +368,73 @@ SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : env(std::move(e)), ort(n
 std::expected<std::vector<Tensor>, std::string>
 SessionImpl::run(const std::vector<Tensor>& inputs) {
     if (inputs.size() != info_.inputs.size()) {
-        return std::unexpected(
-            "onnx_engine: 输入个数不符，期望 " + std::to_string(info_.inputs.size())
-          + "，实际 " + std::to_string(inputs.size()));
+        return std::unexpected(std::format("onnx_engine: 输入个数不符，期望 {}，实际 {}", info_.inputs.size(), inputs.size()));
     }
     try {
         Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         std::vector<Ort::Value> ortInputs;
         std::vector<Tensor> temps;                  // 物化/搬运副本，须存活到 Run 结束
-        std::vector<std::vector<std::uint8_t>> narrowTemps;   // UInt8 收窄缓冲，须存活到 Run 结束
         std::vector<std::vector<int64_t>> shapes;   // 形状存储，保证 CreateTensor 期间指针有效
         ortInputs.reserve(inputs.size());
         temps.reserve(inputs.size());
-        narrowTemps.reserve(inputs.size());
         shapes.reserve(inputs.size());
 
         for (std::size_t i = 0; i < inputs.size(); ++i) {
             const Tensor& t = inputs[i];
             const TensorInfo& want = info_.inputs[i];
             if (!want.isTensor) {
-                return std::unexpected("onnx_engine: 输入 " + want.name + " 不是张量");
+                return std::unexpected(std::format("onnx_engine: 输入 {} 不是张量", want.name));
             }
             if (!isSupportedElement(want.type) || elementTypeSize(want.type) <= 0) {
-                return std::unexpected(
-                    "onnx_engine: 输入 " + want.name + " 的元素类型不受支持（"
-                  + elementTypeName(want.type) + "）");
+                return std::unexpected(std::format(
+                    "onnx_engine: 输入 {} 的元素类型不受支持（{}）",
+                    want.name, elementTypeName(want.type)));
             }
             // dtype 校验：模型类型经 §4.1 映射后必须与张量 dtype 一致
             //（如 UInt8 模型要求 INT16 张量、Bool 模型要求 INT8 张量）
             const via::DataType wantVia = toViaDataType(want.type);
             if (t.dtype() != wantVia) {
-                return std::unexpected(
-                    "onnx_engine: 输入 " + want.name + " 类型不符，期望 "
-                  + std::string(via::dtype_to_string(wantVia)) + "，实际 "
-                  + std::string(via::dtype_to_string(t.dtype())));
+                return std::unexpected(std::format(
+                    "onnx_engine: 输入 {} 类型不符，期望 {}，实际 {}",
+                    want.name, via::dtype_to_string(wantVia), via::dtype_to_string(t.dtype())));
             }
-            // 承载宽度必须一致才能按原始字节喂给 ORT；唯一例外是 §4.1 的
-            // UInt8↔INT16 映射（UInt8 由 INT16 承载，喂 ORT 前需收窄为 1 字节）。
-            const bool uint8Narrow = (want.type == ElementType::UInt8
-                                      && t.dtype() == via::DataType::INT16);
-            if (!uint8Narrow
-                && std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
-                return std::unexpected(
-                    "onnx_engine: 输入 " + want.name + " 的元素承载宽度与模型不匹配（"
-                  + elementTypeName(want.type) + "），暂不支持");
+            // 承载宽度必须一致才能按原始字节喂给 ORT（模型输入不会是 UInt8）
+            if (std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
+                return std::unexpected(std::format(
+                    "onnx_engine: 输入 {} 的元素承载宽度与模型不匹配（{}），暂不支持",
+                    want.name, elementTypeName(want.type)));
             }
             // 形状校验：秩必须一致；期望维 -1（动态）接受任意，其余必须相等
             const auto span = t.shape();
             std::vector<int64_t> shape(span.begin(), span.end());
             if (shape.size() != want.shape.size()) {
-                return std::unexpected(
-                    "onnx_engine: 输入 " + want.name + " 秩不符，期望 "
-                  + std::to_string(want.shape.size()) + "，实际 "
-                  + std::to_string(shape.size()));
+                return std::unexpected(std::format(
+                    "onnx_engine: 输入 {} 秩不符，期望 {}，实际 {}",
+                    want.name, want.shape.size(), shape.size()));
             }
             std::size_t elems = 1;
             for (std::size_t d = 0; d < shape.size(); ++d) {
                 if (want.shape[d] != -1 && shape[d] != want.shape[d]) {
-                    return std::unexpected(
-                        "onnx_engine: 输入 " + want.name + " 形状不符，期望 "
-                      + shapeStr(want.shape) + "，实际 " + shapeStr(shape));
+                    return std::unexpected(std::format(
+                        "onnx_engine: 输入 {} 形状不符，期望 {}，实际 {}",
+                        want.name, shapeStr(want.shape), shapeStr(shape)));
                 }
                 if (shape[d] < 0) {
-                    return std::unexpected(
-                        "onnx_engine: 输入 " + want.name + " 形状含非法维 "
-                      + shapeStr(shape));
+                    return std::unexpected(std::format(
+                        "onnx_engine: 输入 {} 形状含非法维 {}", want.name, shapeStr(shape)));
                 }
                 elems *= std::size_t(shape[d]);
             }
             if (elems != t.numel()) {
-                return std::unexpected(
-                    "onnx_engine: 输入 " + want.name + " 元素数与形状不符，期望 "
-                  + std::to_string(elems) + "，实际 " + std::to_string(t.numel()));
+                return std::unexpected(std::format(
+                    "onnx_engine: 输入 {} 元素数与形状不符，期望 {}，实际 {}",
+                    want.name, elems, t.numel()));
             }
 
-            // 零拷贝：CPU 且连续时直接引用调用方内存；否则物化一份连续 host 副本。
-            // UInt8（§4.1 由 INT16 承载）额外收窄为 1 字节临时缓冲后再喂 ORT。
+            // 零拷贝：CPU 且连续时直接引用调用方内存；否则物化一份连续 host 副本
             const void* p = nullptr;
-            std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
-            if (uint8Narrow) {
-                const Tensor* hostT = &t;
-                if (!(t.is_contiguous() && t.device() == via::Device::CPU)) {
-                    temps.push_back(t.contiguous());
-                    temps.back().to_host();
-                    hostT = &temps.back();
-                }
-                narrowTemps.emplace_back(elems);
-                std::vector<std::uint8_t>& nb = narrowTemps.back();
-                const auto* s16 = static_cast<const std::int16_t*>(hostT->data());
-                for (std::size_t k = 0; k < elems; ++k)
-                    nb[k] = static_cast<std::uint8_t>(s16[k]);   // 无符号语义取低 8 位
-                p = nb.data();
-                bytes = elems;   // 每元素 1 字节
-            } else if (t.is_contiguous() && t.device() == via::Device::CPU) {
+            const std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
+            if (t.is_contiguous() && t.device() == via::Device::CPU) {
                 p = t.data();
             } else {
                 Tensor tmp = t.contiguous();
@@ -477,13 +450,18 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
         }
 
         std::vector<Ort::Value> res =
-            ort.Run(Ort::RunOptions{nullptr}, inputNamePtrs.data(), ortInputs.data(),
-                    ortInputs.size(), outputNamePtrs.data(), outputNamePtrs.size());
+                    ort.Run(
+                    Ort::RunOptions{nullptr},
+                    inputNamePtrs.data(),
+                    ortInputs.data(),
+                    ortInputs.size(),
+                    outputNamePtrs.data(),
+                    outputNamePtrs.size()
+                    );
 
         if (res.size() != info_.outputs.size()) {
-            return std::unexpected(
-                "onnx_engine: 输出个数不符，期望 " + std::to_string(info_.outputs.size())
-              + "，实际 " + std::to_string(res.size()));
+            return std::unexpected(std::format(
+                "onnx_engine: 输出个数不符，期望 {}，实际 {}", info_.outputs.size(), res.size()));
         }
         // 先写入局部缓冲，只有全部成功后才返回（失败即 unexpected）。
         std::vector<Tensor> tmpOuts;
@@ -492,20 +470,20 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
             const TensorInfo& want = info_.outputs[i];
             Ort::Value& v = res[i];
             if (!want.isTensor || !v.IsTensor()) {
-                return std::unexpected(
-                    "onnx_engine: 输出 " + want.name + " 不是张量，暂不支持");
+                return std::unexpected(std::format(
+                    "onnx_engine: 输出 {} 不是张量，暂不支持", want.name));
             }
             Ort::TensorTypeAndShapeInfo ti = v.GetTensorTypeAndShapeInfo();
             const ElementType ot = mapElementType(ti.GetElementType());
             if (!isSupportedElement(ot) || elementTypeSize(ot) == 0) {
-                return std::unexpected(
-                    "onnx_engine: 输出 " + want.name + " 的元素类型不受支持");
+                return std::unexpected(std::format(
+                    "onnx_engine: 输出 {} 的元素类型不受支持", want.name));
             }
             const std::size_t elems = std::size_t(ti.GetElementCount());
             if (elems == 0) {
                 // Tensorvia 不接受零元素张量（构造会抛异常），明确报错优于抛出。
-                return std::unexpected(
-                    "onnx_engine: 输出 " + want.name + " 元素数为 0");
+                return std::unexpected(std::format(
+                    "onnx_engine: 输出 {} 元素数为 0", want.name));
             }
             std::vector<int64_t> shape = ti.GetShape();
             if (shape.empty()) shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
@@ -521,8 +499,8 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
                 std::int16_t* dst = static_cast<std::int16_t*>(out.data());
                 for (std::size_t k = 0; k < elems; ++k) dst[k] = std::int16_t(src[k]);
             } else {
-                return std::unexpected(
-                    "onnx_engine: 输出 " + want.name + " 的类型映射暂不支持");
+                return std::unexpected(std::format(
+                    "onnx_engine: 输出 {} 的类型映射暂不支持", want.name));
             }
             tmpOuts.push_back(std::move(out));
         }

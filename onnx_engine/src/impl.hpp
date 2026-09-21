@@ -18,8 +18,7 @@ struct SessionImpl : Session {
     std::string path;
     std::int64_t mtime = 0;
     std::uint64_t size = 0;
-    std::size_t weightBytes = 0;   // 估算权重（= 模型文件大小）
-    // 会话创建后只读：输入/输出名及其稳定的 c_str 指针，供 run() 直接使用
+    std::size_t weightBytes = 0;
     std::vector<std::string> inputNames, outputNames;
     std::vector<const char*> inputNamePtrs, outputNamePtrs;
 
