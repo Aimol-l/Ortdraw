@@ -66,5 +66,11 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
 add_subdirectory(onnx_engine)
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE onnx_engine)
 
-enable_testing()
-add_subdirectory(tests)
+# 测试可关闭：cmake -S . -B build -DORTDRAW_BUILD_TESTS=OFF（只构建主程序，跳过全部测试）
+option(ORTDRAW_BUILD_TESTS "构建测试（test_* 目标）" OFF)
+if(ORTDRAW_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+else()
+    message(STATUS "ORTDRAW_BUILD_TESTS=OFF：跳过测试构建")
+endif()
