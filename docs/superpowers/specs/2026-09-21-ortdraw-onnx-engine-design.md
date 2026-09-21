@@ -217,7 +217,7 @@ struct TaskSpec {
 - 新增任务 = 注册一个 `TaskSpec` 并实现 `compute`；节点与 UI 无需改动（控件由参数描述自动生成）。
 - 任务节点为单一类（`PreProcessNode`/`PostProcessNode`），`task` 变化即重建端口；端口重建与断线复用 §5.1 机制。
 
-### 5.6 节点显示通道（非端口）
+### 5.5 节点显示通道（非端口）
 
 - 为「结果面板」这类富信息展示提供**非端口**通道：
   - `GraphExecutor` 新增信号 `nodeDisplay(const QString& uuid, const QVariantMap& data)`（经队列信号回 GUI 线程，沿用 `nodeImageReady` 的 runId 校验）；
@@ -226,7 +226,7 @@ struct TaskSpec {
   - 每次运行开始时清空各节点显示数据。
 - 该通道不改端口与连线语义，纯展示用途；分类后处理用它显示 Top-K。
 
-### 5.5 目录/注册
+### 5.6 目录/注册
 
 - 节点：`include/node/OnnxInfer.hpp`、`include/node/PreProcess.hpp`、`include/node/PostProcess.hpp`；QML：`qml/node/OnnxInferNode.qml`、`PreProcessNode.qml`、`PostProcessNode.qml`。
 - 执行器：`include/engine/executors/OnnxInferExecutor.hpp`、`PreProcessExecutor.hpp`、`PostProcessExecutor.hpp`（后两者转发到对应注册表），在 `registerBuiltinExecutors()` 注册。
