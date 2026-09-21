@@ -31,8 +31,7 @@ private slots:
         (void)Runtime::cudaAvailable();                     // 必须能链接到库符号
         QCOMPARE(QString::fromLatin1(elementTypeName(ElementType::Float32)), QString("float32"));
         QCOMPARE(elementTypeSize(ElementType::Float32), 4);
-        // 设计 §4.1 映射：UInt8→INT16、Bool→INT8，其余同名
-        QCOMPARE(toViaDataType(ElementType::UInt8), via::DataType::INT16);
+        // 设计 §4.1 映射：Bool→INT8，其余同名（UInt8 不受支持）
         QCOMPARE(toViaDataType(ElementType::Bool),  via::DataType::INT8);
         QCOMPARE(fromViaDataType(via::DataType::FLOAT32), ElementType::Float32);
         QCOMPARE(fromViaDataType(via::DataType::INT16),   ElementType::Int16);

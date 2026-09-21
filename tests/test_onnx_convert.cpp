@@ -17,7 +17,7 @@ private slots:
     void dtypeMappingRoundTrip() {
         QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Float32), via::DataType::FLOAT32);
         QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Int64),   via::DataType::INT64);
-        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::UInt8),   via::DataType::INT16);  // 无符号->有符号16
+        QVERIFY(!onnx_convert::isSupported(onnx_engine::ElementType::UInt8));   // UInt8 不受支持
         QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Bool),    via::DataType::INT8);   // bool->int8
         QCOMPARE(onnx_engine::fromViaDataType(via::DataType::FLOAT32), onnx_engine::ElementType::Float32);
         QCOMPARE(onnx_engine::fromViaDataType(via::DataType::INT16),   onnx_engine::ElementType::Int16);

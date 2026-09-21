@@ -46,7 +46,7 @@ ONNX_ENGINE_API const char* elementTypeName(ElementType t);
 ONNX_ENGINE_API int elementTypeSize(ElementType t);
 
 // ONNX ElementType ↔ Tensorvia DataType（设计 §4.1）。
-// Tensorvia 无 UInt8/Bool：UInt8→INT16、Bool→INT8；其余同名。
+// Tensorvia 无 Bool：Bool→INT8；UInt8 及其它无符号类型不受支持。
 // 不受支持的类型：toViaDataType 返回 FLOAT32（调用方须自行先判定支持性），
 // fromViaDataType 返回 ElementType::Unknown。
 ONNX_ENGINE_API via::DataType toViaDataType(ElementType t);

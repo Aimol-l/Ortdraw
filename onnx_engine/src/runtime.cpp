@@ -57,7 +57,7 @@ std::string shapeStr(const std::vector<int64_t>& shape) {
     return std::format("[{}]", out);
 }
 
-// Tensorvia 可承载的子集：UInt8/Bool 经映射承载，UInt16+ 与 Unknown 不支持。
+// Tensorvia 可承载的子集：Bool 经 INT8 承载；UInt8/UInt16+ 与 Unknown 不支持。
 bool isSupportedElement(ElementType t) {
     switch (t) {
     case ElementType::Float32:
@@ -68,7 +68,6 @@ bool isSupportedElement(ElementType t) {
     case ElementType::Int16:
     case ElementType::Int32:
     case ElementType::Int64:
-    case ElementType::UInt8:
     case ElementType::Bool:
         return true;
     default:
@@ -135,7 +134,6 @@ via::DataType toViaDataType(ElementType t) {
     case ElementType::Int16:    return via::DataType::INT16;
     case ElementType::Int32:    return via::DataType::INT32;
     case ElementType::Int64:    return via::DataType::INT64;
-    case ElementType::UInt8:    return via::DataType::INT16;   // 用有符号 16 位承载 0..255
     case ElementType::Bool:     return via::DataType::INT8;    // 0/1 承载
     default:                    return via::DataType::FLOAT32;
     }
@@ -391,14 +389,14 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
                     want.name, elementTypeName(want.type)));
             }
             // dtype 校验：模型类型经 §4.1 映射后必须与张量 dtype 一致
-            //（如 UInt8 模型要求 INT16 张量、Bool 模型要求 INT8 张量）
+            //（如 Bool 模型要求 INT8 张量）
             const via::DataType wantVia = toViaDataType(want.type);
             if (t.dtype() != wantVia) {
                 return std::unexpected(std::format(
                     "onnx_engine: 输入 {} 类型不符，期望 {}，实际 {}",
                     want.name, via::dtype_to_string(wantVia), via::dtype_to_string(t.dtype())));
             }
-            // 承载宽度必须一致才能按原始字节喂给 ORT（模型输入不会是 UInt8）
+            // 承载宽度必须一致才能按原始字节喂给 ORT
             if (std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
                 return std::unexpected(std::format(
                     "onnx_engine: 输入 {} 的元素承载宽度与模型不匹配（{}），暂不支持",
@@ -494,10 +492,6 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
             const std::uint8_t* src = v.GetTensorData<std::uint8_t>();
             if (srcSize == dstSize) {
                 std::memcpy(out.data(), src, elems * std::size_t(srcSize));
-            } else if (ot == ElementType::UInt8) {
-                // UInt8→INT16：逐元素无符号加宽（保持 0..255 语义）
-                std::int16_t* dst = static_cast<std::int16_t*>(out.data());
-                for (std::size_t k = 0; k < elems; ++k) dst[k] = std::int16_t(src[k]);
             } else {
                 return std::unexpected(std::format(
                     "onnx_engine: 输出 {} 的类型映射暂不支持", want.name));

@@ -29,8 +29,8 @@ struct TensorBuffer {
 // 调用方应把「空 Tensor / monostate」一律视为错误，并在可能的情况下先做校验。
 // =====================================================================================
 
-// 设计 §4.1：仅下列类型可被表示（UInt8/Bool 经映射承载）；
-// UInt16/UInt32/UInt64/String/Complex/Unknown 不受支持，调用方须先检查。
+// 设计 §4.1：仅下列类型可被表示（Bool 经 INT8 承载）；
+// UInt8/UInt16/UInt32/UInt64/String/Complex/Unknown 不受支持，调用方须先检查。
 inline bool isSupported(onnx_engine::ElementType t) {
     switch (t) {
     case onnx_engine::ElementType::Float32:
@@ -41,7 +41,6 @@ inline bool isSupported(onnx_engine::ElementType t) {
     case onnx_engine::ElementType::Int16:
     case onnx_engine::ElementType::Int32:
     case onnx_engine::ElementType::Int64:
-    case onnx_engine::ElementType::UInt8:
     case onnx_engine::ElementType::Bool:
         return true;
     default:

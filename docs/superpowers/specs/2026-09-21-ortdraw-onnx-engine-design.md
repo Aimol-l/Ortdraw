@@ -147,13 +147,12 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 | Float32 / Float64 / Float16 | FLOAT32 / FLOAT64 / FLOAT16 | 直接对应 |
 | Int8 / Int16 / Int32 / Int64 | 同名 | 直接对应 |
 | BFloat16 | BFLOAT16 | 直接对应 |
-| **UInt8** | **INT16** | 用有符号 16 位承载 0..255，避免误解；转换时按无符号解释 |
 | **Bool** | **INT8** | 0/1 承载 |
-| UInt16/UInt32/UInt64/String/Complex | — | **报错**「不支持的张量类型」，提示该模型当前不受支持 |
+| UInt8/UInt16/UInt32/UInt64/String/Complex | — | **报错**「不支持的张量类型」（模型输入/输出都不会是这些类型） |
 
 - 反向（`via::DataType` → ONNX dtype，用于把张量喂给模型）：同上表反向；`INT16` 不自动视为 `UInt8`（需显式要求），以免歧义。
 - 该映射在 **`onnx_engine`（`types.hpp` 声明、`runtime.cpp` 实现：`toViaDataType`/`fromViaDataType`）** 内实现，并有单元测试覆盖。
-- **UInt8 仅输出侧**：模型输入不会是 UInt8（输入侧按承载宽度校验直接拒绝，给出明确错误）；输出侧 UInt8→INT16 加宽承载（逐元素无符号解释）。
+- **UInt8 不受支持**：模型输入/输出都不会是 UInt8，遇到时按「不支持的张量类型」明确报错。
 - **Bool 输出**：ONNX `Bool` 与 `Int8` 都映射为 `INT8`，单看张量无法区分；应用侧 `tensorToNodeData(t, declType)` 依据**模型声明的输出 `ElementType`**（`session->info().outputs[i].type`）判定：`Bool` → `bool`，其余标量 → `double`。
 
 ## 5. 节点
