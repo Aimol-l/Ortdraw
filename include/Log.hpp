@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QClipboard>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QObject>
@@ -41,9 +43,20 @@ public:
     static QString filePath() { return instance()->m_path; }
 
     Q_INVOKABLE QString path() const { return m_path; }
+    // 用系统默认程序打开日志文件本身
+    Q_INVOKABLE void openFile() const {
+        if (m_path.isEmpty()) return;
+        QDesktopServices::openUrl(QUrl::fromLocalFile(m_path));
+    }
+    // 打开日志所在文件夹
     Q_INVOKABLE void openFolder() const {
         if (m_path.isEmpty()) return;
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_path).absolutePath()));
+    }
+    // 复制日志文件路径到剪贴板
+    Q_INVOKABLE void copyPath() const {
+        if (m_path.isEmpty()) return;
+        QGuiApplication::clipboard()->setText(m_path);
     }
 
 private:

@@ -318,8 +318,9 @@ Rectangle {
     Controls.Menu {
         id: helpMenu
 
-        MenuRow { text: "打开日志"; onTriggered: Log.openFolder() }
-        MenuRow { text: "日志路径"; onTriggered: Log.openFolder() }
+        MenuRow { text: "打开日志"; onTriggered: Log.openFile() }
+        MenuRow { text: "打开日志文件夹"; onTriggered: Log.openFolder() }
+        MenuRow { text: "复制日志路径"; onTriggered: Log.copyPath() }
 
         background: Rectangle {
             implicitWidth: 170
