@@ -21,7 +21,13 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/BrightnessContrast.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Conv.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/PreProcess.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/PreProcessExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/PostProcessExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/TaskSpec.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/PreProcessRegistry.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/PostProcessRegistry.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/onnx/OnnxTensorConvert.hpp
     ${PROJECT_SOURCE_DIR}/include/ExecQueueModel.hpp
     ${PROJECT_SOURCE_DIR}/include/QueueFilterProxyModel.hpp
