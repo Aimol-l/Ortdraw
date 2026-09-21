@@ -1,5 +1,8 @@
 #include "impl.hpp"
+#include <atomic>
+#include <dlfcn.h>
 #include <format>
+#include <mutex>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -186,17 +189,64 @@ void Runtime::Impl::evictIfNeeded() {
     }
 }
 
+// 某些发行版（例如 Arch 的 onnxruntime-opt-cuda）的 provider 动态库缺少对 libcudnn 的
+// DT_NEEDED，内部却保留了未定义的 cudnn 符号，导致 dlopen(provider) 以 undefined symbol 失败
+// （如 cudnnGetConvolutionBackwardDataAlgorithm_v7）。在 ORT 加载 provider 之前，把 cuDNN 的
+// 分发层与子库以 RTLD_GLOBAL 打开，让这些符号全局可见即可正常加载。
+// 注意：这些句柄故意不释放，符号必须一直可见；也不要在此 dlopen provider 试探——裸进程里
+// provider 的静态初始化可能直接段错误。
+static void exposeCudnnSymbols() {
+#ifndef _WIN32
+    static std::once_flag once;
+    std::call_once(once, [] {
+        constexpr const char* kProbe = "cudnnGetConvolutionBackwardDataAlgorithm_v7";
+        if (::dlsym(RTLD_DEFAULT, kProbe) != nullptr) return;   // 已经可见（正常安装或 LD_PRELOAD）
+        const char* libs[] = {"libcudnn.so.9",  "libcudnn_cnn.so.9", "libcudnn_ops.so.9",
+                              "libcudnn_adv.so.9", "libcudnn_graph.so.9",
+                              "libcudnn_heuristic.so.9"};
+        // RTLD_NODELETE：cudnn 在 libonnxruntime 之后加载，若参与退出期卸载，
+        // 其 fini 会先于 ORT 的静态析构执行，导致退出时崩溃；标记为不可卸载即可规避。
+        for (const char* n : libs)
+            (void)::dlopen(n, RTLD_NOW | RTLD_GLOBAL | RTLD_NODELETE);
+    });
+#endif
+}
+
+// provider 必需的 cuDNN 符号是否能解析（Windows 官方包依赖完整，直接交给 ORT 报错）
+static bool cudnnSymbolsResolvable() {
+#ifdef _WIN32
+    return true;
+#else
+    exposeCudnnSymbols();
+    return ::dlsym(RTLD_DEFAULT, "cudnnGetConvolutionBackwardDataAlgorithm_v7") != nullptr;
+#endif
+}
+
+// CUDA 可用性在本进程内的实测状态：// CUDA 可用性在本进程内的实测状态：0=未知，1=可用，2=已确认不可用（例如 provider 动态库损坏）。
+// 确认失败后不再对后续会话重试，避免每个模型都失败一次并刷屏。
+static std::atomic<int> g_cudaState{0};
+static std::atomic<bool> g_cudaFallbackReported{false};
+
 static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
                                                 const std::string& absPath,
                                                 const SessionOptions& opts,
                                                 std::int64_t mtime, std::uint64_t size,
                                                 bool useCuda) {
     Ort::SessionOptions so;
+    // ORT 的 W 级提示（如“部分节点回退 CPU”）由异常接管，这里只保留 E 级，保持输出干净
+    so.SetLogSeverityLevel(ORT_LOGGING_LEVEL_ERROR);
     so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     if (opts.intraThreads > 0) so.SetIntraOpNumThreads(opts.intraThreads);
     if (useCuda) {
+        exposeCudnnSymbols();   // 修复 provider 缺少 cudnn 依赖的发行版包
         OrtCUDAProviderOptions c{};
+        c.device_id = 0;
+        c.arena_extend_strategy = 0;   // kNextPowerOfTwo
+        // EXHAUSTIVE 搜索显存占用和时间都不可控；Heuristic 对推理足够
+        c.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchHeuristic;
+        c.do_copy_in_default_stream = 1;
         so.AppendExecutionProvider_CUDA(c);   // 失败则抛异常，由调用方决定回退策略
+        g_cudaState.store(1, std::memory_order_relaxed);
     }
     auto s = std::make_shared<SessionImpl>(env);
     s->ort = Ort::Session(*env, std::filesystem::path(absPath).c_str(), so);
@@ -286,12 +336,17 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
     std::string buildError;
     try {
         const bool wantCuda = (o.device == Device::CUDA)
-                           || (o.device == Device::Auto && Runtime::cudaAvailable());
+                           || (o.device == Device::Auto && Runtime::cudaAvailable()
+                               && g_cudaState.load(std::memory_order_relaxed) != 2);
         try {
             s = makeSession(env, abs, o, mtime, size, wantCuda);
         } catch (const std::exception& e) {
             if (o.device == Device::Auto && wantCuda) {
-                std::fprintf(stderr, "onnx_engine: CUDA 会话创建失败，回退 CPU: %s\n", e.what());
+                g_cudaState.store(2, std::memory_order_relaxed);
+                if (!g_cudaFallbackReported.exchange(true)) {
+                    std::fprintf(stderr, "onnx_engine: CUDA 初始化失败，改用 CPU（原因: %s）\n",
+                                 e.what());
+                }
                 s = makeSession(env, abs, o, mtime, size, false);
             } else {
                 throw;   // 显式 CUDA：不静默回退
@@ -511,7 +566,13 @@ Runtime::Runtime() : m_impl(std::make_unique<Impl>()) {
 }
 Runtime::~Runtime() = default;
 
-Runtime& Runtime::instance() { static Runtime r; return r; }
+Runtime& Runtime::instance() {
+    // 故意不析构：会话缓存里的 ORT Session 在退出期销毁时，CUDA provider 可能依赖
+    // 已被卸载/析构的 cuDNN 状态而崩溃（且静态析构顺序不可控）。进程退出由内核回收，
+    // 需要显式释放请调用 clearCache()。
+    static Runtime* r = new Runtime();
+    return *r;
+}
 
 ModelInfo Runtime::modelInfo(const std::string& path, const SessionOptions& opts) {
     std::string error;
@@ -546,12 +607,24 @@ void Runtime::setCacheLimits(int maxSessions, std::size_t maxBytes) {
 }
 
 bool Runtime::cudaAvailable() {
+    // 实测过失败（如 provider 动态库损坏）后，本进程内一律视为不可用
+    if (g_cudaState.load(std::memory_order_relaxed) == 2) return false;
+    bool listed = false;
     try {
-        auto providers = Ort::GetAvailableProviders();
-        for (const auto& p : providers)
-            if (p.find("CUDA") != std::string::npos) return true;
+        for (const auto& p : Ort::GetAvailableProviders())
+            if (p.find("CUDA") != std::string::npos) { listed = true; break; }
     } catch (...) {}
-    return false;
+    if (!listed) return false;
+    if (!cudnnSymbolsResolvable()) {
+        g_cudaState.store(2, std::memory_order_relaxed);
+        if (!g_cudaFallbackReported.exchange(true)) {
+            std::fprintf(stderr,
+                         "onnx_engine: CUDA provider 依赖的 cuDNN 符号不可用，使用 CPU"
+                         "（onnxruntime GPU 包与 cuDNN 版本不匹配？）\n");
+        }
+        return false;
+    }
+    return true;
 }
 
 } // namespace onnx_engine
