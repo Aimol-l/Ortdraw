@@ -64,10 +64,10 @@ private slots:
     void tensorRoundTrip() {
         std::vector<float> v{1,2,3,4}; std::vector<int64_t> sh{2,2};
         Tensor t(v, sh);
-        const auto b = onnx_convert::tensorToBuffer(t);
-        QCOMPARE(b.shape, (std::vector<int64_t>{2,2}));
-        QCOMPARE(b.type, onnx_engine::ElementType::Float32);
-        QCOMPARE(b.data.size(), std::size_t(4 * sizeof(float)));
+        QCOMPARE(shapeOf(t), (std::vector<int64_t>{2,2}));
+        QCOMPARE(t.dtype(), via::DataType::FLOAT32);
+        QCOMPARE(t.numel(), std::size_t(4));
+        QCOMPARE(onnx_convert::tensorElement(t, 0), 1.0f);
     }
 
     void imageToTensorKeepSizeMismatchReturnsEmpty() {

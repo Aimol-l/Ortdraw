@@ -3,10 +3,12 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <opencv2/core/mat.hpp>
 #include <utility>
 #include <vector>
 #include <QVariantList>
 #include <opencv2/imgproc.hpp>
+#include "engine/NodeData.hpp"
 #include "engine/onnx/OnnxTensorConvert.hpp"
 #include "engine/tasks/TaskSpec.hpp"
 
@@ -46,13 +48,12 @@ inline const cv::Scalar& classColor(int cls) {
     return kColors[((cls % n) + n) % n];
 }
 
-// 取第 idx 个输入为中性张量缓冲；失败返回 false
-inline bool tensorBufferInput(const QVector<NodeData>& inputs, int idx,
-                              onnx_convert::TensorBuffer& out) {
-    if (idx < 0 || idx >= inputs.size()) return false;
-    if (!std::holds_alternative<Tensor>(inputs[idx])) return false;
-    out = onnx_convert::tensorToBuffer(std::get<Tensor>(inputs[idx]));
-    return !out.data.empty();
+// 取第 idx 个输入为 Tensor（不做拷贝）；失败返回 nullptr
+inline const Tensor* tensorInput(const QVector<NodeData>& inputs, int idx) {
+    if (idx < 0 || idx >= inputs.size()) return nullptr;
+    if (!std::holds_alternative<Tensor>(inputs[idx])) return nullptr;
+    const Tensor& t = std::get<Tensor>(inputs[idx]);
+    return t.numel() == 0 ? nullptr : &t;
 }
 
 // 取第 idx 个输入为非空图像；失败返回 nullptr
@@ -63,10 +64,9 @@ inline const cv::Mat* imageInputAt(const QVector<NodeData>& inputs, int idx = 0)
     return m.empty() ? nullptr : &m;
 }
 
-// 按 (channel, index) 读取张量元素，自动按 row-major 计算偏移
-inline float readElement(const onnx_convert::TensorBuffer& b, std::size_t idx) {
-    const int esize = onnx_engine::elementTypeSize(b.type);
-    return onnx_convert::detail::readScalarAsFloat(b.data.data() + idx * std::size_t(esize), b.type);
+// 按 (channel, index) 读取 host 张量元素
+inline float readElement(const Tensor& host, std::size_t idx) {
+    return onnx_convert::tensorElement(host, idx);
 }
 
 // 几何元信息（与预处理端 1x8 布局一致）
@@ -79,8 +79,8 @@ struct GeometryMeta {
 };
 
 // 解析元信息张量：要求至少 8 个元素，取前 8 个
-inline bool parseMeta(const onnx_convert::TensorBuffer& b, GeometryMeta& m) {
-    if (onnx_convert::detail::numelOf(b.shape) < 8) return false;
+inline bool parseMeta(const Tensor& b, GeometryMeta& m) {
+    if (b.numel() < 8) return false;
     m.mode = int(std::lround(readElement(b, 0)));
     m.origW = readElement(b, 1);
     m.origH = readElement(b, 2);
@@ -150,10 +150,11 @@ struct Detection {
 // （如合成测试的 [1,84,1]），故先用「哪一维才可能是 4+nc（>=5）」判定，再回退到大小比较。
 // channelsFirst=true 时：C=shape[1], N=shape[2]，元素偏移 = c*N + n；
 // channelsFirst=false 时：N=shape[1], C=shape[2]，元素偏移 = n*C + c。
-inline bool parseDetectHead(const onnx_convert::TensorBuffer& b, bool& channelsFirst,
+inline bool parseDetectHead(const Tensor& b, bool& channelsFirst,
                             int64_t& C, int64_t& N) {
-    if (b.shape.size() != 3 || b.shape[0] != 1) return false;
-    const int64_t d1 = b.shape[1], d2 = b.shape[2];
+    const auto shape = b.shape();
+    if (shape.size() != 3 || shape[0] != 1) return false;
+    const int64_t d1 = shape[1], d2 = shape[2];
     if (d1 <= 0 || d2 <= 0) return false;
 
     if (d1 >= 5 && d2 < 5) {
@@ -171,7 +172,7 @@ inline bool parseDetectHead(const onnx_convert::TensorBuffer& b, bool& channelsF
 }
 
 // 解析检测头（含可选掩码系数范围 [coeffBegin, C)），过滤 conf 后做 NMS
-inline bool decodeDetections(const onnx_convert::TensorBuffer& b, float conf, float iou,
+inline bool decodeDetections(const Tensor& b, float conf, float iou,
                              int maxBoxes, std::vector<Detection>& out) {
     bool cf = false;
     int64_t C = 0, N = 0;
@@ -220,8 +221,7 @@ inline bool decodeDetections(const onnx_convert::TensorBuffer& b, float conf, fl
 }
 
 // 在画布上画框 + "<cls> <score两位小数>"
-inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
-                           bool drawScore, int lineWidth) {
+inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,bool drawScore, int lineWidth) {
     const int lw = lineWidth > 0 ? lineWidth : 1;
     for (const Detection& d : dets) {
         const cv::Scalar& col = classColor(d.cls);
@@ -230,9 +230,9 @@ inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
                       cv::Point(int(std::lround(d.box.x + d.box.width)),
                                 int(std::lround(d.box.y + d.box.height))),
                       col, lw);
-        QString text = QString::number(d.cls);
-        if (drawScore) text += QLatin1Char(' ') + QString::number(double(d.score), 'f', 2);
-        cv::putText(canvas, text.toStdString(),
+        std::string text = std::format("{}:{:.2f}",d.cls,d.score);
+        if(lw>0)
+            cv::putText(canvas, text,
                     cv::Point(int(std::lround(d.box.x)), std::max(12, int(std::lround(d.box.y)) - 4)),
                     cv::FONT_HERSHEY_SIMPLEX, 1, col, 1, cv::LINE_AA);
     }
@@ -240,23 +240,24 @@ inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
 
 // 分割原型 [1, nm, mh, mw]（或 [nm, mh, mw]）→ 逐元素访问
 struct ProtoView {
-    const onnx_convert::TensorBuffer* buf = nullptr;
+    const Tensor* host = nullptr;
     bool chFirst = true;
     int64_t nm = 0, mh = 0, mw = 0;
 
-    static bool make(const onnx_convert::TensorBuffer& b, ProtoView& v) {
-        v.buf = &b;
-        if (b.shape.size() == 4) {
-            if (b.shape[0] != 1) return false;
-            v.chFirst = b.shape[1] < b.shape[3];
-            v.nm = v.chFirst ? b.shape[1] : b.shape[3];
-            v.mh = v.chFirst ? b.shape[2] : b.shape[1];
-            v.mw = v.chFirst ? b.shape[3] : b.shape[2];
-        } else if (b.shape.size() == 3) {
+    static bool make(const Tensor& b, ProtoView& v) {
+        v.host = &b;
+        const auto shape = b.shape();
+        if (shape.size() == 4) {
+            if (shape[0] != 1) return false;
+            v.chFirst = shape[1] < shape[3];
+            v.nm = v.chFirst ? shape[1] : shape[3];
+            v.mh = v.chFirst ? shape[2] : shape[1];
+            v.mw = v.chFirst ? shape[3] : shape[2];
+        } else if (shape.size() == 3) {
             v.chFirst = true;
-            v.nm = b.shape[0];
-            v.mh = b.shape[1];
-            v.mw = b.shape[2];
+            v.nm = shape[0];
+            v.mh = shape[1];
+            v.mw = shape[2];
         } else {
             return false;
         }
@@ -265,12 +266,12 @@ struct ProtoView {
 
     float at(int64_t k, int64_t y, int64_t x) const {
         std::size_t idx;
-        if (buf->shape.size() == 3)
+        if (host->shape().size() == 3)
             idx = std::size_t((k * mh + y) * mw + x);
         else
             idx = chFirst ? std::size_t((k * mh + y) * mw + x)
                           : std::size_t(((y * mw + x) * nm) + k);
-        return readElement(*buf, idx);
+        return readElement(*host, idx);
     }
 };
 
@@ -320,30 +321,37 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_convert::TensorBuffer buf, metaBuf;
+            const Tensor* head = tensorInput(inputs, 0);
             const cv::Mat* img = imageInputAt(inputs, 1);
-            if (!tensorBufferInput(inputs, 0, buf) || !img ||
-                !tensorBufferInput(inputs, 2, metaBuf))
+            const Tensor* metaIn = tensorInput(inputs, 2);
+            if (!head || !img || !metaIn)
                 return {false, QStringLiteral("需要 检测/原图/元信息 三个输入"), {}};
 
-            GeometryMeta meta;
-            if (!parseMeta(metaBuf, meta))
+            Tensor headHost, metaHost;
+            if (!onnx_convert::toHostTensor(*head, headHost))
+                return {false, QStringLiteral("YOLO 输出形状无法解析"), {}};
+            if (!onnx_convert::toHostTensor(*metaIn, metaHost))
                 return {false, QStringLiteral("元信息张量无效"), {}};
+
+            GeometryMeta meta;
+            if (!parseMeta(metaHost, meta))
+                return {false, QStringLiteral("元信息张量无效"), {}};
+
             // 约束：元信息记录的原图尺寸必须与输入原图一致
             if (int(std::lround(meta.origW)) != img->cols
                 || int(std::lround(meta.origH)) != img->rows)
                 return {false, QStringLiteral("元信息中的原图尺寸与输入原图不一致"), {}};
 
-            const float conf = p.value("conf", 0.25).toFloat();
-            const float iou = p.value("iou", 0.45).toFloat();
-            const int maxBoxes = std::max(1, p.value("maxBoxes", 300).toInt());
+            const float iou      = p.value("iou", 0.45).toFloat();
+            const int lineWidth  = p.value("lineWidth", 2).toInt();
+            const float conf     = p.value("conf", 0.25).toFloat();
             const bool drawScore = p.value("drawScore", true).toBool();
-            const int lineWidth = p.value("lineWidth", 2).toInt();
+            const int maxBoxes   = std::max(1, p.value("maxBoxes", 300).toInt());
 
             std::vector<Detection> dets;
-            if (!decodeDetections(buf, conf, iou, maxBoxes, dets))
+            if (!decodeDetections(headHost, conf, iou, maxBoxes, dets)){
                 return {false, QStringLiteral("YOLO 输出形状无法解析"), {}};
-
+            }
             // 网络坐标 → 原图坐标
             for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
 
@@ -377,15 +385,21 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_convert::TensorBuffer head, protos, metaBuf;
+            const Tensor* headIn = tensorInput(inputs, 0);
+            const Tensor* protoIn = tensorInput(inputs, 1);
             const cv::Mat* img = imageInputAt(inputs, 2);
-            if (!tensorBufferInput(inputs, 0, head) ||
-                !tensorBufferInput(inputs, 1, protos) || !img ||
-                !tensorBufferInput(inputs, 3, metaBuf))
+            const Tensor* metaIn = tensorInput(inputs, 3);
+            if (!headIn || !protoIn || !img || !metaIn)
+                return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
+
+            Tensor head, protos, metaHost;
+            if (!onnx_convert::toHostTensor(*headIn, head) ||
+                !onnx_convert::toHostTensor(*protoIn, protos) ||
+                !onnx_convert::toHostTensor(*metaIn, metaHost))
                 return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
 
             GeometryMeta meta;
-            if (!parseMeta(metaBuf, meta))
+            if (!parseMeta(metaHost, meta))
                 return {false, QStringLiteral("元信息张量无效"), {}};
             // 约束：元信息记录的原图尺寸必须与输入原图一致
             if (int(std::lround(meta.origW)) != img->cols
@@ -479,11 +493,14 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext& ctx, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_convert::TensorBuffer buf;
-            if (!tensorBufferInput(inputs, 0, buf))
-                return {false, QStringLiteral("输入不是张量"), {}};
+            const Tensor* in = tensorInput(inputs, 0);
+            if (!in) return {false, QStringLiteral("输入不是张量"), {}};
 
-            const std::size_t n = onnx_convert::detail::numelOf(buf.shape);
+            Tensor buf;
+            if (!onnx_convert::toHostTensor(*in, buf))
+                return {false, QStringLiteral("输入张量为空"), {}};
+
+            const std::size_t n = buf.numel();
             if (n == 0) return {false, QStringLiteral("输入张量为空"), {}};
 
             std::vector<float> logits(n);

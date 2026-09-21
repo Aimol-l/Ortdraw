@@ -12,13 +12,6 @@
 
 namespace onnx_convert {
 
-// 应用侧中性张量：仅用于**后处理读取**（SDK 已改用 Tensorvia::Tensor，不再有该类型）。
-struct TensorBuffer {
-    onnx_engine::ElementType type = onnx_engine::ElementType::Unknown;
-    std::vector<int64_t> shape;
-    std::vector<std::uint8_t> data;
-};
-
 // ============================ 失败约定 (failure convention) ============================
 // 本头的转换函数在失败时**不抛异常**，而是返回可判定的「空」值，由调用方
 // （PreProcess/OnnxInfer 执行器）检测后向用户产出具体错误信息：
@@ -351,25 +344,29 @@ inline Tensor imageToTensor(const cv::Mat& img,
     return out;
 }
 
-// Tensorvia::Tensor → 应用侧中性张量（拷贝到 host 字节缓冲，供后处理读取）。
-inline TensorBuffer tensorToBuffer(const Tensor& t) {
-    TensorBuffer b;
-    b.type = onnx_engine::fromViaDataType(t.dtype());
-    const auto span = t.shape();
-    b.shape.assign(span.begin(), span.end());
+// 取 CPU+连续的 host 副本：非连续/非 CPU 时物化，否则为共享 impl 的浅拷贝。
+inline bool toHostTensor(const Tensor& t, Tensor& host) {
+    if (t.numel() == 0) return false;
+    host = t.contiguous();
+    host.to_host();
+    return via::calc_dtype_size(host.dtype()) > 0;
+}
 
-    const std::size_t n = t.numel();
-    const std::size_t esize = via::calc_dtype_size(t.dtype());
-    if (n > 0 && esize > 0) {
-        // 先取连续副本，再确保数据位于 host，避免直接解引用非连续/设备指针。
-        // Tensorvia 提供 contiguous() 与 to_host()（均非 const）。本应用为 CPU 后端，
-        // to_host() 为无操作；contiguous() 对已连续张量可能返回共享 impl 的浅拷贝。
-        Tensor host = t.contiguous();
-        host.to_host();
-        b.data.resize(n * esize);
-        std::memcpy(b.data.data(), host.data(), n * esize);
+// 从 host 张量读取第 idx 个元素为 float（按 dtype 解码）
+inline float tensorElement(const Tensor& host, std::size_t idx) {
+    const std::size_t esize = via::calc_dtype_size(host.dtype());
+    const auto* p = static_cast<const std::uint8_t*>(host.data()) + idx * esize;
+    switch (host.dtype()) {
+    case via::DataType::FLOAT32:  { float v;    std::memcpy(&v, p, 4); return v; }
+    case via::DataType::FLOAT64:  { double v;   std::memcpy(&v, p, 8); return float(v); }
+    case via::DataType::FLOAT16:  { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::halfBitsToDouble(h)); }
+    case via::DataType::BFLOAT16: { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::bfloat16BitsToDouble(h)); }
+    case via::DataType::INT8:     { std::int8_t v;   std::memcpy(&v, p, 1); return float(v); }
+    case via::DataType::INT16:    { std::int16_t v;  std::memcpy(&v, p, 2); return float(v); }
+    case via::DataType::INT32:    { std::int32_t v;  std::memcpy(&v, p, 4); return float(v); }
+    case via::DataType::INT64:    { std::int64_t v;  std::memcpy(&v, p, 8); return float(v); }
+    default: return 0.0f;
     }
-    return b;
 }
 
 // Tensorvia::Tensor → NodeData。
