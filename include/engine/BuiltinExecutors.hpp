@@ -17,12 +17,14 @@
 #include "engine/executors/ThresholdExecutor.hpp"
 #include "engine/executors/TensorExecutor.hpp"
 #include "engine/executors/PreProcessExecutor.hpp"
+#include "engine/executors/OnnxInferExecutor.hpp"
 #include "engine/tasks/PreProcessRegistry.hpp"
 
 inline void registerBuiltinExecutors() {
     auto& r = NodeRegistry::instance();
     registerBuiltinPreProcessTasks();
     r.registerExecutor("PreProcess", std::make_shared<PreProcessExecutor>());
+    r.registerExecutor("OnnxInfer", std::make_shared<OnnxInferExecutor>());
     r.registerExecutor("ImageLoad", std::make_shared<ImageLoadExecutor>());
     r.registerExecutor("ImageSave", std::make_shared<ImageSaveExecutor>());
     r.registerExecutor("ImageShow", std::make_shared<ImageShowExecutor>());
