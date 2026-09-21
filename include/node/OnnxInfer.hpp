@@ -146,7 +146,9 @@ private:
             nm->rebuildNodePorts(this, ins, outs);
             if (m_input_ports.size() != ins.size() || m_output_ports.size() != outs.size())
                 rebuildPorts(ins, outs);
-        } else {
+        } else if (!static_cast<NodeManager*>(NodeManager::instance())->nodeHasEdges(this)) {
+            // setParams 读图恢复路径：仅当节点无连线时才重建端口，避免删除
+            // 撤销/重做中仍被旧边引用的端口（有连线时保持端口与连线一致）。
             rebuildPorts(ins, outs);
         }
     }

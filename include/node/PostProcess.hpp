@@ -82,8 +82,10 @@ public:
         const QVariantMap given = p.value("params").toMap();
         for (auto it = given.begin(); it != given.end(); ++it)
             m_params[it.key()] = it.value();
-        // 读取图文件时直接重建端口（不触发断线），避免破坏已恢复的连线
-        rebuildPorts(spec->inputs, spec->outputs);
+        // 仅当节点无连线时才重建端口（读图加载阶段）。撤销/重做经 setParams
+        // 恢复参数时旧边仍指向旧端口，此时重建会删除被引用的端口造成悬垂指针。
+        if(!static_cast<NodeManager*>(NodeManager::instance())->nodeHasEdges(this))
+            rebuildPorts(spec->inputs, spec->outputs);
         emit paramsChanged();
     }
 

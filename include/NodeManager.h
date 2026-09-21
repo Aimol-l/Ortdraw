@@ -612,24 +612,35 @@ public:
         }
         refresh();
     }
-    // 重建节点端口：先经命令删除涉及旧端口的边，再重建端口，保证撤销一致
-    Q_INVOKABLE void rebuildNodePorts(BaseNode* node, const QVector<PortSpec>& ins,
-                                      const QVector<PortSpec>& outs){
-        if(!m_paint_board || !node) return;
-        // 旧端口即将被删除，而撤销历史中的 RemoveEdgeCMD 仍持有裸 Port*，
-        // 撤销时会访问悬垂指针；故在删除边之前清空历史，且删除动作本身不入栈。
-        m_cmd_manager.clear();
-        QVector<Edge> to_remove;
+    // 该节点当前是否有任意连线（用于 setParams 判断能否安全重建端口）
+    Q_INVOKABLE bool nodeHasEdges(BaseNode* node) const {
+        if(!node || !m_paint_board) return false;
         for(const Edge& e : m_paint_board->m_graph.getAllEdges()){
             if(!e.start_port || !e.stop_port) continue;
             if(e.start_port->father() == node || e.stop_port->father() == node)
-                to_remove.append(e);
+                return true;
         }
-        for(const Edge& e : to_remove){
-            auto cmd = std::make_unique<RemoveEdgeCMD>(e.start_port, e.stop_port, m_paint_board);
-            m_cmd_manager.executeCommand(std::move(cmd));
+        return false;
+    }
+    // 重建节点端口：先直接删边，再重建端口，避免留下悬垂 Port*
+    Q_INVOKABLE void rebuildNodePorts(BaseNode* node, const QVector<PortSpec>& ins,
+                                      const QVector<PortSpec>& outs){
+        if(!m_paint_board || !node) return;
+        // 1) 先删除涉及该节点旧端口的所有边。此处刻意不使用命令入栈：
+        //    RemoveEdgeCMD 持有裸 Port*，若入栈则撤销/重做会访问即将被删除的端口。
+        //    按值复制边列表，避免删除过程中迭代器失效。
+        const QVector<Edge> edges = m_paint_board->m_graph.getAllEdges();
+        for(const Edge& e : edges){
+            if(!e.start_port || !e.stop_port) continue;
+            if(e.start_port->father() == node || e.stop_port->father() == node)
+                m_paint_board->m_graph.removeEdge(e.start_port, e.stop_port);
         }
+        // 2) 清空历史：旧历史项可能引用本节点刚删除的端口或已删除的边指针，
+        //    保留会导致后续撤销访问悬垂指针；不做选择性裁剪，整体清空最安全。
+        m_cmd_manager.clear();
+        // 3) 旧边已删除，重建端口不再有悬垂引用
         node->rebuildPorts(ins, outs);
+        syncLastState();
         refresh();
     }
     Q_INVOKABLE void clearGraph(){
