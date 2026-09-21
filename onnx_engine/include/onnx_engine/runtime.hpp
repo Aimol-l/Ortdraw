@@ -9,9 +9,12 @@ class ONNX_ENGINE_API Session {
 public:
     virtual ~Session() = default;
     virtual const ModelInfo& info() const = 0;
-    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回
-    virtual bool run(const std::vector<TensorBuffer>& inputs,
-                     std::vector<TensorBuffer>& outputs,
+    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回。
+    // 输入：CPU 且连续的 Tensor 直接以非拥有指针喂给 ORT（零拷贝）；
+    //       否则内部做一次 contiguous/host 拷贝。
+    // 输出：构造 Tensor 并按 ORT 结果写入（一次拷贝）。
+    virtual bool run(const std::vector<Tensor>& inputs,
+                     std::vector<Tensor>& outputs,
                      std::string& error) = 0;
 };
 

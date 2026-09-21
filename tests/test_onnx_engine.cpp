@@ -2,18 +2,23 @@
 #include <QTemporaryFile>
 #include <cstring>
 #include <thread>
+#include <vector>
 #include "onnx_engine/runtime.hpp"
 using namespace onnx_engine;
 
 class TestOnnxEngine : public QObject {
     Q_OBJECT
 private:
-    static TensorBuffer f32buf(const std::vector<int64_t>& shape, float v) {
-        TensorBuffer b; b.type = ElementType::Float32; b.shape = shape;
-        std::size_t n = 1; for (auto d : shape) n *= std::size_t(d);
-        b.data.resize(n * sizeof(float));
-        for (std::size_t i = 0; i < n; ++i) std::memcpy(b.data.data() + i * sizeof(float), &v, sizeof(float));
-        return b;
+    static Tensor f32buf(const std::vector<int64_t>& shape, float v) {
+        std::size_t n = 1;
+        for (auto d : shape) n *= std::size_t(d);
+        std::vector<float> vals(n, v);
+        return Tensor(vals, shape);
+    }
+
+    static std::vector<int64_t> shapeOf(const Tensor& t) {
+        const auto s = t.shape();
+        return std::vector<int64_t>(s.begin(), s.end());
     }
 
 private slots:
@@ -21,6 +26,11 @@ private slots:
         (void)Runtime::cudaAvailable();                     // 必须能链接到库符号
         QCOMPARE(QString::fromLatin1(elementTypeName(ElementType::Float32)), QString("float32"));
         QCOMPARE(elementTypeSize(ElementType::Float32), 4);
+        // 设计 §4.1 映射：UInt8→INT16、Bool→INT8，其余同名
+        QCOMPARE(toViaDataType(ElementType::UInt8), via::DataType::INT16);
+        QCOMPARE(toViaDataType(ElementType::Bool),  via::DataType::INT8);
+        QCOMPARE(fromViaDataType(via::DataType::FLOAT32), ElementType::Float32);
+        QCOMPARE(fromViaDataType(via::DataType::INT16),   ElementType::Int16);
     }
 
     void modelInfoReadsTwoInputsOneOutput() {
@@ -93,13 +103,15 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY2(s, err.c_str());
-        std::vector<TensorBuffer> ins{f32buf({3,4}, 2.0f), f32buf({3,4}, 3.0f)}, outs;
+        std::vector<Tensor> ins{f32buf({3,4}, 2.0f), f32buf({3,4}, 3.0f)}, outs;
         QVERIFY2(s->run(ins, outs, err), err.c_str());
         QCOMPARE(outs.size(), std::size_t(1));
-        QCOMPARE(outs[0].type, ElementType::Float32);
-        QCOMPARE(outs[0].shape, (std::vector<int64_t>{3,4}));
-        QCOMPARE(outs[0].data.size(), std::size_t(12 * sizeof(float)));
-        float got = 0; std::memcpy(&got, outs[0].data.data(), sizeof(float));
+        // 同形状/连续/CPU 走零拷贝输入路径，结果不变
+        QCOMPARE(outs[0].dtype(), via::DataType::FLOAT32);
+        QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{3,4}));
+        QCOMPARE(outs[0].numel(), std::size_t(12));
+        float got = 0;
+        std::memcpy(&got, outs[0].data(), sizeof(float));
         QCOMPARE(got, 5.0f);
     }
 
@@ -108,11 +120,11 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(dyn, {}, err);
         QVERIFY2(s, err.c_str());
-        std::vector<TensorBuffer> ins{f32buf({2,4}, 1.0f), f32buf({2,4}, 2.0f)}, outs;
+        std::vector<Tensor> ins{f32buf({2,4}, 1.0f), f32buf({2,4}, 2.0f)}, outs;
         QVERIFY2(s->run(ins, outs, err), err.c_str());
         QCOMPARE(outs.size(), std::size_t(1));
-        QCOMPARE(outs[0].shape, (std::vector<int64_t>{2,4}));
-        QCOMPARE(outs[0].data.size(), std::size_t(8 * sizeof(float)));
+        QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{2,4}));
+        QCOMPARE(outs[0].numel(), std::size_t(8));
     }
 
     void runWrongInputCountFails() {
@@ -120,7 +132,7 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<TensorBuffer> outs;
+        std::vector<Tensor> outs;
         QVERIFY(!s->run({f32buf({3,4}, 1.0f)}, outs, err));
         QVERIFY(!err.empty());
     }
@@ -130,7 +142,7 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<TensorBuffer> outs;
+        std::vector<Tensor> outs;
         QVERIFY(!s->run({f32buf({2,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs, err));
         QVERIFY(!err.empty());
     }
@@ -140,11 +152,9 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        TensorBuffer i32;
-        i32.type = ElementType::Int32;
-        i32.shape = {3,4};
-        i32.data.resize(12 * sizeof(std::int32_t));
-        std::vector<TensorBuffer> outs;
+        std::vector<std::int32_t> data(12, 0);
+        Tensor i32(data, std::vector<int64_t>{3,4});
+        std::vector<Tensor> outs;
         QVERIFY(!s->run({i32, i32}, outs, err));
         QVERIFY(!err.empty());
     }
@@ -154,20 +164,8 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<TensorBuffer> outs;
+        std::vector<Tensor> outs;
         QVERIFY(!s->run({f32buf({3,4}, 1.0f), f32buf({3,4,1}, 1.0f)}, outs, err));
-        QVERIFY(!err.empty());
-    }
-
-    void runWrongDataSizeFails() {
-        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
-        std::string err;
-        auto s = Runtime::instance().session(fx, {}, err);
-        QVERIFY(s);
-        TensorBuffer truncated = f32buf({3,4}, 1.0f);
-        truncated.data.resize(truncated.data.size() - sizeof(float));
-        std::vector<TensorBuffer> outs;
-        QVERIFY(!s->run({truncated, f32buf({3,4}, 2.0f)}, outs, err));
         QVERIFY(!err.empty());
     }
 
@@ -178,7 +176,7 @@ private slots:
         QVERIFY2(s, err.c_str());
         QCOMPARE(s->info().outputs.size(), std::size_t(1));
         QVERIFY(!s->info().outputs[0].isTensor);
-        std::vector<TensorBuffer> ins{f32buf({2}, 1.0f)}, outs;
+        std::vector<Tensor> ins{f32buf({2}, 1.0f)}, outs;
         QVERIFY(!s->run(ins, outs, err));
         QVERIFY(!err.empty());
     }
@@ -189,7 +187,7 @@ private slots:
         SessionOptions o; o.device = Device::CPU; o.intraThreads = 1;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());
-        std::vector<TensorBuffer> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
+        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
         QVERIFY2(s->run(ins, outs, err), err.c_str());
         QCOMPARE(outs.size(), std::size_t(1));
     }
@@ -200,7 +198,7 @@ private slots:
         SessionOptions o; o.device = Device::Auto;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());          // CUDA 不可用时回退 CPU 并成功
-        std::vector<TensorBuffer> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs;
+        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs;
         QVERIFY2(s->run(ins, outs, err), err.c_str());
     }
 
@@ -300,7 +298,7 @@ private slots:
             // 无可用 CUDA：必须报错而非静默回退
             QVERIFY(!err.empty());
         } else {
-            std::vector<TensorBuffer> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
+            std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
             QVERIFY2(s->run(ins, outs, err), err.c_str());
         }
     }

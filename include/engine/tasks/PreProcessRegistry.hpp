@@ -50,95 +50,14 @@ inline const cv::Mat* imageInput(const QVector<NodeData>& inputs, int idx = 0) {
     return &std::get<cv::Mat>(inputs[idx]);
 }
 
-// 逐元素归一化：y = (x - mean) / std * scale（4D 时按通道取 mean/std，否则取首值）
-inline onnx_engine::TensorBuffer normalizeBuffer(const onnx_engine::TensorBuffer& in,
-                                                 double scale,
-                                                 const QVector<double>& mean,
-                                                 const QVector<double>& stdev) {
-    const int esize = onnx_engine::elementTypeSize(in.type);
-    const std::size_t n = onnx_convert::detail::numelOf(in.shape);
-    if (esize <= 0 || in.data.size() != n * std::size_t(esize)) return {};
-
-    onnx_engine::TensorBuffer out = in;
-    bool nchw = false;
-    int64_t C = 1, inner = 1;
-    if (in.shape.size() == 4) {
-        nchw = (in.shape[1] == 3);
-        C = nchw ? in.shape[1] : in.shape[3];
-        inner = nchw ? (in.shape[2] * in.shape[3]) : 1;
-    }
-    for (std::size_t i = 0; i < n; ++i) {
-        float v = onnx_convert::detail::readScalarAsFloat(in.data.data() + i * esize, in.type);
-        double m = mean.isEmpty() ? 0.0 : mean[0];
-        double s = stdev.isEmpty() ? 1.0 : stdev[0];
-        if (in.shape.size() == 4 && C > 0) {
-            const int64_t c = nchw ? int64_t((i / inner) % C) : int64_t(i % C);
-            if (int(c) < mean.size()) m = mean[int(c)];
-            if (int(c) < stdev.size()) s = stdev[int(c)];
-        }
-        if (s == 0.0) s = 1.0;
-        v = float((double(v) - m) / s * scale);
-        onnx_convert::detail::writeScalarAsFloat(out.data.data() + i * esize, in.type, v);
-    }
-    return out;
-}
-
-// 4D 张量空间维缩放（NCHW/NHWC 自动判定），逐通道用 cv::resize（INTER_LINEAR）
-inline onnx_engine::TensorBuffer resizeBuffer(const onnx_engine::TensorBuffer& in,
-                                              int newW, int newH) {
-    if (in.shape.size() != 4 || newW <= 0 || newH <= 0) return {};
-    const int esize = onnx_engine::elementTypeSize(in.type);
-    const std::size_t n = onnx_convert::detail::numelOf(in.shape);
-    if (esize <= 0 || in.data.size() != n * std::size_t(esize)) return {};
-
-    const bool nchw = (in.shape[1] == 3);
-    const int64_t N = in.shape[0];
-    const int64_t C = nchw ? in.shape[1] : in.shape[3];
-    const int64_t H = nchw ? in.shape[2] : in.shape[1];
-    const int64_t W = nchw ? in.shape[3] : in.shape[2];
-    if (N <= 0 || C <= 0 || H <= 0 || W <= 0) return {};
-
-    onnx_engine::TensorBuffer out;
-    out.type = in.type;
-    out.shape = nchw ? std::vector<int64_t>{N, C, newH, newW}
-                     : std::vector<int64_t>{N, newH, newW, C};
-    out.data.resize(std::size_t(N) * C * newH * newW * std::size_t(esize));
-
-    for (int64_t nb = 0; nb < N; ++nb) {
-        for (int64_t c = 0; c < C; ++c) {
-            cv::Mat plane(int(H), int(W), CV_32F);
-            for (int64_t y = 0; y < H; ++y)
-                for (int64_t x = 0; x < W; ++x) {
-                    const std::size_t si = nchw
-                        ? std::size_t(((nb * C + c) * H + y) * W + x)
-                        : std::size_t(((nb * H + y) * W + x) * C + c);
-                    plane.at<float>(int(y), int(x)) =
-                        onnx_convert::detail::readScalarAsFloat(in.data.data() + si * esize, in.type);
-                }
-            cv::Mat rs;
-            cv::resize(plane, rs, cv::Size(newW, newH), 0, 0, cv::INTER_LINEAR);
-            for (int64_t y = 0; y < newH; ++y)
-                for (int64_t x = 0; x < newW; ++x) {
-                    const std::size_t di = nchw
-                        ? std::size_t(((nb * C + c) * newH + y) * newW + x)
-                        : std::size_t(((nb * newH + y) * newW + x) * C + c);
-                    onnx_convert::detail::writeScalarAsFloat(
-                        out.data.data() + di * esize, out.type, rs.at<float>(int(y), int(x)));
-                }
-        }
-    }
-    return out;
-}
-
-// 中性张量 → NodeData 输出；失败时返回错误
-inline bool pushTensor(const onnx_engine::TensorBuffer& buf, ExecResult& r, const QString& err) {
-    const NodeData d = onnx_convert::tensorToNodeData(buf);
-    if (std::holds_alternative<std::monostate>(d)) {
+// Tensorvia 张量 → NodeData 输出；空张量视为失败并返回错误
+inline bool pushTensor(const Tensor& t, ExecResult& r, const QString& err) {
+    if (t.numel() == 0) {
         r.ok = false;
         r.error = err;
         return false;
     }
-    r.outputs.push_back(d);
+    r.outputs.push_back(NodeData{t});
     return true;
 }
 
@@ -188,8 +107,7 @@ inline void registerBuiltinPreProcessTasks() {
               {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
             {"sizeWH", QStringLiteral("宽x高"), "size2", "0x0", {}, 2, 0, {}, ""},
         };
-        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
-                              const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
             if (!img) return {false, QStringLiteral("输入不是图像"), {}};
             if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
@@ -220,10 +138,10 @@ inline void registerBuiltinPreProcessTasks() {
             const QVector<double> mean = preprocess_detail::parseDoubles(p.value("mean").toString());
             const QVector<double> stdev = preprocess_detail::parseDoubles(p.value("std").toString());
 
-            const auto buf = onnx_convert::imageToTensor(
+            Tensor buf = onnx_convert::imageToTensor(
                 *img, shape, dtypeOf(p.value("dtype", "fp32").toString()),
                 norm, mean, stdev, channel, keep ? "keep" : "auto");
-            if (buf.data.empty())
+            if (buf.numel() == 0)
                 return {false, QStringLiteral("标准预处理失败（通道或尺寸不匹配）"), {}};
 
             ExecResult r;
@@ -247,20 +165,28 @@ inline void registerBuiltinPreProcessTasks() {
             {"dtype", QStringLiteral("精度"), "select", "fp32",
              {{"fp32", "fp32"}, {"fp16", "fp16"}}},
         };
-        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
-                              const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
-            if (!img) return {false, QStringLiteral("输入不是图像"), {}};
-            if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
+
+            if (!img) 
+                return {false, QStringLiteral("输入不是图像"), {}};
+            if (img->empty()) 
+                return {false, QStringLiteral("输入图像为空"), {}};
 
             const int size = p.value("size", 640).toInt();
             const int pad = p.value("pad", 114).toInt();
-            if (size <= 0) return {false, QStringLiteral("letterbox 尺寸无效"), {}};
+
+            if (size <= 0) 
+                return {false, QStringLiteral("letterbox 尺寸无效"), {}};
 
             cv::Mat bgr;
-            if (img->channels() == 1)       cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
-            else if (img->channels() == 4)  cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
-            else                            bgr = *img;
+
+            if (img->channels() == 1)       
+                cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
+            else if (img->channels() == 4)  
+                cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
+            else
+                bgr = *img;
 
             const double scale = std::min(double(size) / bgr.cols, double(size) / bgr.rows);
             const int nw = std::max(1, int(std::lround(bgr.cols * scale)));
@@ -276,10 +202,11 @@ inline void registerBuiltinPreProcessTasks() {
                                cv::BORDER_CONSTANT, cv::Scalar(pv, pv, pv));
 
             // 统一走 imageToTensor：BGR→RGB、/255、可选 fp16
-            const auto buf = onnx_convert::imageToTensor(
+            Tensor buf = onnx_convert::imageToTensor(
                 canvas, {1, 3, size, size}, dtypeOf(p.value("dtype", "fp32").toString()),
                 "div255", {}, {}, "rgb", "keep");
-            if (buf.data.empty())
+
+            if (buf.numel() == 0)
                 return {false, QStringLiteral("YOLO 预处理失败（尺寸或通道不匹配）"), {}};
 
             ExecResult r;

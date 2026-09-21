@@ -1,6 +1,7 @@
 #include "impl.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <iterator>
 #include <stdexcept>
@@ -56,6 +57,25 @@ std::string shapeStr(const std::vector<int64_t>& shape) {
     return s + "]";
 }
 
+// Tensorvia 可承载的子集：UInt8/Bool 经映射承载，UInt16+ 与 Unknown 不支持。
+bool isSupportedElement(ElementType t) {
+    switch (t) {
+    case ElementType::Float32:
+    case ElementType::Float64:
+    case ElementType::Float16:
+    case ElementType::BFloat16:
+    case ElementType::Int8:
+    case ElementType::Int16:
+    case ElementType::Int32:
+    case ElementType::Int64:
+    case ElementType::UInt8:
+    case ElementType::Bool:
+        return true;
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
 static std::string normPath(const std::string& path) {
@@ -102,6 +122,36 @@ int elementTypeSize(ElementType t) {
     case ElementType::UInt64:   return 8;
     case ElementType::Bool:     return 1;
     default:                    return 0;
+    }
+}
+
+via::DataType toViaDataType(ElementType t) {
+    switch (t) {
+    case ElementType::Float32:  return via::DataType::FLOAT32;
+    case ElementType::Float64:  return via::DataType::FLOAT64;
+    case ElementType::Float16:  return via::DataType::FLOAT16;
+    case ElementType::BFloat16: return via::DataType::BFLOAT16;
+    case ElementType::Int8:     return via::DataType::INT8;
+    case ElementType::Int16:    return via::DataType::INT16;
+    case ElementType::Int32:    return via::DataType::INT32;
+    case ElementType::Int64:    return via::DataType::INT64;
+    case ElementType::UInt8:    return via::DataType::INT16;   // 用有符号 16 位承载 0..255
+    case ElementType::Bool:     return via::DataType::INT8;    // 0/1 承载
+    default:                    return via::DataType::FLOAT32;
+    }
+}
+
+ElementType fromViaDataType(via::DataType t) {
+    switch (t) {
+    case via::DataType::FLOAT32:  return ElementType::Float32;
+    case via::DataType::FLOAT64:  return ElementType::Float64;
+    case via::DataType::FLOAT16:  return ElementType::Float16;
+    case via::DataType::BFLOAT16: return ElementType::BFloat16;
+    case via::DataType::INT8:     return ElementType::Int8;
+    case via::DataType::INT16:    return ElementType::Int16;
+    case via::DataType::INT32:    return ElementType::Int32;
+    case via::DataType::INT64:    return ElementType::Int64;
+    default:                      return ElementType::Unknown;
     }
 }
 
@@ -315,7 +365,7 @@ void Runtime::Impl::reloadPath(const std::string& path) {
 
 SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : env(std::move(e)), ort(nullptr) {}
 
-bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<TensorBuffer>& outputs,
+bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& outputs,
                       std::string& error) {
     outputs.clear();   // 失败时也保证输出为空，契约干净
     if (inputs.size() != info_.inputs.size()) {
@@ -326,58 +376,85 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<Tenso
     try {
         Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         std::vector<Ort::Value> ortInputs;
+        std::vector<Tensor> temps;                  // 物化/搬运副本，须存活到 Run 结束
+        std::vector<std::vector<int64_t>> shapes;   // 形状存储，保证 CreateTensor 期间指针有效
         ortInputs.reserve(inputs.size());
+        temps.reserve(inputs.size());
+        shapes.reserve(inputs.size());
+
         for (std::size_t i = 0; i < inputs.size(); ++i) {
-            const TensorBuffer& b = inputs[i];
+            const Tensor& t = inputs[i];
             const TensorInfo& want = info_.inputs[i];
             if (!want.isTensor) {
                 error = "onnx_engine: 输入 " + want.name + " 不是张量";
                 return false;
             }
-            if (b.type == ElementType::Unknown || elementTypeSize(b.type) == 0) {
-                error = "onnx_engine: 输入 " + want.name + " 的元素类型不受支持";
+            if (!isSupportedElement(want.type) || elementTypeSize(want.type) <= 0) {
+                error = "onnx_engine: 输入 " + want.name + " 的元素类型不受支持（"
+                      + elementTypeName(want.type) + "）";
                 return false;
             }
-            if (b.type != want.type) {
+            // dtype 校验：模型类型经 §4.1 映射后必须与张量 dtype 一致
+            //（如 UInt8 模型要求 INT16 张量、Bool 模型要求 INT8 张量）
+            const via::DataType wantVia = toViaDataType(want.type);
+            if (t.dtype() != wantVia) {
                 error = "onnx_engine: 输入 " + want.name + " 类型不符，期望 "
-                      + elementTypeName(want.type) + "，实际 " + elementTypeName(b.type);
+                      + std::string(via::dtype_to_string(wantVia)) + "，实际 "
+                      + std::string(via::dtype_to_string(t.dtype()));
+                return false;
+            }
+            // 承载宽度必须一致才能按原始字节喂给 ORT。UInt8→INT16（2 字节）这类
+            // 刻意加宽的映射需要显式收窄，本版本暂不支持，避免静默误读。
+            if (std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
+                error = "onnx_engine: 输入 " + want.name + " 的元素承载宽度与模型不匹配（"
+                      + elementTypeName(want.type) + "），暂不支持";
                 return false;
             }
             // 形状校验：秩必须一致；期望维 -1（动态）接受任意，其余必须相等
-            if (b.shape.size() != want.shape.size()) {
+            const auto span = t.shape();
+            std::vector<int64_t> shape(span.begin(), span.end());
+            if (shape.size() != want.shape.size()) {
                 error = "onnx_engine: 输入 " + want.name + " 秩不符，期望 "
                       + std::to_string(want.shape.size()) + "，实际 "
-                      + std::to_string(b.shape.size());
+                      + std::to_string(shape.size());
                 return false;
             }
-            for (std::size_t d = 0; d < b.shape.size(); ++d) {
-                if (want.shape[d] != -1 && b.shape[d] != want.shape[d]) {
-                    error = "onnx_engine: 输入 " + want.name + " 形状不符，期望 "
-                          + shapeStr(want.shape) + "，实际 " + shapeStr(b.shape);
-                    return false;
-                }
-            }
-            // 预校验 data 字节数 == 形状元素数 * 元素大小
             std::size_t elems = 1;
-            for (int64_t dm : b.shape) {
-                if (dm < 0) {
-                    error = "onnx_engine: 输入 " + want.name + " 形状含非法维 "
-                          + shapeStr(b.shape);
+            for (std::size_t d = 0; d < shape.size(); ++d) {
+                if (want.shape[d] != -1 && shape[d] != want.shape[d]) {
+                    error = "onnx_engine: 输入 " + want.name + " 形状不符，期望 "
+                          + shapeStr(want.shape) + "，实际 " + shapeStr(shape);
                     return false;
                 }
-                elems *= std::size_t(dm);
+                if (shape[d] < 0) {
+                    error = "onnx_engine: 输入 " + want.name + " 形状含非法维 "
+                          + shapeStr(shape);
+                    return false;
+                }
+                elems *= std::size_t(shape[d]);
             }
-            const std::size_t wantBytes = elems * std::size_t(elementTypeSize(b.type));
-            if (b.data.size() != wantBytes) {
-                error = "onnx_engine: 输入 " + want.name + " 数据大小不符，期望 "
-                      + std::to_string(wantBytes) + " 字节，实际 "
-                      + std::to_string(b.data.size()) + " 字节";
+            if (elems != t.numel()) {
+                error = "onnx_engine: 输入 " + want.name + " 元素数与形状不符，期望 "
+                      + std::to_string(elems) + "，实际 " + std::to_string(t.numel());
                 return false;
             }
-            // buffer 由调用方保证在 Run 期间存活（inputs 为 const 引用，同步调用）
+
+            // 零拷贝：CPU 且连续时直接引用调用方内存；否则物化一份连续 host 副本。
+            const void* p = nullptr;
+            if (t.is_contiguous() && t.device() == via::Device::CPU) {
+                p = t.data();
+            } else {
+                Tensor tmp = t.contiguous();
+                tmp.to_host();
+                temps.push_back(std::move(tmp));
+                p = temps.back().data();
+            }
+            shapes.push_back(std::move(shape));
+            const std::vector<int64_t>& sh = shapes.back();
+            const std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
             ortInputs.emplace_back(Ort::Value::CreateTensor(
-                mem, const_cast<std::uint8_t*>(b.data.data()), b.data.size(),
-                b.shape.data(), b.shape.size(), ortElementType(b.type)));
+                mem, const_cast<void*>(p), bytes, sh.data(), sh.size(),
+                ortElementType(want.type)));
         }
 
         std::vector<Ort::Value> res =
@@ -399,18 +476,30 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<Tenso
                 return false;
             }
             Ort::TensorTypeAndShapeInfo ti = v.GetTensorTypeAndShapeInfo();
-            TensorBuffer b;
-            b.type = mapElementType(ti.GetElementType());
-            if (b.type == ElementType::Unknown || elementTypeSize(b.type) == 0) {
+            const ElementType ot = mapElementType(ti.GetElementType());
+            if (!isSupportedElement(ot) || elementTypeSize(ot) == 0) {
                 error = "onnx_engine: 输出 " + want.name + " 的元素类型不受支持";
                 return false;
             }
-            b.shape = ti.GetShape();
-            const std::size_t bytes =
-                std::size_t(ti.GetElementCount()) * std::size_t(elementTypeSize(b.type));
-            const std::uint8_t* p = v.GetTensorData<std::uint8_t>();
-            if (bytes != 0) b.data.assign(p, p + bytes);
-            outputs.push_back(std::move(b));
+            std::vector<int64_t> shape = ti.GetShape();
+            if (shape.empty()) shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
+            const via::DataType dt = toViaDataType(ot);
+            Tensor out(shape, dt, via::Device::CPU);
+            const std::size_t elems = std::size_t(ti.GetElementCount());
+            const int srcSize = elementTypeSize(ot);
+            const int dstSize = int(via::calc_dtype_size(dt));
+            const std::uint8_t* src = v.GetTensorData<std::uint8_t>();
+            if (srcSize == dstSize) {
+                if (elems != 0) std::memcpy(out.data(), src, elems * std::size_t(srcSize));
+            } else if (ot == ElementType::UInt8) {
+                // UInt8→INT16：逐元素无符号加宽（保持 0..255 语义）
+                std::int16_t* dst = static_cast<std::int16_t*>(out.data());
+                for (std::size_t k = 0; k < elems; ++k) dst[k] = std::int16_t(src[k]);
+            } else {
+                error = "onnx_engine: 输出 " + want.name + " 的类型映射暂不支持";
+                return false;
+            }
+            outputs.push_back(std::move(out));
         }
         error.clear();
         return true;

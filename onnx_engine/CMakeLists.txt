@@ -26,6 +26,9 @@ if(NOT ONNXRUNTIME_LIB OR NOT ONNXRUNTIME_INCLUDE_DIR)
 endif()
 message(STATUS "onnxruntime: ${ONNXRUNTIME_LIB}")
 
+# ---- Tensorvia 探测（硬依赖；公开头直接包含 Tensorvia，故 PUBLIC 链接）----
+find_package(Tensorvia REQUIRED)
+
 add_library(onnx_engine SHARED
     src/runtime.cpp
 )
@@ -36,7 +39,10 @@ target_include_directories(onnx_engine PRIVATE
     "${ONNXRUNTIME_INCLUDE_DIR}"
 )
 target_compile_definitions(onnx_engine PRIVATE ONNX_ENGINE_BUILD)
-target_link_libraries(onnx_engine PRIVATE "${ONNXRUNTIME_LIB}")
+target_link_libraries(onnx_engine
+    PUBLIC Tensorvia::tensorvia
+    PRIVATE "${ONNXRUNTIME_LIB}"
+)
 set_target_properties(onnx_engine PROPERTIES
     VERSION 0.1.0
     SOVERSION 0

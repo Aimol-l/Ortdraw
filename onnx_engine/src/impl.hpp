@@ -25,8 +25,8 @@ struct SessionImpl : Session {
 
     explicit SessionImpl(std::shared_ptr<Ort::Env> env);
     const ModelInfo& info() const override { return info_; }
-    bool run(const std::vector<TensorBuffer>& inputs,
-             std::vector<TensorBuffer>& outputs, std::string& error) override;
+    bool run(const std::vector<Tensor>& inputs,
+             std::vector<Tensor>& outputs, std::string& error) override;
 };
 
 // Runtime 带 ONNX_ENGINE_API(default visibility)，嵌套的 Impl 会继承该可见性；

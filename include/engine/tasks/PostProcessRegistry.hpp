@@ -48,7 +48,7 @@ inline const cv::Scalar& classColor(int cls) {
 
 // 取第 idx 个输入为中性张量缓冲；失败返回 false
 inline bool tensorBufferInput(const QVector<NodeData>& inputs, int idx,
-                              onnx_engine::TensorBuffer& out) {
+                              onnx_convert::TensorBuffer& out) {
     if (idx < 0 || idx >= inputs.size()) return false;
     if (!std::holds_alternative<Tensor>(inputs[idx])) return false;
     out = onnx_convert::tensorToBuffer(std::get<Tensor>(inputs[idx]));
@@ -56,7 +56,7 @@ inline bool tensorBufferInput(const QVector<NodeData>& inputs, int idx,
 }
 
 // 按 (channel, index) 读取张量元素，自动按 row-major 计算偏移
-inline float readElement(const onnx_engine::TensorBuffer& b, std::size_t idx) {
+inline float readElement(const onnx_convert::TensorBuffer& b, std::size_t idx) {
     const int esize = onnx_engine::elementTypeSize(b.type);
     return onnx_convert::detail::readScalarAsFloat(b.data.data() + idx * std::size_t(esize), b.type);
 }
@@ -76,7 +76,7 @@ struct Detection {
 // （如合成测试的 [1,84,1]），故先用「哪一维才可能是 4+nc（>=5）」判定，再回退到大小比较。
 // channelsFirst=true 时：C=shape[1], N=shape[2]，元素偏移 = c*N + n；
 // channelsFirst=false 时：N=shape[1], C=shape[2]，元素偏移 = n*C + c。
-inline bool parseDetectHead(const onnx_engine::TensorBuffer& b, bool& channelsFirst,
+inline bool parseDetectHead(const onnx_convert::TensorBuffer& b, bool& channelsFirst,
                             int64_t& C, int64_t& N) {
     if (b.shape.size() != 3 || b.shape[0] != 1) return false;
     const int64_t d1 = b.shape[1], d2 = b.shape[2];
@@ -97,7 +97,7 @@ inline bool parseDetectHead(const onnx_engine::TensorBuffer& b, bool& channelsFi
 }
 
 // 解析检测头（含可选掩码系数范围 [coeffBegin, C)），过滤 conf 后做 NMS
-inline bool decodeDetections(const onnx_engine::TensorBuffer& b, float conf, float iou,
+inline bool decodeDetections(const onnx_convert::TensorBuffer& b, float conf, float iou,
                              int maxBoxes, std::vector<Detection>& out) {
     bool cf = false;
     int64_t C = 0, N = 0;
@@ -166,11 +166,11 @@ inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
 
 // 分割原型 [1, nm, mh, mw]（或 [nm, mh, mw]）→ 逐元素访问
 struct ProtoView {
-    const onnx_engine::TensorBuffer* buf = nullptr;
+    const onnx_convert::TensorBuffer* buf = nullptr;
     bool chFirst = true;
     int64_t nm = 0, mh = 0, mw = 0;
 
-    static bool make(const onnx_engine::TensorBuffer& b, ProtoView& v) {
+    static bool make(const onnx_convert::TensorBuffer& b, ProtoView& v) {
         v.buf = &b;
         if (b.shape.size() == 4) {
             if (b.shape[0] != 1) return false;
@@ -245,7 +245,7 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_engine::TensorBuffer buf;
+            onnx_convert::TensorBuffer buf;
             if (!tensorBufferInput(inputs, 0, buf))
                 return {false, QStringLiteral("输入不是张量"), {}};
 
@@ -289,7 +289,7 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_engine::TensorBuffer head, protos;
+            onnx_convert::TensorBuffer head, protos;
             if (!tensorBufferInput(inputs, 0, head))
                 return {false, QStringLiteral("检测头输入不是张量"), {}};
             if (!tensorBufferInput(inputs, 1, protos))
@@ -377,7 +377,7 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext& ctx, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_engine::TensorBuffer buf;
+            onnx_convert::TensorBuffer buf;
             if (!tensorBufferInput(inputs, 0, buf))
                 return {false, QStringLiteral("输入不是张量"), {}};
 

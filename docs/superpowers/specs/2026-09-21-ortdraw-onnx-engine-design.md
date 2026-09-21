@@ -2,12 +2,12 @@
 
 - 日期：2026-09-21
 - 状态：待评审
-- 范围：封装 ONNX Runtime 为**独立的动态库 SDK**（仅依赖 onnxruntime），并在 Ortdraw 中提供「ONNX 推理」节点与**可扩展的「预处理」「后处理」节点**，支持**多输入多输出**、按模型元数据自动生成端口与类型映射、CPU/CUDA 设备与线程配置。
+- 范围：封装 ONNX Runtime 为**独立的动态库 SDK**（依赖 onnxruntime 与 **Tensorvia**），并在 Ortdraw 中提供「ONNX 推理」节点与**可扩展的「预处理」「后处理」节点**，支持**多输入多输出**、按模型元数据自动生成端口与类型映射、CPU/CUDA 设备与线程配置。
 - 非目标：训练/反向传播；把 ONNX 图展开为 Ortdraw 节点；异步推理；多输出合并为单端口；通用「张量 → 图像」节点（由任务化后处理替代）；预处理/后处理的自动串联（用户手动连线）。
 
 ## 1. 目标
 
-1. 提供独立的 `onnx_engine` 动态库（不强耦合 Qt / OpenCV / Tensorvia / 应用类型），可脱离主工程单独构建。
+1. 提供独立的 `onnx_engine` 动态库：依赖 onnxruntime 与 **Tensorvia**（张量载体），**不依赖 Qt / OpenCV / 应用类型**，可脱离主工程单独构建。
 2. 「ONNX 推理」节点：一个节点 = 一个模型；载入模型后**按模型输入/输出自动生成端口**（多进多出），端口名 = 模型 IO 名。
 3. **ONNX 节点的输入与输出端口一律为 `Tensor`**（沿用现有 `DataType::Tensor`）；端口名 = 模型 IO 名，tooltip 显示 dtype/shape。图像等其它数据由「预处理」节点先转成张量；输出统一由后续任务节点（后处理）转成图像/类别。
 4. 预处理由独立的「预处理」节点承担（图像/张量 → 模型输入张量）；ONNX 节点只做**最小适配**（dtype 转换与形状校验）。
@@ -32,7 +32,7 @@ onnx_engine/
   include/onnx_engine/*.hpp # 公开头（不含 Ort/Qt/OpenCV）
   src/*.cpp                 # pimpl 实现，含 Ort::* 细节
 ```
-- 产出 `SHARED` 目标 `onnx_engine`（`libonnx_engine.so`）。
+- 产出 `SHARED` 目标 `onnx_engine`（`libonnx_engine.so`），并 `find_package(Tensorvia REQUIRED)` 链接 `Tensorvia::tensorvia`（张量载体；公开头允许包含 `tensorvia/core/tensor.h`）。
 - 主工程 `add_subdirectory(onnx_engine)` 并链接。
 - 依赖探测：
   - Linux：`find_library(onnxruntime)` + 头 `/usr/include/onnxruntime`（可 `ONNXRUNTIME_ROOT` 覆盖）；
@@ -63,12 +63,8 @@ struct ModelInfo {
     std::vector<TensorInfo> outputs;
 };
 
-// 中性的张量数据（行主序，raw bytes）
-struct TensorBuffer {
-    ElementType type = ElementType::Unknown;
-    std::vector<int64_t> shape;
-    std::vector<std::uint8_t> data;
-};
+// 张量载体统一用 Tensorvia；输入零拷贝（要求 CPU 后端且 contiguous）
+using Tensor = ::Tensor;
 
 struct SessionOptions {
     Device device = Device::Auto;   // Auto：有 CUDA 则用 CUDA，否则 CPU
@@ -102,9 +98,12 @@ public:
 class Session {
 public:
     const ModelInfo& info() const;
-    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回
-    bool run(const std::vector<TensorBuffer>& inputs,
-             std::vector<TensorBuffer>& outputs,
+    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回。
+    // 输入：CPU 且 contiguous 的 Tensor 直接以非拥有指针喂给 ORT（零拷贝）；
+    //       否则内部做一次 contiguous/host 拷贝或 dtype 转换。
+    // 输出：构造 Tensor 并按 ORT 结果写入（一次拷贝；后续可用 IOBinding 预分配做到零拷贝）。
+    bool run(const std::vector<Tensor>& inputs,
+             std::vector<Tensor>& outputs,
              std::string& error);
 };
 
@@ -134,11 +133,10 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 ## 4. 应用侧适配层
 
 `include/engine/onnx/` 下（依赖库 + OpenCV + Tensorvia，供「预处理」节点与「ONNX 推理」 executor 使用）：
-- `OnnxTensorConvert.hpp`：
-  - `cv::Mat → TensorBuffer`：按目标 dtype/shape、通道序（BGR→RGB）、归一化、resize（插值）、布局（NCHW/NHWC 自适应）；
-  - `TensorBuffer → NodeData`：float/double → `Tensorvia::Tensor`；bool → `bool`；整型单值 → `double`；
-  - `Tensorvia::Tensor → TensorBuffer`（张量输入直连时）。
-- 与库之间只传 `TensorBuffer`/`ModelInfo`。
+- `OnnxTensorConvert.hpp`（SDK 已直接用 Tensorvia，故这里不再做张量与缓冲之间的搬运）：
+  - `cv::Mat → via::Tensor`：按目标 dtype/shape、通道序（BGR→RGB）、归一化、resize（插值）、布局（NCHW/NHWC 自适应）；
+  - `via::Tensor → NodeData`：张量 → `Tensorvia::Tensor`；bool 标量 → `bool`；整型/浮点单值 → `double`。
+- 与库之间只传 `via::Tensor` / `ModelInfo`。
 
 ### 4.1 ONNX ElementType ↔ Tensorvia DataType 映射
 

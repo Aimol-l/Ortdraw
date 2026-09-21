@@ -22,32 +22,32 @@ public:
         o.intraThreads = params.value("threads", 0).toInt();
 
         std::string err;
-        auto s = onnx_engine::Runtime::instance().session(path.toStdString(), o, err);
-        if (!s) return {false, QString::fromStdString(err), {}};
+        auto session = onnx_engine::Runtime::instance().session(path.toStdString(), o, err);
+        if (!session) return {false, QString::fromStdString(err), {}};
 
-        std::vector<onnx_engine::TensorBuffer> ins;
+        std::vector<Tensor> ins;
         for (const NodeData& d : inputs) {
             if (std::holds_alternative<Tensor>(d)) {
-                auto b = onnx_convert::tensorToBuffer(std::get<Tensor>(d));
-                if (b.data.empty()) return {false, QStringLiteral("输入张量无效"), {}};
-                ins.push_back(std::move(b));
+                ins.push_back(std::get<Tensor>(d));   // 零转换，直接作为推理输入
             } else if (std::holds_alternative<cv::Mat>(d)) {
-                auto b = onnx_convert::imageToTensor(std::get<cv::Mat>(d), {}, onnx_engine::ElementType::Float32,
-                                                     "none", {}, {}, "auto", "keep");
-                if (b.data.empty())
+                Tensor t = onnx_convert::imageToTensor(std::get<cv::Mat>(d), {},
+                                                       onnx_engine::ElementType::Float32,
+                                                       "none", {}, {}, "auto", "keep");
+                if (t.numel() == 0)
                     return {false, QStringLiteral("图像输入无法直接转换，请先用「预处理」节点"), {}};
-                ins.push_back(std::move(b));
+                ins.push_back(std::move(t));
             } else {
                 return {false, QStringLiteral("输入必须是张量（请接「预处理」节点）"), {}};
             }
         }
 
-        std::vector<onnx_engine::TensorBuffer> outs;
-        if (!s->run(ins, outs, err)) return {false, QString::fromStdString(err), {}};
+        std::vector<Tensor> outs;
+        if (!session->run(ins, outs, err))
+            return {false, QString::fromStdString(err), {}};
 
         ExecResult r;
-        for (auto& b : outs) {
-            NodeData d = onnx_convert::tensorToNodeData(b);
+        for (auto& t : outs) {
+            NodeData d = onnx_convert::tensorToNodeData(t);
             if (std::holds_alternative<std::monostate>(d))
                 return {false, QStringLiteral("输出类型不受支持"), {}};
             r.outputs.push_back(std::move(d));
