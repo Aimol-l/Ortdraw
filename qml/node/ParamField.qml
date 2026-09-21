@@ -40,6 +40,7 @@ Row {
 
     Text {
         anchors.verticalCenter: parent.verticalCenter
+        visible: field.labelWidth > 0
         width: field.labelWidth
         text: field.desc ? field.desc.label : ""
         color: Theme.fgDim
@@ -221,7 +222,9 @@ Row {
         anchors.verticalCenter: parent.verticalCenter
         spacing: 4
 
-        readonly property var parts: ("" + field.val(field.desc ? field.desc.key : "")).split("x")
+        // 引用 revision 以在参数变化（如下拉切换）时重新求值
+        readonly property var parts: (field.revision,
+            ("" + field.val(field.desc ? field.desc.key : "")).split("x"))
 
         function commit2() {
             field.commit(parseInt(wIn.text, 10) + "x" + parseInt(hIn.text, 10))

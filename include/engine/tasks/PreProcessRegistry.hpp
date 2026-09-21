@@ -165,7 +165,7 @@ inline void registerBuiltinPreProcessTasks() {
         s.defaults = QVariantMap{
             {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp32"},
             {"norm", "unit"}, {"mean", "0.485,0.456,0.406"}, {"std", "0.229,0.224,0.225"},
-            {"size", "keep"}, {"sizeWH", "224x224"},
+            {"size", "keep"}, {"sizeWH", "0x0"},
         };
         s.params = {
             {"layout", QStringLiteral("布局"), "select", "NCHW",
@@ -186,7 +186,7 @@ inline void registerBuiltinPreProcessTasks() {
             {"size", QStringLiteral("尺寸"), "select", "keep",
              {{"keep", QStringLiteral("原尺寸")},
               {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
-            {"sizeWH", QStringLiteral("宽x高"), "size2", "224x224", {}, 2, 0, {}, ""},
+            {"sizeWH", QStringLiteral("宽x高"), "size2", "0x0", {}, 2, 0, {}, ""},
         };
         s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
                               const QVector<NodeData>& inputs) -> ExecResult {
@@ -198,10 +198,11 @@ inline void registerBuiltinPreProcessTasks() {
             const QString channel = p.value("channel", "rgb").toString();
             const QString size = p.value("size", "keep").toString();
             const int channels = img->channels() == 1 ? 1 : 3;
-            const bool keep = (size != QStringLiteral("resize"));
-            int reqW = 224, reqH = 224;
-            const QStringList wh = p.value("sizeWH", "224x224").toString().split('x');
+            // sizeWH 为 "0x0"（或含 0）表示“原尺寸”
+            int reqW = 0, reqH = 0;
+            const QStringList wh = p.value("sizeWH", "0x0").toString().split('x');
             if (wh.size() == 2) { reqW = wh[0].toInt(); reqH = wh[1].toInt(); }
+            const bool keep = (size != QStringLiteral("resize")) || reqW <= 0 || reqH <= 0;
             const int W = keep ? img->cols : reqW;
             const int H = keep ? img->rows : reqH;
             if (W <= 0 || H <= 0) return {false, QStringLiteral("目标尺寸无效"), {}};

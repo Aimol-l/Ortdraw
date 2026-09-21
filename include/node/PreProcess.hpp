@@ -70,6 +70,15 @@ public:
     Q_INVOKABLE void setTaskParam(const QString& k, const QVariant& v) {
         if (m_params.value(k) == v) return;
         m_params[k] = v;
+        // “标准预处理”：尺寸=原尺寸 时把宽x高归零；从 0x0 切到“指定”时给个默认值
+        if (m_task == QStringLiteral("standard") && k == QStringLiteral("size")) {
+            const QString wh = m_params.value("sizeWH").toString();
+            if (v.toString() == QStringLiteral("keep")) {
+                m_params["sizeWH"] = QStringLiteral("0x0");
+            } else if (wh.isEmpty() || wh == QStringLiteral("0x0")) {
+                m_params["sizeWH"] = QStringLiteral("224x224");
+            }
+        }
         emit paramsChanged();
     }
 

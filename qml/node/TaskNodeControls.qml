@@ -136,7 +136,7 @@ Column {
 
     // ---- 参数行：group>0 的参数排在同一行；特殊控件用自然宽度，其余等分 ----
     function naturalWidth(it) {
-        if (it.kind === "size2") return 46 + 54 + 6 + 54          // 标签 + [W]×[H]
+        if (it.kind === "size2") return 54 + 6 + 54              // [W]×[H]（无标签）
         if (it.kind === "floats") {
             var n = it.vecCount ? it.vecCount : 1
             return 46 + n * 52 + (n - 1) * 4
@@ -144,7 +144,8 @@ Column {
         return -1
     }
     function labelW(it, count) {
-        if (it.kind === "size2" || it.kind === "floats") return 46
+        if (it.kind === "size2") return 0
+        if (it.kind === "floats") return 46
         return count >= 3 ? 22 : count === 2 ? 24 : 46
     }
     readonly property var paramRows: {

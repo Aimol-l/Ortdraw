@@ -125,6 +125,15 @@ private slots:
         QCOMPARE(v[1], 1.0f);     // R 通道 max → 1
     }
 
+    void sizeParamZeroesWH() {
+        PreProcessNode n;                                   // 默认 standard / 原尺寸
+        QCOMPARE(n.taskParams().value("sizeWH").toString(), QString("0x0"));
+        n.setTaskParam("size", "resize");                   // 切到“指定” → 给默认 224x224
+        QCOMPARE(n.taskParams().value("sizeWH").toString(), QString("224x224"));
+        n.setTaskParam("size", "keep");                     // 切回“原尺寸” → 归零
+        QCOMPARE(n.taskParams().value("sizeWH").toString(), QString("0x0"));
+    }
+
     void standardTaskKeepSize() {
         cv::Mat bgr(3, 5, CV_8UC3, cv::Scalar(10, 20, 30));
         PreProcessExecutor ex;
