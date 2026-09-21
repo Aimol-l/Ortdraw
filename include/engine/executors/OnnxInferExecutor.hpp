@@ -41,9 +41,10 @@ public:
             }
         }
 
-        std::vector<Tensor> outs;
-        if (!session->run(ins, outs, err))
-            return {false, QString::fromStdString(err), {}};
+        auto res = session->run(ins);
+        if (!res)
+            return {false, QString::fromStdString(res.error()), {}};
+        const std::vector<Tensor>& outs = *res;
 
         // 输出按 info().outputs 顺序对应；用模型声明的 ElementType 区分 Bool 与 Int8 标量。
         const auto& outInfos = session->info().outputs;

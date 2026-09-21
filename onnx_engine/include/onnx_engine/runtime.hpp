@@ -1,4 +1,5 @@
 #pragma once
+#include <expected>
 #include <memory>
 #include <string>
 #include "onnx_engine/types.hpp"
@@ -9,13 +10,13 @@ class ONNX_ENGINE_API Session {
 public:
     virtual ~Session() = default;
     virtual const ModelInfo& info() const = 0;
-    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回。
+    // inputs 按 info().inputs 顺序。
     // 输入：CPU 且连续的 Tensor 直接以非拥有指针喂给 ORT（零拷贝）；
     //       否则内部做一次 contiguous/host 拷贝。
     // 输出：构造 Tensor 并按 ORT 结果写入（一次拷贝）。
-    virtual bool run(const std::vector<Tensor>& inputs,
-                     std::vector<Tensor>& outputs,
-                     std::string& error) = 0;
+    // 成功：按 info().outputs 顺序返回输出张量；失败：unexpected(错误文本)。
+    virtual std::expected<std::vector<Tensor>, std::string>
+    run(const std::vector<Tensor>& inputs) = 0;
 };
 
 class ONNX_ENGINE_API Runtime {

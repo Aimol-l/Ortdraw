@@ -98,13 +98,13 @@ public:
 class Session {
 public:
     const ModelInfo& info() const;
-    // inputs 按 info().inputs 顺序；outputs 按 info().outputs 顺序返回。
+    // inputs 按 info().inputs 顺序；成功按 info().outputs 顺序返回输出张量。
     // 输入：CPU 且 contiguous 的 Tensor 直接以非拥有指针喂给 ORT（零拷贝）；
     //       否则内部做一次 contiguous/host 拷贝或 dtype 转换。
     // 输出：构造 Tensor 并按 ORT 结果写入（一次拷贝；后续可用 IOBinding 预分配做到零拷贝）。
-    bool run(const std::vector<Tensor>& inputs,
-             std::vector<Tensor>& outputs,
-             std::string& error);
+    // 失败返回 std::unexpected(错误文本)。
+    std::expected<std::vector<Tensor>, std::string>
+    run(const std::vector<Tensor>& inputs);
 };
 
 // 便捷：元素类型名 / 字节大小

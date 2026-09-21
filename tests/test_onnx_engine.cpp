@@ -108,8 +108,10 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY2(s, err.c_str());
-        std::vector<Tensor> ins{f32buf({3,4}, 2.0f), f32buf({3,4}, 3.0f)}, outs;
-        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        std::vector<Tensor> ins{f32buf({3,4}, 2.0f), f32buf({3,4}, 3.0f)};
+        auto r = s->run(ins);
+        QVERIFY2(r.has_value(), r.error().c_str());
+        const std::vector<Tensor>& outs = *r;
         QCOMPARE(outs.size(), std::size_t(1));
         // 同形状/连续/CPU 走零拷贝输入路径，结果不变
         QCOMPARE(outs[0].dtype(), via::DataType::FLOAT32);
@@ -125,8 +127,10 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(dyn, {}, err);
         QVERIFY2(s, err.c_str());
-        std::vector<Tensor> ins{f32buf({2,4}, 1.0f), f32buf({2,4}, 2.0f)}, outs;
-        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        std::vector<Tensor> ins{f32buf({2,4}, 1.0f), f32buf({2,4}, 2.0f)};
+        auto r = s->run(ins);
+        QVERIFY2(r.has_value(), r.error().c_str());
+        const std::vector<Tensor>& outs = *r;
         QCOMPARE(outs.size(), std::size_t(1));
         QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{2,4}));
         QCOMPARE(outs[0].numel(), std::size_t(8));
@@ -143,8 +147,10 @@ private slots:
         QCOMPARE(s->info().outputs[0].type, ElementType::UInt8);
 
         Tensor a = i16buf({2,3}, {200, 1, 2, 3, 4, 255});
-        std::vector<Tensor> ins{a}, outs;
-        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        std::vector<Tensor> ins{a};
+        auto r = s->run(ins);
+        QVERIFY2(r.has_value(), r.error().c_str());
+        const std::vector<Tensor>& outs = *r;
         QCOMPARE(outs.size(), std::size_t(1));
         QCOMPARE(outs[0].dtype(), via::DataType::INT16);   // uint8 输出加宽承载
         QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{2,3}));
@@ -158,9 +164,9 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<Tensor> outs;
-        QVERIFY(!s->run({f32buf({3,4}, 1.0f)}, outs, err));
-        QVERIFY(!err.empty());
+        auto r = s->run({f32buf({3,4}, 1.0f)});
+        QVERIFY(!r.has_value());
+        QVERIFY(!r.error().empty());
     }
 
     void runWrongShapeFails() {
@@ -168,9 +174,9 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<Tensor> outs;
-        QVERIFY(!s->run({f32buf({2,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs, err));
-        QVERIFY(!err.empty());
+        auto r = s->run({f32buf({2,4}, 1.0f), f32buf({3,4}, 1.0f)});
+        QVERIFY(!r.has_value());
+        QVERIFY(!r.error().empty());
     }
 
     void runWrongDtypeFails() {
@@ -180,9 +186,9 @@ private slots:
         QVERIFY(s);
         std::vector<std::int32_t> data(12, 0);
         Tensor i32(data, std::vector<int64_t>{3,4});
-        std::vector<Tensor> outs;
-        QVERIFY(!s->run({i32, i32}, outs, err));
-        QVERIFY(!err.empty());
+        auto r = s->run({i32, i32});
+        QVERIFY(!r.has_value());
+        QVERIFY(!r.error().empty());
     }
 
     void runWrongRankFails() {
@@ -190,9 +196,9 @@ private slots:
         std::string err;
         auto s = Runtime::instance().session(fx, {}, err);
         QVERIFY(s);
-        std::vector<Tensor> outs;
-        QVERIFY(!s->run({f32buf({3,4}, 1.0f), f32buf({3,4,1}, 1.0f)}, outs, err));
-        QVERIFY(!err.empty());
+        auto r = s->run({f32buf({3,4}, 1.0f), f32buf({3,4,1}, 1.0f)});
+        QVERIFY(!r.has_value());
+        QVERIFY(!r.error().empty());
     }
 
     void runRejectsNonTensorOutput() {
@@ -202,9 +208,10 @@ private slots:
         QVERIFY2(s, err.c_str());
         QCOMPARE(s->info().outputs.size(), std::size_t(1));
         QVERIFY(!s->info().outputs[0].isTensor);
-        std::vector<Tensor> ins{f32buf({2}, 1.0f)}, outs;
-        QVERIFY(!s->run(ins, outs, err));
-        QVERIFY(!err.empty());
+        std::vector<Tensor> ins{f32buf({2}, 1.0f)};
+        auto r = s->run(ins);
+        QVERIFY(!r.has_value());
+        QVERIFY(!r.error().empty());
     }
 
     void cpuDeviceRunsAdd() {
@@ -213,8 +220,10 @@ private slots:
         SessionOptions o; o.device = Device::CPU; o.intraThreads = 1;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());
-        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
-        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)};
+        auto r = s->run(ins);
+        QVERIFY2(r.has_value(), r.error().c_str());
+        const std::vector<Tensor>& outs = *r;
         QCOMPARE(outs.size(), std::size_t(1));
     }
 
@@ -224,8 +233,9 @@ private slots:
         SessionOptions o; o.device = Device::Auto;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());          // CUDA 不可用时回退 CPU 并成功
-        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs;
-        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 1.0f)};
+        auto r = s->run(ins);
+        QVERIFY2(r.has_value(), r.error().c_str());
     }
 
     void cudaProbeDoesNotCrash() {
@@ -324,8 +334,9 @@ private slots:
             // 无可用 CUDA：必须报错而非静默回退
             QVERIFY(!err.empty());
         } else {
-            std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
-            QVERIFY2(s->run(ins, outs, err), err.c_str());
+            std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)};
+            auto r = s->run(ins);
+            QVERIFY2(r.has_value(), r.error().c_str());
         }
     }
 };
