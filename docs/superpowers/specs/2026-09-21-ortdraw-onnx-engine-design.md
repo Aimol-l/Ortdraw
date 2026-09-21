@@ -9,9 +9,7 @@
 
 1. 提供独立的 `onnx_engine` 动态库（不强耦合 Qt / OpenCV / Tensorvia / 应用类型），可脱离主工程单独构建。
 2. 「ONNX 推理」节点：一个节点 = 一个模型；载入模型后**按模型输入/输出自动生成端口**（多进多出），端口名 = 模型 IO 名。
-3. 端口类型依据**模型元数据**：
-   - 输入端口一律 `Any`（可接图像或张量；由执行器按该端口设置转换）；
-   - 输出端口按 ONNX 元素类型映射：float/double → `Tensor`；bool → `Bool`；整型/单值 → `Number`；不支持/非张量 → `Any`。
+3. **ONNX 节点的输入与输出端口一律为 `Tensor`**（沿用现有 `DataType::Tensor`）；端口名 = 模型 IO 名，tooltip 显示 dtype/shape。图像等其它数据由「预处理」节点先转成张量；输出统一由后续任务节点（后处理）转成图像/类别。
 4. 预处理由独立的「预处理」节点承担（图像/张量 → 模型输入张量）；ONNX 节点只做**最小适配**（dtype 转换与形状校验）。
 5. 设备与线程：节点参数 `device = 自动 / CPU / CUDA`、`threads`（0=默认）；会话按 `(模型路径, 设备, 线程)` 缓存复用。
 6. 新增**可扩展的「预处理」节点**（图像/张量 → 模型输入张量）与**「后处理」节点**（模型输出张量 → 图像/类别），共用任务框架；**任务决定端口数量与类型**（如 YOLO 检测后处理 = 1 张量 → 1 图像；YOLO 分割 = 2 张量 → 1 图像）。**不提供通用「张量 → 图像」节点。**
@@ -47,7 +45,8 @@ onnx_engine/
 ```cpp
 namespace onnx_engine {
 
-enum class ElementType { Float32, Float64, Int32, Int64, UInt8, Int8, Bool, Unknown };
+enum class ElementType { Float32, Float64, Float16, Int32, Int64, Int8, Int16, UInt8, UInt16, UInt32, UInt64, Bool, Unknown };
+// 覆盖 ONNX TensorProto 常用元素类型；库内部与 Ort::Value 一一对应。
 enum class Device { Auto, CPU, CUDA };
 
 // 单个模型 IO
@@ -140,6 +139,22 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   - `Tensorvia::Tensor → TensorBuffer`（张量输入直连时）。
 - 与库之间只传 `TensorBuffer`/`ModelInfo`。
 
+### 4.1 ONNX ElementType ↔ Tensorvia DataType 映射
+
+`Tensorvia::via::DataType` 提供 `INT8/INT16/INT32/INT64/BFLOAT16/FLOAT16/FLOAT32/FLOAT64`，**不含 `UINT8` 与 `BOOL`**，故按下列规则映射（其余不支持类型报错）：
+
+| ONNX `ElementType` | `via::DataType` | 说明 |
+|---|---|---|
+| Float32 / Float64 / Float16 | FLOAT32 / FLOAT64 / FLOAT16 | 直接对应 |
+| Int8 / Int16 / Int32 / Int64 | 同名 | 直接对应 |
+| BFloat16 | BFLOAT16 | 直接对应 |
+| **UInt8** | **INT16** | 用有符号 16 位承载 0..255，避免误解；转换时按无符号解释 |
+| **Bool** | **INT8** | 0/1 承载 |
+| UInt16/UInt32/UInt64/String/Complex | — | **报错**「不支持的张量类型」，提示该模型当前不受支持 |
+
+- 反向（`via::DataType` → ONNX dtype，用于把张量喂给模型）：同上表反向；`INT16` 不自动视为 `UInt8`（需显式要求），以免歧义。
+- 该映射在 `OnnxTensorConvert.hpp` 内实现并有单元测试覆盖（含 `uint8`/`bool` 往返）。
+
 ## 5. 节点
 
 ### 5.1 「ONNX 推理」`OnnxInferNode` + `OnnxInferExecutor`
@@ -162,7 +177,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 - 执行（worker 线程）：
   1. `session(modelPath, {device,threads})`；失败 → 节点错误。
   2. 按 `info().inputs` 顺序取 `inputs[i]`，要求为 `Tensorvia::Tensor`（否则报「输入类型不符」）；做**最小适配**：dtype 转换到模型 dtype、校验形状一致（静态形状，不符即报错并提示期望 shape）。
-  3. `session->run(...)` → `TensorBuffer` 列表 → 转 `NodeData`（按输出端口类型）。
+  3. `session->run(...)` → `TensorBuffer` 列表 → 转 `Tensorvia::Tensor` 的 `NodeData`（**所有输出端口都是 `Tensor`**）。
 - UI（`OnnxInferNode.qml`）：模型路径选择/重载、设备下拉、线程输入、输入/输出端口名与 shape/dtype 概览、错误徽标沿用现有机制。
 
 ### 5.2 「预处理」`PreProcessNode` + 任务框架（与后处理对称）
