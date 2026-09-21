@@ -77,8 +77,9 @@ int elementTypeSize(ElementType t) {
     }
 }
 
+// path 需为已规范化的绝对路径（调用方保证），避免重复 normPath
 std::string Runtime::Impl::makeKey(const std::string& path, const SessionOptions& o) const {
-    return normPath(path) + "|" + std::to_string(int(o.device)) + "|" + std::to_string(o.intraThreads);
+    return path + "|" + std::to_string(int(o.device)) + "|" + std::to_string(o.intraThreads);
 }
 
 void Runtime::Impl::touch(const std::string& key) {
@@ -110,15 +111,14 @@ void Runtime::Impl::evictIfNeeded() {
 static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
                                                 const std::string& absPath,
                                                 const SessionOptions& opts,
-                                                std::int64_t mtime, std::uint64_t size) {
+                                                std::int64_t mtime, std::uint64_t size,
+                                                bool useCuda) {
     Ort::SessionOptions so;
     so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     if (opts.intraThreads > 0) so.SetIntraOpNumThreads(opts.intraThreads);
-    const bool wantCuda = (opts.device == Device::CUDA)
-                       || (opts.device == Device::Auto && Runtime::cudaAvailable());
-    if (wantCuda) {
-        try { OrtCUDAProviderOptions c{}; so.AppendExecutionProvider_CUDA(c); }
-        catch (const std::exception&) { std::fprintf(stderr, "onnx_engine: CUDA 不可用，回退 CPU\n"); }
+    if (useCuda) {
+        OrtCUDAProviderOptions c{};
+        so.AppendExecutionProvider_CUDA(c);   // 失败则抛异常，由调用方决定回退策略
     }
     auto s = std::make_shared<SessionImpl>(env);
     s->ort = Ort::Session(*env, std::filesystem::path(absPath).c_str(), so);
@@ -126,7 +126,7 @@ static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
     s->path = absPath;
     s->mtime = mtime;
     s->size = size;
-    s->weightBytes = std::size_t(size);
+    s->weightBytes = std::size_t(size);   // 估算权重：以模型文件大小近似
 
     Ort::AllocatorWithDefaultOptions alloc;
     auto readIO = [&](size_t count, bool input, std::vector<TensorInfo>& out) {
@@ -154,27 +154,86 @@ static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
 
 std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
                                                 const SessionOptions& o, std::string& error) {
+    error.clear();
     std::error_code ec;
     const std::string abs = normPath(path);
     const auto mt = std::filesystem::last_write_time(abs, ec);
     const auto sz = std::filesystem::file_size(abs, ec);
     if (ec) { error = "模型文件不存在或不可读: " + path; return nullptr; }
-    const auto key = makeKey(abs, o) + "|" + std::to_string(mt.time_since_epoch().count());
-    std::lock_guard<std::mutex> lk(mutex);
-    auto it = sessions.find(key);
-    if (it != sessions.end()) { touch(key); return it->second; }
-    error.clear();
-    try {
-        auto s = makeSession(env, abs, o, std::int64_t(mt.time_since_epoch().count()),
-                             std::uint64_t(sz));
-        sessions.emplace(key, s);
-        touch(key);
-        evictIfNeeded();
-        return s;
-    } catch (const std::exception& e) {
-        error = e.what();
-        return nullptr;
+    const auto mtime = std::int64_t(mt.time_since_epoch().count());
+    const auto size = std::uint64_t(sz);
+    const auto key = makeKey(abs, o) + "|" + std::to_string(mtime) + "|" + std::to_string(size);
+
+    std::shared_ptr<BuildSlot> slot;
+    bool leader = false;
+    {
+        std::lock_guard<std::mutex> lk(mutex);
+        auto it = sessions.find(key);
+        if (it != sessions.end()) { touch(key); return it->second; }
+        auto bit = building.find(key);
+        if (bit != building.end()) {
+            slot = bit->second;                 // 已有 leader 在加载，等待其结果
+        } else {
+            slot = std::make_shared<BuildSlot>();
+            slot->future = slot->promise.get_future().share();
+            building.emplace(key, slot);
+            leader = true;
+        }
     }
+
+    if (!leader) {
+        try {
+            return slot->future.get();
+        } catch (const std::exception& e) {
+            error = e.what();
+            return nullptr;
+        }
+    }
+
+    // leader 在锁外加载/构图，避免持锁阻塞其他 session()/clearCache() 等调用
+    std::shared_ptr<SessionImpl> s;
+    std::string buildError;
+    try {
+        const bool wantCuda = (o.device == Device::CUDA)
+                           || (o.device == Device::Auto && Runtime::cudaAvailable());
+        try {
+            s = makeSession(env, abs, o, mtime, size, wantCuda);
+        } catch (const std::exception& e) {
+            if (o.device == Device::Auto && wantCuda) {
+                std::fprintf(stderr, "onnx_engine: CUDA 会话创建失败，回退 CPU: %s\n", e.what());
+                s = makeSession(env, abs, o, mtime, size, false);
+            } else {
+                throw;   // 显式 CUDA：不静默回退
+            }
+        }
+    } catch (const std::exception& e) {
+        buildError = e.what();
+        s = nullptr;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(mutex);
+        building.erase(key);
+        if (s) {
+            // 同一路径的旧条目（如文件已变化、仅缓存持有）一并淘汰，避免残留旧权重
+            for (auto it = sessions.begin(); it != sessions.end();) {
+                if (it->first != key && it->second->path == abs && it->second.use_count() == 1) {
+                    lru.remove(it->first);
+                    it = sessions.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            sessions.emplace(key, s);
+            touch(key);
+            evictIfNeeded();
+            slot->promise.set_value(s);
+        } else {
+            slot->promise.set_exception(std::make_exception_ptr(std::runtime_error(buildError)));
+        }
+    }
+    if (!s) { error = buildError; return nullptr; }
+    return s;
 }
 
 void Runtime::Impl::reloadPath(const std::string& path) {
@@ -205,8 +264,13 @@ Runtime::~Runtime() = default;
 Runtime& Runtime::instance() { static Runtime r; return r; }
 
 ModelInfo Runtime::modelInfo(const std::string& path, const SessionOptions& opts) {
-    std::string err;
-    auto s = session(path, opts, err);
+    std::string error;
+    return modelInfo(path, opts, error);
+}
+
+ModelInfo Runtime::modelInfo(const std::string& path, const SessionOptions& opts,
+                             std::string& error) {
+    auto s = session(path, opts, error);
     return s ? s->info() : ModelInfo{};
 }
 

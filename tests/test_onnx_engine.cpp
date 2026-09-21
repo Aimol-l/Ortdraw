@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QTemporaryFile>
 #include "onnx_engine/runtime.hpp"
 using namespace onnx_engine;
 
@@ -36,6 +37,42 @@ private slots:
     void missingFileReturnsError() {
         std::string err;
         auto s = Runtime::instance().session("/no/such/model.onnx", {}, err);
+        QVERIFY(!s);
+        QVERIFY(!err.empty());
+    }
+
+    void successClearsError() {
+        std::string err = "stale";
+        auto bad = Runtime::instance().session("/no/such/model.onnx", {}, err);
+        QVERIFY(!bad);
+        QVERIFY(!err.empty());
+
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        auto ok = Runtime::instance().session(fx, {}, err);
+        QVERIFY(ok);
+        QVERIFY(err.empty());
+    }
+
+    void cacheHitReturnsSamePointer() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        std::string e1, e2;
+        auto a = Runtime::instance().session(fx, {}, e1);
+        auto b = Runtime::instance().session(fx, {}, e2);
+        QVERIFY(a);
+        QVERIFY(b);
+        QVERIFY(a.get() == b.get());
+        QVERIFY(e1.empty());
+        QVERIFY(e2.empty());
+    }
+
+    void corruptModelFails() {
+        QTemporaryFile f;
+        QVERIFY(f.open());
+        QCOMPARE(f.write("not an onnx"), qint64(11));
+        f.flush();
+
+        std::string err;
+        auto s = Runtime::instance().session(f.fileName().toStdString(), {}, err);
         QVERIFY(!s);
         QVERIFY(!err.empty());
     }

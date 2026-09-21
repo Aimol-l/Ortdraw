@@ -21,6 +21,9 @@ public:
 
     // 读取模型 IO 元数据（内部缓存；文件变化自动失效重建）
     ModelInfo modelInfo(const std::string& path, const SessionOptions& opts = {});
+    // 同上，但失败时通过 error 报告（成功则清空 error）
+    ModelInfo modelInfo(const std::string& path, const SessionOptions& opts,
+                        std::string& error);
     // 取得共享会话；失败返回 nullptr 并置 error
     std::shared_ptr<Session> session(const std::string& path, const SessionOptions& opts,
                                      std::string& error);
