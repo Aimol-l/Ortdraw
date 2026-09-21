@@ -29,6 +29,8 @@ struct SessionImpl : Session {
              std::vector<TensorBuffer>& outputs, std::string& error) override;
 };
 
+// Runtime 带 ONNX_ENGINE_API(default visibility)，嵌套的 Impl 会继承该可见性；
+// 隐藏性由 runtime.hpp 中对 Impl 的前向声明附加 hidden 属性保证，此处为普通定义。
 struct Runtime::Impl {
     std::shared_ptr<Ort::Env> env;
     // 锁契约：所有对 sessions/lru/building/maxSessions/maxBytes 的访问都必须持有本锁；

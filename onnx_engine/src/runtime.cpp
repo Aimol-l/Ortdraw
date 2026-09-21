@@ -107,7 +107,9 @@ int elementTypeSize(ElementType t) {
 
 // path 需为已规范化的绝对路径（调用方保证），避免重复 normPath
 std::string Runtime::Impl::makeKey(const std::string& path, const SessionOptions& o) const {
-    return path + "|" + std::to_string(int(o.device)) + "|" + std::to_string(o.intraThreads);
+    // 归一化线程数：<0 与 0 语义相同（onnxruntime 默认），避免重复建会话
+    const int threads = o.intraThreads > 0 ? o.intraThreads : 0;
+    return path + "|" + std::to_string(int(o.device)) + "|" + std::to_string(threads);
 }
 
 void Runtime::Impl::touch(const std::string& key) {
@@ -200,7 +202,7 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
     const std::string abs = normPath(path);
     const auto mt = std::filesystem::last_write_time(abs, ec);
     const auto sz = std::filesystem::file_size(abs, ec);
-    if (ec) { error = "模型文件不存在或不可读: " + path; return nullptr; }
+    if (ec) { error = "onnx_engine: 模型文件不存在或不可读: " + path; return nullptr; }
     const auto mtime = std::int64_t(mt.time_since_epoch().count());
     const auto size = std::uint64_t(sz);
     const auto key = makeKey(abs, o) + "|" + std::to_string(mtime) + "|" + std::to_string(size);
@@ -254,7 +256,26 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
 
     {
         std::lock_guard<std::mutex> lk(mutex);
-        building.erase(key);
+        // 不变量：凡从 building 移除 key 的路径，都必须已对 promise set_value/set_exception；
+        // 若中途抛出（如 emplace/evict 失败），本 guard 兜底设置异常并清理 building，
+        // 避免等待者永久阻塞在 future.get()。
+        struct PromiseGuard {
+            Runtime::Impl* self;
+            const std::string* key;
+            std::shared_ptr<BuildSlot> slot;
+            std::string msg;
+            bool done = false;
+            ~PromiseGuard() {
+                if (done) return;
+                try {
+                    slot->promise.set_exception(
+                        std::make_exception_ptr(std::runtime_error(msg)));
+                } catch (...) {}
+                self->building.erase(*key);
+            }
+        } guard{this, &key, slot,
+                buildError.empty() ? std::string("onnx_engine: 会话构建失败") : buildError};
+
         if (s) {
             // 同一路径的旧条目（如文件已变化、仅缓存持有）一并淘汰，避免残留旧权重
             for (auto it = sessions.begin(); it != sessions.end();) {
@@ -269,9 +290,12 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
             touch(key);
             evictIfNeeded();
             slot->promise.set_value(s);
+            guard.done = true;
         } else {
             slot->promise.set_exception(std::make_exception_ptr(std::runtime_error(buildError)));
+            guard.done = true;
         }
+        building.erase(key);
     }
     if (!s) { error = buildError; return nullptr; }
     return s;
@@ -293,6 +317,7 @@ SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : env(std::move(e)), ort(n
 
 bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<TensorBuffer>& outputs,
                       std::string& error) {
+    outputs.clear();   // 失败时也保证输出为空，契约干净
     if (inputs.size() != info_.inputs.size()) {
         error = "onnx_engine: 输入个数不符，期望 " + std::to_string(info_.inputs.size())
               + "，实际 " + std::to_string(inputs.size());
@@ -390,6 +415,7 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<Tenso
         error.clear();
         return true;
     } catch (const std::exception& e) {
+        outputs.clear();
         error = e.what();
         return false;
     }

@@ -5,13 +5,21 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ---- onnxruntime 探测（硬依赖）----
-if(NOT ONNXRUNTIME_ROOT)
-    set(ONNXRUNTIME_ROOT "/usr" CACHE PATH "onnxruntime 安装前缀")
+if(WIN32)
+    if(NOT ONNX_DIR)
+        message(FATAL_ERROR "Windows 需要 -DONNX_DIR=<OnnxRuntime 目录>")
+    endif()
+    find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h "${ONNX_DIR}/include")
+    find_library(ONNXRUNTIME_LIB NAMES onnxruntime "${ONNX_DIR}/lib")
+else()
+    if(NOT ONNXRUNTIME_ROOT)
+        set(ONNXRUNTIME_ROOT "/usr" CACHE PATH "onnxruntime 安装前缀")
+    endif()
+    find_library(ONNXRUNTIME_LIB NAMES onnxruntime
+        PATHS "${ONNXRUNTIME_ROOT}/lib" "${ONNXRUNTIME_ROOT}/lib64" NO_DEFAULT_PATH)
+    find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
+        PATHS "${ONNXRUNTIME_ROOT}/include/onnxruntime" NO_DEFAULT_PATH)
 endif()
-find_library(ONNXRUNTIME_LIB NAMES onnxruntime
-    PATHS "${ONNXRUNTIME_ROOT}/lib" "${ONNXRUNTIME_ROOT}/lib64" NO_DEFAULT_PATH)
-find_path(ONNXRUNTIME_INCLUDE_DIR onnxruntime_cxx_api.h
-    PATHS "${ONNXRUNTIME_ROOT}/include/onnxruntime" NO_DEFAULT_PATH)
 if(NOT ONNXRUNTIME_LIB OR NOT ONNXRUNTIME_INCLUDE_DIR)
     message(FATAL_ERROR
         "未找到 onnxruntime。请安装（如 pacman -S onnxruntime-opt）或用 -DONNXRUNTIME_ROOT=<prefix> 指定。")

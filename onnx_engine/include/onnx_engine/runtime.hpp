@@ -40,7 +40,12 @@ public:
 private:
     Runtime();
     ~Runtime();
+    // Impl 为内部实现，禁止导出其符号（否则会泄漏 future/hashtable 等内部符号）
+#if defined(__GNUC__)
+    struct __attribute__((visibility("hidden"))) Impl;
+#else
     struct Impl;
+#endif
     std::unique_ptr<Impl> m_impl;
 };
 

@@ -1,7 +1,7 @@
 #include <QtTest>
 #include <QTemporaryFile>
 #include <cstring>
-#include <memory>
+#include <thread>
 #include "onnx_engine/runtime.hpp"
 using namespace onnx_engine;
 
@@ -269,6 +269,40 @@ private slots:
         QVERIFY2(b, e2.c_str());
         QVERIFY(wa.expired());                           // 旧会话已淘汰
         Runtime::instance().setCacheLimits(4, std::size_t(1) << 30);
+    }
+
+    void concurrentSameKeyReturnsOneSession() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        SessionOptions opts; opts.device = Device::CPU; opts.intraThreads = 2;
+        constexpr int N = 8;
+        std::vector<std::shared_ptr<Session>> got(N);
+        std::vector<std::string> errs(N);
+        std::vector<std::thread> ts;
+        ts.reserve(N);
+        for (int i = 0; i < N; ++i) {
+            ts.emplace_back([&, i] {
+                got[i] = Runtime::instance().session(fx, opts, errs[i]);
+            });
+        }
+        for (auto& t : ts) t.join();
+        for (int i = 0; i < N; ++i) {
+            QVERIFY2(got[i], errs[i].c_str());
+            QCOMPARE(got[i].get(), got[0].get());
+        }
+    }
+
+    void explicitCudaWithoutProviderFails() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        SessionOptions o; o.device = Device::CUDA;
+        std::string err;
+        auto s = Runtime::instance().session(fx, o, err);
+        if (!s) {
+            // 无可用 CUDA：必须报错而非静默回退
+            QVERIFY(!err.empty());
+        } else {
+            std::vector<TensorBuffer> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)}, outs;
+            QVERIFY2(s->run(ins, outs, err), err.c_str());
+        }
     }
 };
 QTEST_MAIN(TestOnnxEngine)
