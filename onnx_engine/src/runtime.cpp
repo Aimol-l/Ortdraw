@@ -1,9 +1,19 @@
 #include "impl.hpp"
 #include <algorithm>
 #include <filesystem>
+#include <iterator>
 #include <stdexcept>
 
 namespace onnx_engine {
+
+static std::string normPath(const std::string& path) {
+    std::error_code ec;
+    auto abs = std::filesystem::absolute(path, ec);
+    if (ec) return path;
+    auto canon = std::filesystem::weakly_canonical(abs, ec);
+    if (ec) return abs.string();
+    return canon.string();
+}
 
 const char* elementTypeName(ElementType t) {
     switch (t) {
@@ -44,7 +54,7 @@ int elementTypeSize(ElementType t) {
 }
 
 std::string Runtime::Impl::makeKey(const std::string& path, const SessionOptions& o) const {
-    return path + "|" + std::to_string(int(o.device)) + "|" + std::to_string(o.intraThreads);
+    return normPath(path) + "|" + std::to_string(int(o.device)) + "|" + std::to_string(o.intraThreads);
 }
 
 void Runtime::Impl::touch(const std::string& key) {
@@ -75,13 +85,15 @@ void Runtime::Impl::evictIfNeeded() {
 
 std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string&, const SessionOptions&,
                                                 std::string& error) {
+    std::lock_guard<std::mutex> lk(mutex);
     error = "onnx_engine: not implemented";
     return nullptr;
 }
 
 void Runtime::Impl::reloadPath(const std::string& path) {
+    const std::string key = normPath(path);
     for (auto it = sessions.begin(); it != sessions.end();) {
-        if (it->second->path == path) {
+        if (it->second->path == key) {
             lru.remove(it->first);
             it = sessions.erase(it);
         } else {
@@ -127,6 +139,7 @@ void Runtime::setCacheLimits(int maxSessions, std::size_t maxBytes) {
     std::lock_guard<std::mutex> lk(m_impl->mutex);
     m_impl->maxSessions = maxSessions;
     m_impl->maxBytes = maxBytes;
+    m_impl->evictIfNeeded();
 }
 
 bool Runtime::cudaAvailable() {

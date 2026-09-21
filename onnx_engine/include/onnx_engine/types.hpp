@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "onnx_engine/export.hpp"
 
 namespace onnx_engine {
 
@@ -42,9 +43,9 @@ struct SessionOptions {
     int intraThreads = 0;           // 0 = onnxruntime 默认
 };
 
-const char* elementTypeName(ElementType t);
+ONNX_ENGINE_API const char* elementTypeName(ElementType t);
 
 // 返回元素字节大小；Unknown 返回 0
-int elementTypeSize(ElementType t);
+ONNX_ENGINE_API int elementTypeSize(ElementType t);
 
 } // namespace onnx_engine

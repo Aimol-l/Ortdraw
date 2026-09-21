@@ -51,10 +51,14 @@ foreach(src ${TEST_SOURCES})
         ${OpenCV_INCLUDE_DIRS}
     )
     target_compile_features(${name} PRIVATE cxx_std_23)
+    target_compile_definitions(${name} PRIVATE
+        ORTDRAW_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+    )
     target_link_libraries(${name} PRIVATE
         Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test
         ${OpenCV_LIBRARIES}
         Tensorvia::tensorvia
+        onnx_engine
     )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

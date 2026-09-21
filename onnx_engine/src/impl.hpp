@@ -26,6 +26,8 @@ struct SessionImpl : Session {
 
 struct Runtime::Impl {
     std::shared_ptr<Ort::Env> env;
+    // 锁契约：所有对 sessions/lru/maxSessions/maxBytes 的访问都必须持有本锁；
+    // 统一在最内层 get() 加锁，外层（Runtime::session 等）不得再加锁，避免死锁（非递归锁）。
     std::mutex mutex;
     int maxSessions = 4;
     std::size_t maxBytes = std::size_t(1) << 30;  // 1 GiB

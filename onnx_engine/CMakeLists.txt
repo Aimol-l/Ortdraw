@@ -23,10 +23,16 @@ add_library(onnx_engine SHARED
 )
 target_include_directories(onnx_engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_include_directories(onnx_engine PRIVATE
     "${ONNXRUNTIME_INCLUDE_DIR}"
 )
+target_compile_definitions(onnx_engine PRIVATE ONNX_ENGINE_BUILD)
 target_link_libraries(onnx_engine PRIVATE "${ONNXRUNTIME_LIB}")
 set_target_properties(onnx_engine PROPERTIES
+    VERSION 0.1.0
+    SOVERSION 0
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     POSITION_INDEPENDENT_CODE ON

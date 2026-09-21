@@ -5,9 +5,7 @@
 
 namespace onnx_engine {
 
-class Session;   // pimpl
-
-class Session {
+class ONNX_ENGINE_API Session {
 public:
     virtual ~Session() = default;
     virtual const ModelInfo& info() const = 0;
@@ -17,7 +15,7 @@ public:
                      std::string& error) = 0;
 };
 
-class Runtime {
+class ONNX_ENGINE_API Runtime {
 public:
     static Runtime& instance();
 
