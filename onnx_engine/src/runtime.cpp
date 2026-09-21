@@ -28,6 +28,27 @@ ElementType mapElementType(ONNXTensorElementDataType t) {
     }
 }
 
+ONNXTensorElementDataType ortElementType(ElementType t) {
+    switch (t) {
+    case ElementType::Float32:  return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT;
+    case ElementType::Float64:  return ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE;
+    case ElementType::Float16:  return ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16;
+    case ElementType::BFloat16: return ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16;
+    case ElementType::Int8:     return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8;
+    case ElementType::Int16:    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16;
+    case ElementType::Int32:    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32;
+    case ElementType::Int64:    return ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64;
+    case ElementType::UInt8:    return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8;
+    case ElementType::UInt16:   return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16;
+    case ElementType::UInt32:   return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32;
+    case ElementType::UInt64:   return ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64;
+    case ElementType::Bool:     return ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL;
+    default:                    return ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED;
+    }
+}
+
+ElementType unmapElement(ONNXTensorElementDataType t) { return mapElementType(t); }
+
 } // namespace
 
 static std::string normPath(const std::string& path) {
@@ -250,10 +271,78 @@ void Runtime::Impl::reloadPath(const std::string& path) {
 
 SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : env(std::move(e)), ort(nullptr) {}
 
-bool SessionImpl::run(const std::vector<TensorBuffer>&, std::vector<TensorBuffer>&,
+bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<TensorBuffer>& outputs,
                       std::string& error) {
-    error = "onnx_engine: not implemented";
-    return false;
+    if (inputs.size() != info_.inputs.size()) {
+        error = "onnx_engine: 输入个数不符，期望 " + std::to_string(info_.inputs.size())
+              + "，实际 " + std::to_string(inputs.size());
+        return false;
+    }
+    try {
+        Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        std::vector<Ort::Value> ortInputs;
+        std::vector<std::string> inNames, outNames;
+        ortInputs.reserve(inputs.size());
+        for (std::size_t i = 0; i < inputs.size(); ++i) {
+            const TensorBuffer& b = inputs[i];
+            const TensorInfo& want = info_.inputs[i];
+            if (!want.isTensor) {
+                error = "onnx_engine: 输入 " + want.name + " 不是张量";
+                return false;
+            }
+            if (b.type != want.type) {
+                error = "onnx_engine: 输入 " + want.name + " 类型不符，期望 "
+                      + elementTypeName(want.type) + "，实际 " + elementTypeName(b.type);
+                return false;
+            }
+            // 形状校验：秩必须一致；期望维 -1（动态）接受任意，其余必须相等
+            if (b.shape.size() != want.shape.size()) {
+                error = "onnx_engine: 输入 " + want.name + " 秩不符";
+                return false;
+            }
+            for (std::size_t d = 0; d < b.shape.size(); ++d) {
+                if (want.shape[d] != -1 && b.shape[d] != want.shape[d]) {
+                    error = "onnx_engine: 输入 " + want.name + " 形状不符";
+                    return false;
+                }
+            }
+            inNames.push_back(want.name);
+            // buffer 由调用方保证在 Run 期间存活（inputs 为 const 引用，同步调用）
+            ortInputs.emplace_back(Ort::Value::CreateTensor(
+                mem, const_cast<std::uint8_t*>(b.data.data()), b.data.size(),
+                b.shape.data(), b.shape.size(), ortElementType(b.type)));
+        }
+        for (const TensorInfo& o : info_.outputs) outNames.push_back(o.name);
+
+        std::vector<const char*> inPtrs, outPtrs;
+        inPtrs.reserve(inNames.size());
+        outPtrs.reserve(outNames.size());
+        for (const std::string& n : inNames) inPtrs.push_back(n.c_str());
+        for (const std::string& n : outNames) outPtrs.push_back(n.c_str());
+
+        std::vector<Ort::Value> res =
+            ort.Run(Ort::RunOptions{nullptr}, inPtrs.data(), ortInputs.data(), ortInputs.size(),
+                    outPtrs.data(), outPtrs.size());
+
+        outputs.clear();
+        outputs.reserve(res.size());
+        for (Ort::Value& v : res) {
+            Ort::TensorTypeAndShapeInfo ti = v.GetTensorTypeAndShapeInfo();
+            TensorBuffer b;
+            b.type = unmapElement(ti.GetElementType());
+            b.shape = ti.GetShape();
+            const int esz = elementTypeSize(b.type);
+            const std::size_t bytes = std::size_t(ti.GetElementCount()) * std::size_t(esz);
+            const std::uint8_t* p = v.GetTensorData<std::uint8_t>();
+            b.data.assign(p, p + bytes);
+            outputs.push_back(std::move(b));
+        }
+        error.clear();
+        return true;
+    } catch (const std::exception& e) {
+        error = e.what();
+        return false;
+    }
 }
 
 Runtime::Runtime() : m_impl(std::make_unique<Impl>()) {
