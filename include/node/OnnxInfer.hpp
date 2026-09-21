@@ -21,6 +21,7 @@ class OnnxInferNode : public BaseNode {
 public:
     explicit OnnxInferNode(QQuickItem* parent = nullptr) : BaseNode(parent) {
         m_name = QStringLiteral("ONNX 推理");
+        min_width = 240;   // 保证参数行不越界
         m_description = QStringLiteral("加载 ONNX 模型，端口按模型元数据生成（输入/输出均为张量）。");
     }
     ~OnnxInferNode() override = default;

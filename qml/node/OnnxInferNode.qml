@@ -77,6 +77,7 @@ OnnxInferNode {
                 }
 
                 Rectangle {
+                    id: reloadBtn
                     anchors.verticalCenter: parent.verticalCenter
                     width: reloadLabel.implicitWidth + 16
                     height: 24
@@ -107,7 +108,7 @@ OnnxInferNode {
 
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Math.max(0, parent.width - pickBtn.width - reloadLabel.width
+                    width: Math.max(0, parent.width - pickBtn.width - reloadBtn.width
                                     - parent.spacing * 2)
                     text: root.modelPath === "" ? "未选择模型" : root.modelPath.split("/").pop()
                     color: Theme.fgDim
@@ -123,8 +124,8 @@ OnnxInferNode {
                 spacing: 6
 
                 Text {
+                    id: devLabel
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 40
                     text: "设备"
                     color: Theme.fgDim
                     font.pixelSize: 11
@@ -134,7 +135,8 @@ OnnxInferNode {
                 Rectangle {
                     id: deviceBox
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 110
+                    width: Math.max(60, parent.width - devLabel.width - thrLabel.width
+                                        - threadRect.width - parent.spacing * 4)
                     height: 22
                     radius: 5
                     color: deviceHover.hovered || deviceMenu.visible ? Theme.bgHover : Theme.bg
@@ -169,7 +171,12 @@ OnnxInferNode {
 
                     Menu {
                         id: deviceMenu
-                        y: -(height + 4)
+                        parent: Overlay.overlay
+                        onAboutToShow: {
+                            var p = deviceBox.mapToItem(null, 0, deviceBox.height + 4)
+                            x = p.x
+                            y = p.y
+                        }
                         background: Rectangle {
                             implicitWidth: 130
                             color: Theme.bgElev
@@ -209,8 +216,8 @@ OnnxInferNode {
                 }
 
                 Text {
+                    id: thrLabel
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 30
                     text: "线程"
                     color: Theme.fgDim
                     font.pixelSize: 11
@@ -218,8 +225,9 @@ OnnxInferNode {
                 }
 
                 Rectangle {
+                    id: threadRect
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 50
+                    width: 44
                     height: 22
                     radius: 5
                     color: Theme.bg

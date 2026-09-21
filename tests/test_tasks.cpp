@@ -1,6 +1,8 @@
 #include <QtTest>
 #include <variant>
 #include "engine/tasks/PreProcessRegistry.hpp"
+#include "node/PreProcess.hpp"
+#include "node/PostProcess.hpp"
 #include "engine/tasks/PostProcessRegistry.hpp"
 #include "engine/executors/PreProcessExecutor.hpp"
 #include "engine/executors/PostProcessExecutor.hpp"
@@ -28,24 +30,113 @@ private slots:
         const auto& all = PreProcessRegistry::instance().all();
         QStringList ids;
         for (const auto& s : all) ids << s.id;
-        QVERIFY(ids.contains("image_to_tensor"));
+        QCOMPARE(ids.size(), 2);                       // 只保留两个任务
+        QVERIFY(ids.contains("standard"));
         QVERIFY(ids.contains("yolo_letterbox"));
+        QVERIFY(!ids.contains("normalize"));
+        QVERIFY(!ids.contains("resize"));
     }
 
-    void imageToTensorTask() {
-        cv::Mat bgr(2, 2, CV_8UC3, cv::Scalar(0, 0, 255));
+    void taskNodesHaveMinWidth() {
+        PreProcessNode pre;
+        PostProcessNode post;
+        QVERIFY(pre.getMinWidth() >= 260);    // 保证参数行不越界
+        QVERIFY(post.getMinWidth() >= 260);
+    }
+
+    void standardTaskFp32Range01() {
+        cv::Mat bgr(2, 2, CV_8UC3, cv::Scalar(0, 0, 255));   // BGR 全红
         PreProcessExecutor ex;
         const ExecResult r = ex.execute({}, QVariantMap{
-            {"task", "image_to_tensor"},
-            {"params", QVariantMap{{"width", 2}, {"height", 2}, {"layout", "NCHW"},
-                                   {"channel", "rgb"}, {"norm", "div255"}, {"resize", "keep"}}}},
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "resize"}, {"sizeWH", "2x2"},
+                                   {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp32"}}}},
             imageInputs(bgr));
         QVERIFY2(r.ok, qPrintable(r.error));
         QVERIFY(std::holds_alternative<Tensor>(r.outputs[0]));
         const Tensor& t = std::get<Tensor>(r.outputs[0]);
-        QCOMPARE(t.shape().size(), size_t(4));
         QCOMPARE(int64_t(t.shape()[0]), int64_t(1));
         QCOMPARE(int64_t(t.shape()[1]), int64_t(3));
+        QCOMPARE(int64_t(t.shape()[2]), int64_t(2));
+        QCOMPARE(int64_t(t.shape()[3]), int64_t(2));
+        // 值域 0..1（红色 R 通道 = 1.0）
+        const float* p = reinterpret_cast<const float*>(t.data());
+        QCOMPARE(p[0], 1.0f);
+    }
+
+    void standardTaskFp16() {
+        cv::Mat bgr(2, 2, CV_8UC3, cv::Scalar(0, 0, 255));
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "resize"}, {"sizeWH", "2x2"},
+                                   {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp16"}}}},
+            imageInputs(bgr));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const Tensor& t = std::get<Tensor>(r.outputs[0]);
+        QCOMPARE(int(t.dtype()), int(via::DataType::FLOAT16));
+        QCOMPARE(t.data() != nullptr, true);
+    }
+
+    void standardTaskZscore() {
+        cv::Mat bgr(1, 1, CV_8UC3, cv::Scalar(0, 0, 255));   // 红
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "keep"}, {"layout", "NCHW"}, {"channel", "rgb"},
+                                   {"dtype", "fp32"}, {"norm", "zscore"},
+                                   {"mean", "255,0,0"}, {"std", "255,1,1"}}}},
+            imageInputs(bgr));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const Tensor& t = std::get<Tensor>(r.outputs[0]);
+        const float* v = reinterpret_cast<const float*>(t.data());
+        QCOMPARE(v[0], 0.0f);    // (255-255)/255
+    }
+
+    void standardTaskPm1() {
+        cv::Mat bgr(1, 1, CV_8UC3, cv::Scalar(0, 0, 255));   // 红 → R=+1
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "keep"}, {"layout", "NCHW"}, {"channel", "rgb"},
+                                   {"dtype", "fp32"}, {"norm", "pm1"}}}},
+            imageInputs(bgr));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const Tensor& t = std::get<Tensor>(r.outputs[0]);
+        const float* v = reinterpret_cast<const float*>(t.data());
+        QCOMPARE(v[0], 1.0f);     // 255/127.5 - 1
+        QCOMPARE(v[1], -1.0f);    // 0/127.5 - 1
+    }
+
+    void standardTaskMinMax() {
+        cv::Mat bgr(1, 2, CV_8UC3);
+        bgr.at<cv::Vec3b>(0, 0) = cv::Vec3b(0, 0, 0);
+        bgr.at<cv::Vec3b>(0, 1) = cv::Vec3b(0, 0, 255);
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "keep"}, {"layout", "NCHW"}, {"channel", "rgb"},
+                                   {"dtype", "fp32"}, {"norm", "minmax"}}}},
+            imageInputs(bgr));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const Tensor& t = std::get<Tensor>(r.outputs[0]);
+        const float* v = reinterpret_cast<const float*>(t.data());
+        QCOMPARE(v[0], 0.0f);     // R 通道 min → 0
+        QCOMPARE(v[1], 1.0f);     // R 通道 max → 1
+    }
+
+    void standardTaskKeepSize() {
+        cv::Mat bgr(3, 5, CV_8UC3, cv::Scalar(10, 20, 30));
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "keep"}, {"layout", "NCHW"},
+                                   {"channel", "rgb"}, {"dtype", "fp32"}}}},
+            imageInputs(bgr));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const Tensor& t = std::get<Tensor>(r.outputs[0]);
+        QCOMPARE(int64_t(t.shape()[2]), int64_t(3));   // H = 原图高
+        QCOMPARE(int64_t(t.shape()[3]), int64_t(5));   // W = 原图宽
     }
 
     void letterboxTask() {

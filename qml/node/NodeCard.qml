@@ -78,6 +78,17 @@ Item {
         onTriggered: card.syncPorts()
     }
 
+    // 顶层描边：保证选中时 2px 边框整圈可见（不被表头/内容遮挡）
+    Rectangle {
+        id: outline
+        z: 100
+        anchors.fill: bg
+        radius: bg.radius
+        color: "transparent"
+        border.width: card.selected ? 2 : 1
+        border.color: card.selected ? Theme.blue : Theme.border
+    }
+
     Rectangle {
         id: glow
         visible: card.selected
@@ -119,8 +130,7 @@ Item {
         anchors.fill: parent
         radius: Settings.cornerRadius
         color: Theme.bgElev
-        border.width: card.selected ? 2 : 1
-        border.color: card.selected ? Theme.blue : Theme.border
+        border.width: 0          // 描边改由最上层 outline 绘制，避免被表头渐变覆盖
 
         Rectangle {
             id: head

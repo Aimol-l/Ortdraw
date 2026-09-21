@@ -5,7 +5,7 @@ import Settings
 
 PostProcessNode {
     id: root
-    width: 240
+    width: 288
     height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
 
     readonly property int textRenderType:

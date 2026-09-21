@@ -104,6 +104,30 @@ inline double bfloat16BitsToDouble(std::uint16_t h) {
     return static_cast<double>(f);
 }
 
+// double → IEEE 754 half / bfloat16 位模式（写张量用）
+inline std::uint16_t doubleToHalfBits(double value) {
+    float f = static_cast<float>(value);
+    std::uint32_t x;
+    std::memcpy(&x, &f, 4);
+    const std::uint32_t sign = (x >> 16) & 0x8000u;
+    int exp = int((x >> 23) & 0xFF) - 127 + 15;
+    const std::uint32_t man = x & 0x7FFFFFu;
+    if (exp <= 0) {
+        if (exp < -10) return static_cast<std::uint16_t>(sign);
+        std::uint32_t m = (man | 0x800000u) >> (1 - exp);
+        return static_cast<std::uint16_t>(sign | (m >> 13));
+    }
+    if (exp >= 31) return static_cast<std::uint16_t>(sign | 0x7C00u);
+    return static_cast<std::uint16_t>(sign | (static_cast<std::uint32_t>(exp) << 10) | (man >> 13));
+}
+
+inline std::uint16_t doubleToBfloat16Bits(double value) {
+    float f = static_cast<float>(value);
+    std::uint32_t x;
+    std::memcpy(&x, &f, 4);
+    return static_cast<std::uint16_t>(x >> 16);
+}
+
 // 把一段连续的 float 值按目标 dtype 写进行主序字节缓冲（单元素）。
 inline void writeScalarAsFloat(std::uint8_t* dst, onnx_engine::ElementType t, float v) {
     switch (t) {
@@ -147,8 +171,16 @@ inline void writeScalarAsFloat(std::uint8_t* dst, onnx_engine::ElementType t, fl
         break;
     }
     default:
-        // Float16/BFloat16 等暂不在此处转换，调用方应返回空缓冲。
+    case onnx_engine::ElementType::Float16: {
+        const std::uint16_t h = detail::doubleToHalfBits(v);
+        std::memcpy(dst, &h, 2);
         break;
+    }
+    case onnx_engine::ElementType::BFloat16: {
+        const std::uint16_t b = detail::doubleToBfloat16Bits(v);
+        std::memcpy(dst, &b, 2);
+        break;
+    }
     }
 }
 
@@ -303,19 +335,50 @@ inline onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
                               static_cast<std::size_t>(H) * static_cast<std::size_t>(W);
     std::vector<float> fbuf(total, 0.0f);
 
+    // 逐通道 Min-Max：先统计各通道最小/最大值
+    std::vector<float> cmin(static_cast<std::size_t>(C), 0.0f);
+    std::vector<float> cmax(static_cast<std::size_t>(C), 1.0f);
+    if (norm == QStringLiteral("minmax")) {
+        for (int64_t c = 0; c < C; ++c) {
+            double mn = 1e300, mx = -1e300;
+            for (int64_t y = 0; y < H; ++y) {
+                const float* row = f.ptr<float>(static_cast<int>(y));
+                for (int64_t x = 0; x < W; ++x) {
+                    const int sc = (srcC == C) ? static_cast<int>(c) : 0;
+                    const float v = row[x * srcC + sc];
+                    mn = std::min(mn, double(v));
+                    mx = std::max(mx, double(v));
+                }
+            }
+            if (mn > mx) { mn = 0.0; mx = 1.0; }
+            cmin[static_cast<std::size_t>(c)] = static_cast<float>(mn);
+            cmax[static_cast<std::size_t>(c)] = static_cast<float>(mx);
+        }
+    }
+
     for (int64_t y = 0; y < H; ++y) {
         const float* row = f.ptr<float>(static_cast<int>(y));
         for (int64_t x = 0; x < W; ++x) {
             for (int64_t c = 0; c < C; ++c) {
                 const int sc = (srcC == C) ? static_cast<int>(c) : 0;
                 float v = row[x * srcC + sc];
-                if (norm == QStringLiteral("div255")) {
+                if (norm == QStringLiteral("div255") || norm == QStringLiteral("unit")) {
                     v /= 255.0f;
-                } else if (norm == QStringLiteral("meanstd")) {
+                } else if (norm == QStringLiteral("meanstd")
+                           || norm == QStringLiteral("zscore")) {
+                    // Z-score：(x - mean) / std（按通道）
                     const double m = (c < mean.size()) ? mean[static_cast<int>(c)] : 0.0;
                     const double s = (c < std.size() && std[static_cast<int>(c)] != 0.0)
                                          ? std[static_cast<int>(c)] : 1.0;
                     v = static_cast<float>((static_cast<double>(v) - m) / s);
+                } else if (norm == QStringLiteral("pm1")) {
+                    // 缩放到 [-1, 1]：x/127.5 - 1
+                    v = v / 127.5f - 1.0f;
+                } else if (norm == QStringLiteral("minmax")) {
+                    const std::size_t ci = static_cast<std::size_t>(c);
+                    const float lo = cmin[ci], hi = cmax[ci];
+                    const float range = (hi - lo);
+                    v = range > 0.0f ? (v - lo) / range : 0.0f;
                 }
                 const std::size_t idx = nchw
                     ? (static_cast<std::size_t>(c) * static_cast<std::size_t>(H) + static_cast<std::size_t>(y)) *
@@ -339,10 +402,6 @@ inline onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
     out.data.resize(total * static_cast<std::size_t>(esize));
     for (std::size_t i = 0; i < total; ++i)
         detail::writeScalarAsFloat(out.data.data() + i * static_cast<std::size_t>(esize), dtype, fbuf[i]);
-
-    // Float16/BFloat16 未实现转换，写出全零无意义，按约定返回空缓冲。
-    if (dtype == onnx_engine::ElementType::Float16 || dtype == onnx_engine::ElementType::BFloat16)
-        return onnx_engine::TensorBuffer{};
 
     return out;
 }

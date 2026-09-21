@@ -5,7 +5,7 @@ import Settings
 
 PreProcessNode {
     id: root
-    width: 240
+    width: 288
     height: Settings.autoHeight ? Math.max(root.getMinHeight(), card.contentHeight) : root.getMinHeight()
 
     NodeCard {

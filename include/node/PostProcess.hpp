@@ -16,6 +16,7 @@ class PostProcessNode : public BaseNode {
 public:
     explicit PostProcessNode(QQuickItem* parent = nullptr) : BaseNode(parent) {
         m_name = QStringLiteral("后处理");
+        min_width = 280;   // 保证参数行不越界
         m_description = QStringLiteral("按任务对张量做后处理（检测/分割/分类），端口随任务变化。");
         if (const TaskSpec* spec = PostProcessRegistry::instance().find(m_task)) {
             m_params = spec->defaults;
@@ -58,7 +59,9 @@ public:
             for (const auto& o : d.options)
                 opts.append(QVariantMap{{"value", o.first}, {"label", o.second}});
             out.append(QVariantMap{{"key", d.key}, {"label", d.label}, {"kind", d.kind},
-                                   {"default", d.def}, {"options", opts}});
+                                   {"default", d.def}, {"options", opts},
+                                   {"group", d.group}, {"vecCount", d.vecCount},
+                                   {"showIfKey", d.showIfKey}, {"showIfValue", d.showIfValue}});
         }
         return out;
     }

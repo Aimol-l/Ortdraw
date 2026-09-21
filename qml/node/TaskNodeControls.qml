@@ -87,7 +87,13 @@ Column {
 
         Menu {
             id: taskMenu
-            y: -(height + 6)
+            // 渲染到窗口 overlay 层，避免被节点内后续子项遮挡
+            parent: Overlay.overlay
+            onAboutToShow: {
+                var p = taskBox.mapToItem(null, 0, taskBox.height + 6)
+                x = p.x
+                y = p.y
+            }
             background: Rectangle {
                 implicitWidth: 200
                 color: Theme.bgElev
@@ -128,179 +134,77 @@ Column {
         }
     }
 
-    // ---- 参数行：按 ParamDesc.kind 生成控件 ----
+    // ---- 参数行：group>0 的参数排在同一行；特殊控件用自然宽度，其余等分 ----
+    function naturalWidth(it) {
+        if (it.kind === "size2") return 46 + 54 + 6 + 54          // 标签 + [W]×[H]
+        if (it.kind === "floats") {
+            var n = it.vecCount ? it.vecCount : 1
+            return 46 + n * 52 + (n - 1) * 4
+        }
+        return -1
+    }
+    function labelW(it, count) {
+        if (it.kind === "size2" || it.kind === "floats") return 46
+        return count >= 3 ? 22 : count === 2 ? 24 : 46
+    }
+    readonly property var paramRows: {
+        if (!node) return []
+        root.revision
+        var descs = node.paramDescs()
+        var cur = node.taskParams()
+        var groups = []
+        for (var i = 0; i < descs.length; ++i) {
+            var d = descs[i]
+            if (d.showIfKey !== undefined && d.showIfKey !== "") {
+                if (("" + cur[d.showIfKey]) !== ("" + d.showIfValue)) continue
+            }
+            var g = d.group === undefined ? 0 : d.group
+            if (g > 0 && groups.length > 0 && groups[groups.length - 1].group === g)
+                groups[groups.length - 1].items.push(d)
+            else
+                groups.push({ group: g, items: [d] })
+        }
+        // 计算每列的 labelWidth/controlWidth
+        var rows = []
+        for (var r = 0; r < groups.length; ++r) {
+            var items = groups[r].items
+            var specialSum = 0, flexCount = 0
+            for (var j = 0; j < items.length; ++j) {
+                if (naturalWidth(items[j]) >= 0) specialSum += naturalWidth(items[j])
+                else ++flexCount
+            }
+            var gaps = Math.max(0, items.length - 1) * 8
+            var flexArea = Math.max(0, root.width - specialSum - gaps)
+            var perItem = flexCount > 0 ? flexArea / flexCount : 0
+            var cols = []
+            for (var k = 0; k < items.length; ++k) {
+                var it = items[k]
+                var lw = labelW(it, items.length)
+                cols.push({ desc: it, labelWidth: lw,
+                            controlWidth: naturalWidth(it) >= 0 ? 0
+                                          : Math.min(110, Math.max(36, perItem - lw - 6)) })
+            }
+            rows.push({ group: groups[r].group, cols: cols })
+        }
+        return rows
+    }
+
     Repeater {
-        id: paramRepeater
-        model: root.node ? (root.revision, root.node.paramDescs()) : []
-
+        model: root.paramRows
         delegate: Row {
-            id: paramRow
+            id: groupRow
             required property var modelData
-
             width: root.width
-            spacing: 6
+            spacing: 8
 
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 62
-                text: paramRow.modelData.label
-                color: Theme.fgDim
-                font.pixelSize: 11
-                elide: Text.ElideRight
-                renderType: root.textRenderType
-            }
-
-            // bool：点击切换的开关
-            Rectangle {
-                id: boolBox
-                visible: paramRow.modelData.kind === "bool"
-                anchors.verticalCenter: parent.verticalCenter
-                width: 40
-                height: 22
-                radius: 11
-                color: root.boolValue(paramRow.modelData.key) ? Theme.blue : Theme.bg
-                border.width: 1
-                border.color: root.boolValue(paramRow.modelData.key) ? Theme.blue : Theme.border
-                Behavior on color { ColorAnimation { duration: 130 } }
-
-                Rectangle {
-                    width: 16
-                    height: 16
-                    radius: 8
-                    y: 2
-                    x: root.boolValue(paramRow.modelData.key) ? 21 : 2
-                    color: root.boolValue(paramRow.modelData.key) ? "#ffffff" : Theme.fgDim
-                    Behavior on x { NumberAnimation { duration: 130 } }
-                }
-
-                TapHandler {
-                    onTapped: {
-                        if (!root.node) return
-                        root.node.setTaskParam(paramRow.modelData.key,
-                                               !root.boolValue(paramRow.modelData.key))
-                        NodeManager.commitNodeParams(root.node.uuid)
-                    }
-                }
-            }
-
-            // select：深色主题化下拉
-            Rectangle {
-                id: selectBox
-                visible: paramRow.modelData.kind === "select"
-                anchors.verticalCenter: parent.verticalCenter
-                width: 110
-                height: 22
-                radius: 5
-                color: selectHover.hovered || selectMenu.visible ? Theme.bgHover : Theme.bg
-                border.width: 1
-                border.color: Theme.border
-
-                Text {
-                    anchors.fill: parent
-                    anchors.leftMargin: 8
-                    anchors.rightMargin: 18
-                    verticalAlignment: Text.AlignVCenter
-                    text: root.optionLabel(paramRow.modelData.options,
-                                           root.paramValue(paramRow.modelData.key))
-                    color: Theme.fg
-                    font.pixelSize: 11
-                    elide: Text.ElideRight
-                    renderType: root.textRenderType
-                }
-                Text {
-                    anchors.right: parent.right
-                    anchors.rightMargin: 7
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"
-                    color: Theme.fgDim
-                    font.pixelSize: 10
-                    renderType: root.textRenderType
-                }
-
-                HoverHandler { id: selectHover }
-                TapHandler {
-                    onTapped: selectMenu.visible ? selectMenu.close() : selectMenu.open()
-                }
-
-                Menu {
-                    id: selectMenu
-                    y: -(height + 4)
-                    background: Rectangle {
-                        implicitWidth: 150
-                        color: Theme.bgElev
-                        border.width: 1
-                        border.color: Theme.border
-                        radius: 8
-                    }
-                    Instantiator {
-                        model: paramRow.modelData.options
-                        delegate: MenuItem {
-                            id: optItem
-                            required property var modelData
-                            implicitHeight: 26
-                            text: modelData.label
-                            onTriggered: {
-                                if (root.node) {
-                                    root.node.setTaskParam(paramRow.modelData.key,
-                                                           modelData.value)
-                                    NodeManager.commitNodeParams(root.node.uuid)
-                                }
-                            }
-                            contentItem: Text {
-                                text: optItem.text
-                                color: optItem.hovered ? Theme.fgBright : Theme.fg
-                                font.pixelSize: 11
-                                leftPadding: 12
-                                rightPadding: 12
-                                verticalAlignment: Text.AlignVCenter
-                                renderType: root.textRenderType
-                            }
-                            background: Rectangle {
-                                radius: 6
-                                color: optItem.hovered ? Theme.bgHover : "transparent"
-                            }
-                        }
-                        onObjectAdded: (index, object) => selectMenu.insertItem(index, object)
-                        onObjectRemoved: (index, object) => selectMenu.removeItem(object)
-                    }
-                }
-            }
-
-            // int / float / text：文本输入，提交时交给 C++ 转换
-            Rectangle {
-                id: textBox
-                visible: paramRow.modelData.kind !== "bool" && paramRow.modelData.kind !== "select"
-                anchors.verticalCenter: parent.verticalCenter
-                width: 90
-                height: 22
-                radius: 5
-                color: Theme.bg
-                border.width: 1
-                border.color: textIn.activeFocus ? Theme.blue : Theme.border
-
-                TextInput {
-                    id: textIn
-                    anchors.fill: parent
-                    horizontalAlignment: TextInput.AlignHCenter
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: Theme.fg
-                    font.pixelSize: 11
-                    selectByMouse: true
-                    renderType: root.textRenderType
-                    text: "" + root.paramValue(paramRow.modelData.key)
-                    onEditingFinished: {
-                        if (!root.node) return
-                        root.node.setTaskParam(paramRow.modelData.key, text)
-                        NodeManager.commitNodeParams(root.node.uuid)
-                    }
-                }
-
-                Connections {
-                    target: root
-                    function onRevisionChanged() {
-                        if (!textIn.activeFocus)
-                            textIn.text = "" + root.paramValue(paramRow.modelData.key)
-                    }
+            Repeater {
+                model: groupRow.modelData.cols
+                delegate: ParamField {
+                    node: root.node
+                    desc: groupRow.modelData.cols[index].desc
+                    revision: root.revision
+                    labelWidth: groupRow.modelData.cols[index].labelWidth
+                    controlWidth: groupRow.modelData.cols[index].controlWidth
                 }
             }
         }

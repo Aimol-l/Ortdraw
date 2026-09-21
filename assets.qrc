@@ -21,6 +21,7 @@
         <file alias="PreProcessNode.qml">qml/node/PreProcessNode.qml</file>
         <file alias="PostProcessNode.qml">qml/node/PostProcessNode.qml</file>
         <file alias="TaskNodeControls.qml">qml/node/TaskNodeControls.qml</file>
+        <file alias="ParamField.qml">qml/node/ParamField.qml</file>
         <file alias="NodeCard.qml">qml/node/NodeCard.qml</file>
         <file alias="preview_placeholder.png">assets/images/preview_placeholder.png</file>
         <file alias="TopBar.qml">qml/chrome/TopBar.qml</file>

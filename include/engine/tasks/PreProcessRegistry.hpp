@@ -146,106 +146,120 @@ inline bool pushTensor(const onnx_engine::TensorBuffer& buf, ExecResult& r, cons
 
 inline void registerBuiltinPreProcessTasks() {
     auto& reg = PreProcessRegistry::instance();
-    if (reg.find(QStringLiteral("image_to_tensor"))) return;
+    if (reg.find(QStringLiteral("standard"))) return;
 
     using namespace preprocess_detail;
 
-    // ---- 图像 → 张量 ----
+    auto dtypeOf = [](const QString& v) {
+        return v == QStringLiteral("fp16") ? onnx_engine::ElementType::Float16
+                                           : onnx_engine::ElementType::Float32;
+    };
+
+    // ---- 标准预处理：图像 → 张量（0..1），dtype 可选 fp32/fp16，尺寸可保持或缩放 ----
     {
         TaskSpec s;
-        s.id = "image_to_tensor";
-        s.name = QStringLiteral("图像→张量");
+        s.id = "standard";
+        s.name = QStringLiteral("标准预处理");
         s.inputs = {{QStringLiteral("图像"), DataType::Image}};
         s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
         s.defaults = QVariantMap{
-            {"layout", "NCHW"}, {"channel", "auto"}, {"norm", "none"},
-            {"mean", "0.485,0.456,0.406"}, {"std", "0.229,0.224,0.225"},
-            {"resize", "auto"}, {"width", 224}, {"height", 224},
+            {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp32"},
+            {"norm", "unit"}, {"mean", "0.485,0.456,0.406"}, {"std", "0.229,0.224,0.225"},
+            {"size", "keep"}, {"sizeWH", "224x224"},
         };
         s.params = {
             {"layout", QStringLiteral("布局"), "select", "NCHW",
-             {{"NCHW", "NCHW"}, {"NHWC", "NHWC"}}},
-            {"channel", QStringLiteral("通道"), "select", "auto",
-             {{"auto", "auto"}, {"rgb", "rgb"}, {"bgr", "bgr"}}},
-            {"norm", QStringLiteral("归一化"), "select", "none",
-             {{"none", "none"}, {"div255", "div255"}, {"meanstd", "meanstd"}}},
-            {"mean", QStringLiteral("均值"), "text", "0.485,0.456,0.406", {}},
-            {"std", QStringLiteral("标准差"), "text", "0.229,0.224,0.225", {}},
-            {"resize", QStringLiteral("缩放"), "select", "auto",
-             {{"auto", "auto"}, {"keep", "keep"}}},
-            {"width", QStringLiteral("宽"), "int", 224, {}},
-            {"height", QStringLiteral("高"), "int", 224, {}},
+             {{"NCHW", "NCHW"}, {"NHWC", "NHWC"}}, 1, 0, {}, ""},
+            {"channel", QStringLiteral("通道"), "select", "rgb",
+             {{"rgb", "RGB"}, {"bgr", "BGR"}}, 1, 0, {}, ""},
+            {"dtype", QStringLiteral("精度"), "select", "fp32",
+             {{"fp32", "fp32"}, {"fp16", "fp16"}}, 1, 0, {}, ""},
+            {"norm", QStringLiteral("处理方式"), "select", "unit",
+             {{"unit", QStringLiteral("0~1 (/255)")},
+              {"zscore", QStringLiteral("Z-score")},
+              {"pm1", QStringLiteral("[-1,1]")},
+              {"minmax", QStringLiteral("逐通道 Min-Max")}}, 0, 0, {}, ""},
+            {"mean", QStringLiteral("均值"), "floats", "0.485,0.456,0.406", {}, 0, 3,
+             "norm", "zscore"},
+            {"std", QStringLiteral("标准差"), "floats", "0.229,0.224,0.225", {}, 0, 3,
+             "norm", "zscore"},
+            {"size", QStringLiteral("尺寸"), "select", "keep",
+             {{"keep", QStringLiteral("原尺寸")},
+              {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
+            {"sizeWH", QStringLiteral("宽x高"), "size2", "224x224", {}, 2, 0, {}, ""},
         };
-        s.compute = [](const ExecuteContext&, const QVariantMap& p,
-                       const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
+                              const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
             if (!img) return {false, QStringLiteral("输入不是图像"), {}};
             if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
 
             const QString layout = p.value("layout", "NCHW").toString();
-            const QString channel = p.value("channel", "auto").toString();
-            const QString norm = p.value("norm", "none").toString();
-            const QString resize = p.value("resize", "auto").toString();
-            const int W = p.value("width", 224).toInt();
-            const int H = p.value("height", 224).toInt();
-            const QVector<double> mean = parseDoubles(p.value("mean").toString());
-            const QVector<double> stdev = parseDoubles(p.value("std").toString());
+            const QString channel = p.value("channel", "rgb").toString();
+            const QString size = p.value("size", "keep").toString();
+            const int channels = img->channels() == 1 ? 1 : 3;
+            const bool keep = (size != QStringLiteral("resize"));
+            int reqW = 224, reqH = 224;
+            const QStringList wh = p.value("sizeWH", "224x224").toString().split('x');
+            if (wh.size() == 2) { reqW = wh[0].toInt(); reqH = wh[1].toInt(); }
+            const int W = keep ? img->cols : reqW;
+            const int H = keep ? img->rows : reqH;
+            if (W <= 0 || H <= 0) return {false, QStringLiteral("目标尺寸无效"), {}};
 
-            const int channels = (channel == QStringLiteral("rgb") || channel == QStringLiteral("bgr"))
-                                     ? 3 : img->channels();
             std::vector<int64_t> shape;
             if (layout == QStringLiteral("NHWC"))
                 shape = {1, H, W, channels};
             else
                 shape = {1, channels, H, W};
 
+            // 处理方式：0~1(/255) / Z-score / [-1,1] / 逐通道 Min-Max
+            const QString normOpt = p.value("norm", "unit").toString();
+            const QString norm = (normOpt == QStringLiteral("div255")) ? QStringLiteral("div255")
+                                 : normOpt;
+            const QVector<double> mean = preprocess_detail::parseDoubles(p.value("mean").toString());
+            const QVector<double> stdev = preprocess_detail::parseDoubles(p.value("std").toString());
+
             const auto buf = onnx_convert::imageToTensor(
-                *img, shape, onnx_engine::ElementType::Float32,
-                norm, mean, stdev, channel, resize);
+                *img, shape, dtypeOf(p.value("dtype", "fp32").toString()),
+                norm, mean, stdev, channel, keep ? "keep" : "auto");
             if (buf.data.empty())
-                return {false, QStringLiteral("图像→张量失败（通道或尺寸不匹配）"), {}};
+                return {false, QStringLiteral("标准预处理失败（通道或尺寸不匹配）"), {}};
 
             ExecResult r;
-            pushTensor(buf, r, QStringLiteral("图像→张量失败（数据无效）"));
+            pushTensor(buf, r, QStringLiteral("标准预处理失败（数据无效）"));
             return r;
         };
         reg.add(std::move(s));
     }
 
-    // ---- YOLO letterbox ----
+    // ---- YOLO 预处理：letterbox 到 size×size，RGB，0..1 ----
     {
         TaskSpec s;
         s.id = "yolo_letterbox";
-        s.name = QStringLiteral("YOLO Letterbox");
+        s.name = QStringLiteral("YOLO 预处理");
         s.inputs = {{QStringLiteral("图像"), DataType::Image}};
         s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
-        s.defaults = QVariantMap{{"size", 640}, {"pad", 114}, {"channel", "rgb"}};
+        s.defaults = QVariantMap{{"size", 640}, {"pad", 114}, {"dtype", "fp32"}};
         s.params = {
             {"size", QStringLiteral("尺寸"), "int", 640, {}},
             {"pad", QStringLiteral("填充值"), "int", 114, {}},
-            {"channel", QStringLiteral("通道"), "select", "rgb",
-             {{"rgb", "rgb"}, {"bgr", "bgr"}}},
+            {"dtype", QStringLiteral("精度"), "select", "fp32",
+             {{"fp32", "fp32"}, {"fp16", "fp16"}}},
         };
-        s.compute = [](const ExecuteContext&, const QVariantMap& p,
-                       const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
+                              const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
             if (!img) return {false, QStringLiteral("输入不是图像"), {}};
             if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
 
             const int size = p.value("size", 640).toInt();
             const int pad = p.value("pad", 114).toInt();
-            const QString channel = p.value("channel", "rgb").toString();
             if (size <= 0) return {false, QStringLiteral("letterbox 尺寸无效"), {}};
 
             cv::Mat bgr;
-            if (img->channels() == 1)
-                cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
-            else if (img->channels() == 4)
-                cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
-            else
-                bgr = *img;
-            if (channel == QStringLiteral("rgb"))
-                cv::cvtColor(bgr, bgr, cv::COLOR_BGR2RGB);
+            if (img->channels() == 1)       cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
+            else if (img->channels() == 4)  cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
+            else                            bgr = *img;
 
             const double scale = std::min(double(size) / bgr.cols, double(size) / bgr.rows);
             const int nw = std::max(1, int(std::lround(bgr.cols * scale)));
@@ -253,86 +267,22 @@ inline void registerBuiltinPreProcessTasks() {
             cv::Mat resized;
             cv::resize(bgr, resized, cv::Size(nw, nh), 0, 0, cv::INTER_LINEAR);
 
-            cv::Mat f;
-            resized.convertTo(f, CV_32FC3, 1.0 / 255.0);
             const int top = (size - nh) / 2, bottom = size - nh - top;
             const int left = (size - nw) / 2, right = size - nw - left;
             cv::Mat canvas;
-            const double pv = pad / 255.0;
-            cv::copyMakeBorder(f, canvas, top, bottom, left, right,
+            const int pv = std::max(0, std::min(255, pad));
+            cv::copyMakeBorder(resized, canvas, top, bottom, left, right,
                                cv::BORDER_CONSTANT, cv::Scalar(pv, pv, pv));
 
-            onnx_engine::TensorBuffer buf;
-            buf.type = onnx_engine::ElementType::Float32;
-            buf.shape = {1, 3, size, size};
-            buf.data.resize(std::size_t(3) * size * size * sizeof(float));
-            float* dst = reinterpret_cast<float*>(buf.data.data());
-            for (int y = 0; y < size; ++y) {
-                const float* row = canvas.ptr<float>(y);
-                for (int x = 0; x < size; ++x)
-                    for (int c = 0; c < 3; ++c)
-                        dst[(std::size_t(c) * size + y) * size + x] = row[x * 3 + c];
-            }
+            // 统一走 imageToTensor：BGR→RGB、/255、可选 fp16
+            const auto buf = onnx_convert::imageToTensor(
+                canvas, {1, 3, size, size}, dtypeOf(p.value("dtype", "fp32").toString()),
+                "div255", {}, {}, "rgb", "keep");
+            if (buf.data.empty())
+                return {false, QStringLiteral("YOLO 预处理失败（尺寸或通道不匹配）"), {}};
 
             ExecResult r;
-            pushTensor(buf, r, QStringLiteral("letterbox 失败"));
-            return r;
-        };
-        reg.add(std::move(s));
-    }
-
-    // ---- 归一化 ----
-    {
-        TaskSpec s;
-        s.id = "normalize";
-        s.name = QStringLiteral("归一化");
-        s.inputs = {{QStringLiteral("张量"), DataType::Tensor}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
-        s.defaults = QVariantMap{{"scale", 1.0}, {"mean", "0,0,0"}, {"std", "1,1,1"}};
-        s.params = {
-            {"scale", QStringLiteral("缩放"), "float", 1.0, {}},
-            {"mean", QStringLiteral("均值"), "text", "0,0,0", {}},
-            {"std", QStringLiteral("标准差"), "text", "1,1,1", {}},
-        };
-        s.compute = [](const ExecuteContext&, const QVariantMap& p,
-                       const QVector<NodeData>& inputs) -> ExecResult {
-            if (inputs.isEmpty() || !std::holds_alternative<Tensor>(inputs[0]))
-                return {false, QStringLiteral("输入不是张量"), {}};
-            const auto in = onnx_convert::tensorToBuffer(std::get<Tensor>(inputs[0]));
-            const auto out = normalizeBuffer(in, p.value("scale", 1.0).toDouble(),
-                                             parseDoubles(p.value("mean").toString()),
-                                             parseDoubles(p.value("std").toString()));
-            if (out.data.empty()) return {false, QStringLiteral("归一化失败（张量数据无效）"), {}};
-            ExecResult r;
-            pushTensor(out, r, QStringLiteral("归一化失败"));
-            return r;
-        };
-        reg.add(std::move(s));
-    }
-
-    // ---- Resize ----
-    {
-        TaskSpec s;
-        s.id = "resize";
-        s.name = QStringLiteral("Resize");
-        s.inputs = {{QStringLiteral("张量"), DataType::Tensor}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
-        s.defaults = QVariantMap{{"width", 224}, {"height", 224}};
-        s.params = {
-            {"width", QStringLiteral("宽"), "int", 224, {}},
-            {"height", QStringLiteral("高"), "int", 224, {}},
-        };
-        s.compute = [](const ExecuteContext&, const QVariantMap& p,
-                       const QVector<NodeData>& inputs) -> ExecResult {
-            if (inputs.isEmpty() || !std::holds_alternative<Tensor>(inputs[0]))
-                return {false, QStringLiteral("输入不是张量"), {}};
-            const auto in = onnx_convert::tensorToBuffer(std::get<Tensor>(inputs[0]));
-            const auto out = resizeBuffer(in, p.value("width", 224).toInt(),
-                                          p.value("height", 224).toInt());
-            if (out.data.empty())
-                return {false, QStringLiteral("Resize 失败（张量需为 4D 且尺寸有效）"), {}};
-            ExecResult r;
-            pushTensor(out, r, QStringLiteral("Resize 失败"));
+            pushTensor(buf, r, QStringLiteral("YOLO 预处理失败"));
             return r;
         };
         reg.add(std::move(s));
