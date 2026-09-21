@@ -377,9 +377,11 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
         Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         std::vector<Ort::Value> ortInputs;
         std::vector<Tensor> temps;                  // 物化/搬运副本，须存活到 Run 结束
+        std::vector<std::vector<std::uint8_t>> narrowTemps;   // UInt8 收窄缓冲，须存活到 Run 结束
         std::vector<std::vector<int64_t>> shapes;   // 形状存储，保证 CreateTensor 期间指针有效
         ortInputs.reserve(inputs.size());
         temps.reserve(inputs.size());
+        narrowTemps.reserve(inputs.size());
         shapes.reserve(inputs.size());
 
         for (std::size_t i = 0; i < inputs.size(); ++i) {
@@ -403,9 +405,12 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
                       + std::string(via::dtype_to_string(t.dtype()));
                 return false;
             }
-            // 承载宽度必须一致才能按原始字节喂给 ORT。UInt8→INT16（2 字节）这类
-            // 刻意加宽的映射需要显式收窄，本版本暂不支持，避免静默误读。
-            if (std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
+            // 承载宽度必须一致才能按原始字节喂给 ORT；唯一例外是 §4.1 的
+            // UInt8↔INT16 映射（UInt8 由 INT16 承载，喂 ORT 前需收窄为 1 字节）。
+            const bool uint8Narrow = (want.type == ElementType::UInt8
+                                      && t.dtype() == via::DataType::INT16);
+            if (!uint8Narrow
+                && std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
                 error = "onnx_engine: 输入 " + want.name + " 的元素承载宽度与模型不匹配（"
                       + elementTypeName(want.type) + "），暂不支持";
                 return false;
@@ -440,8 +445,24 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
             }
 
             // 零拷贝：CPU 且连续时直接引用调用方内存；否则物化一份连续 host 副本。
+            // UInt8（§4.1 由 INT16 承载）额外收窄为 1 字节临时缓冲后再喂 ORT。
             const void* p = nullptr;
-            if (t.is_contiguous() && t.device() == via::Device::CPU) {
+            std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
+            if (uint8Narrow) {
+                const Tensor* hostT = &t;
+                if (!(t.is_contiguous() && t.device() == via::Device::CPU)) {
+                    temps.push_back(t.contiguous());
+                    temps.back().to_host();
+                    hostT = &temps.back();
+                }
+                narrowTemps.emplace_back(elems);
+                std::vector<std::uint8_t>& nb = narrowTemps.back();
+                const auto* s16 = static_cast<const std::int16_t*>(hostT->data());
+                for (std::size_t k = 0; k < elems; ++k)
+                    nb[k] = static_cast<std::uint8_t>(s16[k]);   // 无符号语义取低 8 位
+                p = nb.data();
+                bytes = elems;   // 每元素 1 字节
+            } else if (t.is_contiguous() && t.device() == via::Device::CPU) {
                 p = t.data();
             } else {
                 Tensor tmp = t.contiguous();
@@ -451,7 +472,6 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
             }
             shapes.push_back(std::move(shape));
             const std::vector<int64_t>& sh = shapes.back();
-            const std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
             ortInputs.emplace_back(Ort::Value::CreateTensor(
                 mem, const_cast<void*>(p), bytes, sh.data(), sh.size(),
                 ortElementType(want.type)));
@@ -466,8 +486,9 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
                   + "，实际 " + std::to_string(res.size());
             return false;
         }
-        outputs.clear();
-        outputs.reserve(res.size());
+        // 先写入局部缓冲，只有全部成功后才提交到 outputs（失败退出时保持 outputs 为空）。
+        std::vector<Tensor> tmpOuts;
+        tmpOuts.reserve(res.size());
         for (std::size_t i = 0; i < res.size(); ++i) {
             const TensorInfo& want = info_.outputs[i];
             Ort::Value& v = res[i];
@@ -481,16 +502,21 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
                 error = "onnx_engine: 输出 " + want.name + " 的元素类型不受支持";
                 return false;
             }
+            const std::size_t elems = std::size_t(ti.GetElementCount());
+            if (elems == 0) {
+                // Tensorvia 不接受零元素张量（构造会抛异常），明确报错优于抛出。
+                error = "onnx_engine: 输出 " + want.name + " 元素数为 0";
+                return false;
+            }
             std::vector<int64_t> shape = ti.GetShape();
             if (shape.empty()) shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
             const via::DataType dt = toViaDataType(ot);
             Tensor out(shape, dt, via::Device::CPU);
-            const std::size_t elems = std::size_t(ti.GetElementCount());
             const int srcSize = elementTypeSize(ot);
             const int dstSize = int(via::calc_dtype_size(dt));
             const std::uint8_t* src = v.GetTensorData<std::uint8_t>();
             if (srcSize == dstSize) {
-                if (elems != 0) std::memcpy(out.data(), src, elems * std::size_t(srcSize));
+                std::memcpy(out.data(), src, elems * std::size_t(srcSize));
             } else if (ot == ElementType::UInt8) {
                 // UInt8→INT16：逐元素无符号加宽（保持 0..255 语义）
                 std::int16_t* dst = static_cast<std::int16_t*>(out.data());
@@ -499,12 +525,12 @@ bool SessionImpl::run(const std::vector<Tensor>& inputs, std::vector<Tensor>& ou
                 error = "onnx_engine: 输出 " + want.name + " 的类型映射暂不支持";
                 return false;
             }
-            outputs.push_back(std::move(out));
+            tmpOuts.push_back(std::move(out));
         }
+        outputs = std::move(tmpOuts);
         error.clear();
         return true;
     } catch (const std::exception& e) {
-        outputs.clear();
         error = e.what();
         return false;
     }

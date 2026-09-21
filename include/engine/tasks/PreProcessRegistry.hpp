@@ -107,7 +107,8 @@ inline void registerBuiltinPreProcessTasks() {
               {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
             {"sizeWH", QStringLiteral("宽x高"), "size2", "0x0", {}, 2, 0, {}, ""},
         };
-        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
+                              const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
             if (!img) return {false, QStringLiteral("输入不是图像"), {}};
             if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
@@ -165,28 +166,20 @@ inline void registerBuiltinPreProcessTasks() {
             {"dtype", QStringLiteral("精度"), "select", "fp32",
              {{"fp32", "fp32"}, {"fp16", "fp16"}}},
         };
-        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,const QVector<NodeData>& inputs) -> ExecResult {
+        s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
+                              const QVector<NodeData>& inputs) -> ExecResult {
             const cv::Mat* img = preprocess_detail::imageInput(inputs, 0);
-
-            if (!img) 
-                return {false, QStringLiteral("输入不是图像"), {}};
-            if (img->empty()) 
-                return {false, QStringLiteral("输入图像为空"), {}};
+            if (!img) return {false, QStringLiteral("输入不是图像"), {}};
+            if (img->empty()) return {false, QStringLiteral("输入图像为空"), {}};
 
             const int size = p.value("size", 640).toInt();
             const int pad = p.value("pad", 114).toInt();
-
-            if (size <= 0) 
-                return {false, QStringLiteral("letterbox 尺寸无效"), {}};
+            if (size <= 0) return {false, QStringLiteral("letterbox 尺寸无效"), {}};
 
             cv::Mat bgr;
-
-            if (img->channels() == 1)       
-                cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
-            else if (img->channels() == 4)  
-                cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
-            else
-                bgr = *img;
+            if (img->channels() == 1)       cv::cvtColor(*img, bgr, cv::COLOR_GRAY2BGR);
+            else if (img->channels() == 4)  cv::cvtColor(*img, bgr, cv::COLOR_BGRA2BGR);
+            else                            bgr = *img;
 
             const double scale = std::min(double(size) / bgr.cols, double(size) / bgr.rows);
             const int nw = std::max(1, int(std::lround(bgr.cols * scale)));
@@ -205,7 +198,6 @@ inline void registerBuiltinPreProcessTasks() {
             Tensor buf = onnx_convert::imageToTensor(
                 canvas, {1, 3, size, size}, dtypeOf(p.value("dtype", "fp32").toString()),
                 "div255", {}, {}, "rgb", "keep");
-
             if (buf.numel() == 0)
                 return {false, QStringLiteral("YOLO 预处理失败（尺寸或通道不匹配）"), {}};
 

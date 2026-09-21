@@ -152,7 +152,9 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 | UInt16/UInt32/UInt64/String/Complex | — | **报错**「不支持的张量类型」，提示该模型当前不受支持 |
 
 - 反向（`via::DataType` → ONNX dtype，用于把张量喂给模型）：同上表反向；`INT16` 不自动视为 `UInt8`（需显式要求），以免歧义。
-- 该映射在 `OnnxTensorConvert.hpp` 内实现并有单元测试覆盖（含 `uint8`/`bool` 往返）。
+- 该映射在 **`onnx_engine`（`types.hpp` 声明、`runtime.cpp` 实现：`toViaDataType`/`fromViaDataType`）** 内实现，并有单元测试覆盖。
+- **UInt8 输入**：由于 Tensorvia 只有 `INT16` 可承载，喂 ORT 前由 SDK 在内部构造**收窄临时缓冲**（逐元素取低 8 位、按无符号解释），对调用方透明。
+- **Bool 输出**：ONNX `Bool` 与 `Int8` 都映射为 `INT8`，单看张量无法区分；应用侧 `tensorToNodeData(t, declType)` 依据**模型声明的输出 `ElementType`**（`session->info().outputs[i].type`）判定：`Bool` → `bool`，其余标量 → `double`。
 
 ## 5. 节点
 

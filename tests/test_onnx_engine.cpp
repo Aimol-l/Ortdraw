@@ -21,6 +21,11 @@ private:
         return std::vector<int64_t>(s.begin(), s.end());
     }
 
+    static Tensor i16buf(const std::vector<int64_t>& shape, std::initializer_list<std::int16_t> vals) {
+        std::vector<std::int16_t> v(vals);
+        return Tensor(v, shape);
+    }
+
 private slots:
     void linksAndProbes() {
         (void)Runtime::cudaAvailable();                     // 必须能链接到库符号
@@ -125,6 +130,27 @@ private slots:
         QCOMPARE(outs.size(), std::size_t(1));
         QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{2,4}));
         QCOMPARE(outs[0].numel(), std::size_t(8));
+    }
+
+    void runUInt8Input() {
+        // 模型输入为 uint8；Tensorvia 以 INT16 承载，SDK 内部收窄为 1 字节后喂 ORT。
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/uint8_add.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(fx, {}, err);
+        QVERIFY2(s, err.c_str());
+        QCOMPARE(s->info().inputs.size(), std::size_t(1));
+        QCOMPARE(s->info().inputs[0].type, ElementType::UInt8);
+        QCOMPARE(s->info().outputs[0].type, ElementType::UInt8);
+
+        Tensor a = i16buf({2,3}, {200, 1, 2, 3, 4, 255});
+        std::vector<Tensor> ins{a}, outs;
+        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        QCOMPARE(outs.size(), std::size_t(1));
+        QCOMPARE(outs[0].dtype(), via::DataType::INT16);   // uint8 输出加宽承载
+        QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{2,3}));
+        const auto* p = static_cast<const std::int16_t*>(outs[0].data());
+        QCOMPARE(int(p[0]), 200);   // 无符号语义原样保留
+        QCOMPARE(int(p[5]), 255);
     }
 
     void runWrongInputCountFails() {

@@ -373,28 +373,37 @@ inline TensorBuffer tensorToBuffer(const Tensor& t) {
     return b;
 }
 
-// Tensorvia::Tensor → NodeData：
+// Tensorvia::Tensor → NodeData。
+//
+// Tensorvia 没有 Bool，ONNX Bool 与 Int8 都映射为 INT8，单看张量无法区分，
+// 故提供 declType：模型声明的输出 ElementType（来自 session->info().outputs[i].type）。
 //   - 空张量（numel == 0）→ monostate（调用方须检查并报告错误）；
-//   - numel == 1 视为标量：INT8（可承载 Bool 或 Int8）→ bool，其余→double；
+//   - declType == Bool 且 numel == 1 → bool；
+//   - 其余标量（numel == 1，含整型/浮点/Unknown）→ double；
 //   - numel > 1 → Tensorvia::Tensor。
-inline NodeData tensorToNodeData(const Tensor& t) {
+inline NodeData tensorToNodeData(const Tensor& t, onnx_engine::ElementType declType) {
     if (t.numel() == 0) return NodeData{std::monostate{}};
 
     if (t.numel() == 1) {
-        const via::DataType dt = t.dtype();
         Tensor host = t.contiguous();
         host.to_host();
-        if (dt == via::DataType::INT8) {
+        if (declType == onnx_engine::ElementType::Bool) {
             std::int8_t v = 0;
             std::memcpy(&v, host.data(), 1);
             return NodeData(v != 0);
         }
-        const onnx_engine::ElementType et = onnx_engine::fromViaDataType(dt);
+        // 按张量自身 dtype 读取（Int8/UInt8/UInt16 等承载宽度可能已被 §4.1 调整）。
+        const onnx_engine::ElementType et = onnx_engine::fromViaDataType(t.dtype());
         if (onnx_engine::elementTypeSize(et) <= 0) return NodeData{std::monostate{}};
         return NodeData(detail::readScalarAsDouble(
             static_cast<const std::uint8_t*>(host.data()), et));
     }
     return NodeData(t);
+}
+
+// 无声明类型时的退化重载：标量一律 → double（INT8 也按 Int8 处理，不退化为 bool）。
+inline NodeData tensorToNodeData(const Tensor& t) {
+    return tensorToNodeData(t, onnx_engine::ElementType::Unknown);
 }
 
 } // namespace onnx_convert

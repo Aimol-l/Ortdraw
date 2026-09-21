@@ -49,9 +49,10 @@ private slots:
         Tensor t(vals, std::vector<int64_t>{2, 2});
         QVERIFY(std::holds_alternative<Tensor>(onnx_convert::tensorToNodeData(t)));
 
-        std::vector<std::int8_t> bv{1};                 // INT8 标量 → bool
+        std::vector<std::int8_t> bv{1};                 // 声明 Bool → bool
         Tensor bt(bv, std::vector<int64_t>{1});
-        QVERIFY(std::holds_alternative<bool>(onnx_convert::tensorToNodeData(bt)));
+        QVERIFY(std::holds_alternative<bool>(
+            onnx_convert::tensorToNodeData(bt, onnx_engine::ElementType::Bool)));
 
         std::vector<std::int64_t> iv{7};                // 其它标量 → double
         Tensor it(iv, std::vector<int64_t>{1});
@@ -114,6 +115,28 @@ private slots:
     void emptyTensorYieldsMonostate() {
         Tensor t;   // 默认构造：numel==0
         QVERIFY(std::holds_alternative<std::monostate>(onnx_convert::tensorToNodeData(t)));
+    }
+
+    void declaredTypeDisambiguatesBoolAndInt8Scalars() {
+        std::vector<std::int8_t> v{1};
+        Tensor t(v, std::vector<int64_t>{1});
+        // 声明为 Bool → bool
+        const NodeData b = onnx_convert::tensorToNodeData(t, onnx_engine::ElementType::Bool);
+        QVERIFY(std::holds_alternative<bool>(b));
+        QCOMPARE(std::get<bool>(b), true);
+        // 声明为 Int8 → double
+        const NodeData i = onnx_convert::tensorToNodeData(t, onnx_engine::ElementType::Int8);
+        QVERIFY(std::holds_alternative<double>(i));
+        QCOMPARE(std::get<double>(i), 1.0);
+        // 1 参退化（Unknown）：INT8 标量 → double，不退化为 bool
+        const NodeData u = onnx_convert::tensorToNodeData(t);
+        QVERIFY(std::holds_alternative<double>(u));
+        QCOMPARE(std::get<double>(u), 1.0);
+        // 非标量即使声明为 Bool 也保持张量
+        std::vector<std::int8_t> vv{1, 0};
+        Tensor tt(vv, std::vector<int64_t>{2});
+        QVERIFY(std::holds_alternative<Tensor>(
+            onnx_convert::tensorToNodeData(tt, onnx_engine::ElementType::Bool)));
     }
 };
 

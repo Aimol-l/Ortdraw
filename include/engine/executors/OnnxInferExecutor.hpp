@@ -45,9 +45,13 @@ public:
         if (!session->run(ins, outs, err))
             return {false, QString::fromStdString(err), {}};
 
+        // 输出按 info().outputs 顺序对应；用模型声明的 ElementType 区分 Bool 与 Int8 标量。
+        const auto& outInfos = session->info().outputs;
         ExecResult r;
-        for (auto& t : outs) {
-            NodeData d = onnx_convert::tensorToNodeData(t);
+        for (std::size_t i = 0; i < outs.size(); ++i) {
+            const onnx_engine::ElementType declType =
+                (i < outInfos.size()) ? outInfos[i].type : onnx_engine::ElementType::Unknown;
+            NodeData d = onnx_convert::tensorToNodeData(outs[i], declType);
             if (std::holds_alternative<std::monostate>(d))
                 return {false, QStringLiteral("输出类型不受支持"), {}};
             r.outputs.push_back(std::move(d));
