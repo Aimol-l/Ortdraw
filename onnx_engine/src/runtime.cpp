@@ -1,10 +1,34 @@
 #include "impl.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <iterator>
 #include <stdexcept>
 
 namespace onnx_engine {
+
+namespace {
+
+ElementType mapElementType(ONNXTensorElementDataType t) {
+    switch (t) {
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:   return ElementType::Float32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:  return ElementType::Float64;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16: return ElementType::Float16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16:return ElementType::BFloat16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8:    return ElementType::Int8;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16:   return ElementType::Int16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:   return ElementType::Int32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:   return ElementType::Int64;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:   return ElementType::UInt8;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:  return ElementType::UInt16;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:  return ElementType::UInt32;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:  return ElementType::UInt64;
+    case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:    return ElementType::Bool;
+    default:                                    return ElementType::Unknown;
+    }
+}
+
+} // namespace
 
 static std::string normPath(const std::string& path) {
     std::error_code ec;
@@ -83,11 +107,74 @@ void Runtime::Impl::evictIfNeeded() {
     }
 }
 
-std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string&, const SessionOptions&,
-                                                std::string& error) {
+static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
+                                                const std::string& absPath,
+                                                const SessionOptions& opts,
+                                                std::int64_t mtime, std::uint64_t size) {
+    Ort::SessionOptions so;
+    so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+    if (opts.intraThreads > 0) so.SetIntraOpNumThreads(opts.intraThreads);
+    const bool wantCuda = (opts.device == Device::CUDA)
+                       || (opts.device == Device::Auto && Runtime::cudaAvailable());
+    if (wantCuda) {
+        try { OrtCUDAProviderOptions c{}; so.AppendExecutionProvider_CUDA(c); }
+        catch (const std::exception&) { std::fprintf(stderr, "onnx_engine: CUDA 不可用，回退 CPU\n"); }
+    }
+    auto s = std::make_shared<SessionImpl>(env);
+    s->ort = Ort::Session(*env, std::filesystem::path(absPath).c_str(), so);
+    s->info_.path = absPath;
+    s->path = absPath;
+    s->mtime = mtime;
+    s->size = size;
+    s->weightBytes = std::size_t(size);
+
+    Ort::AllocatorWithDefaultOptions alloc;
+    auto readIO = [&](size_t count, bool input, std::vector<TensorInfo>& out) {
+        for (size_t i = 0; i < count; ++i) {
+            Ort::AllocatedStringPtr n = input ? s->ort.GetInputNameAllocated(i, alloc)
+                                              : s->ort.GetOutputNameAllocated(i, alloc);
+            Ort::TypeInfo ti = input ? s->ort.GetInputTypeInfo(i) : s->ort.GetOutputTypeInfo(i);
+            TensorInfo info;
+            info.name = n.get();
+            if (ti.GetONNXType() == ONNX_TYPE_TENSOR) {
+                Ort::ConstTensorTypeAndShapeInfo sh = ti.GetTensorTypeAndShapeInfo();
+                info.type = mapElementType(sh.GetElementType());
+                info.shape = sh.GetShape();       // 可能含 -1（动态维）
+                info.isTensor = true;
+            } else {
+                info.isTensor = false;
+            }
+            out.push_back(std::move(info));
+        }
+    };
+    readIO(s->ort.GetInputCount(), true, s->info_.inputs);
+    readIO(s->ort.GetOutputCount(), false, s->info_.outputs);
+    return s;
+}
+
+std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
+                                                const SessionOptions& o, std::string& error) {
+    std::error_code ec;
+    const std::string abs = normPath(path);
+    const auto mt = std::filesystem::last_write_time(abs, ec);
+    const auto sz = std::filesystem::file_size(abs, ec);
+    if (ec) { error = "模型文件不存在或不可读: " + path; return nullptr; }
+    const auto key = makeKey(abs, o) + "|" + std::to_string(mt.time_since_epoch().count());
     std::lock_guard<std::mutex> lk(mutex);
-    error = "onnx_engine: not implemented";
-    return nullptr;
+    auto it = sessions.find(key);
+    if (it != sessions.end()) { touch(key); return it->second; }
+    error.clear();
+    try {
+        auto s = makeSession(env, abs, o, std::int64_t(mt.time_since_epoch().count()),
+                             std::uint64_t(sz));
+        sessions.emplace(key, s);
+        touch(key);
+        evictIfNeeded();
+        return s;
+    } catch (const std::exception& e) {
+        error = e.what();
+        return nullptr;
+    }
 }
 
 void Runtime::Impl::reloadPath(const std::string& path) {
@@ -102,9 +189,7 @@ void Runtime::Impl::reloadPath(const std::string& path) {
     }
 }
 
-SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> env) {
-    (void)env;
-}
+SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : env(std::move(e)), ort(nullptr) {}
 
 bool SessionImpl::run(const std::vector<TensorBuffer>&, std::vector<TensorBuffer>&,
                       std::string& error) {
@@ -119,7 +204,11 @@ Runtime::~Runtime() = default;
 
 Runtime& Runtime::instance() { static Runtime r; return r; }
 
-ModelInfo Runtime::modelInfo(const std::string&, const SessionOptions&) { return {}; }
+ModelInfo Runtime::modelInfo(const std::string& path, const SessionOptions& opts) {
+    std::string err;
+    auto s = session(path, opts, err);
+    return s ? s->info() : ModelInfo{};
+}
 
 std::shared_ptr<Session> Runtime::session(const std::string& path, const SessionOptions& opts,
                                           std::string& error) {

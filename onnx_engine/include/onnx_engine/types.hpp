@@ -21,7 +21,7 @@ enum class Device { Auto, CPU, CUDA };
 struct TensorInfo {
     std::string name;
     ElementType type = ElementType::Unknown;
-    std::vector<int64_t> shape;   // -1 表示动态维（本 SDK 仅支持静态，见 modelInfo 校验）
+    std::vector<int64_t> shape;   // -1 表示动态维（原样保留）
     bool isTensor = true;         // 非张量（sequence/map/optional）为 false
 };
 

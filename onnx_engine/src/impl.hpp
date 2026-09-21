@@ -11,6 +11,7 @@
 namespace onnx_engine {
 
 struct SessionImpl : Session {
+    std::shared_ptr<Ort::Env> env;
     Ort::Session ort{nullptr};
     ModelInfo info_;
     std::string path;
