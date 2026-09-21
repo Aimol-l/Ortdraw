@@ -3,12 +3,27 @@
 #include <tensorvia/core/tensor.h>
 #include <QString>
 #include <QVector>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <vector>
 #include "engine/NodeData.hpp"
 #include "onnx_engine/types.hpp"
 
 namespace onnx_convert {
+
+// ============================ 失败约定 (failure convention) ============================
+// 本头的转换函数在失败时**不抛异常**，而是返回可判定的「空」值，由调用方
+// （PreProcess/OnnxInfer 执行器）检测后向用户产出具体错误信息：
+//   - imageToTensor()  失败（空图、不支持的 dtype、通道/尺寸与目标形状不符、
+//                      layout 无法判定、Float16/BFloat16 未实现）→ 返回 data 为空的 TensorBuffer；
+//   - bufferToTensor() 失败（不支持的 dtype、data 长度与 shape*元素大小不符、
+//                      空 shape）→ 返回默认构造的空 Tensor（numel()==0）；
+//   - tensorToNodeData() 对不支持的 dtype、非法 data 长度、无法构造 Tensor
+//                       → 返回 std::monostate；标量（numel==1）转 bool/double。
+// 调用方应把「空 TensorBuffer / 空 Tensor / monostate」一律视为错误，
+// 并在可能的情况下先做校验以给出更精确的提示。
+// =====================================================================================
 
 // ONNX ElementType ↔ Tensorvia DataType（设计 §4.1）。
 // Tensorvia 没有 UInt8/Bool：UInt8→INT16，Bool→INT8；其余不支持类型→FLOAT32。
@@ -64,6 +79,31 @@ inline bool isSupported(onnx_engine::ElementType t) {
 
 namespace detail {
 
+// IEEE 754 half (float16) 位模式 → double。
+inline double halfBitsToDouble(std::uint16_t h) {
+    const std::uint32_t sign = (h >> 15) & 1u;
+    const std::uint32_t exp  = (h >> 10) & 0x1Fu;
+    const std::uint32_t mant = h & 0x3FFu;
+    double v = 0.0;
+    if (exp == 0) {
+        if (mant != 0) v = std::ldexp(static_cast<double>(mant), -24);  // 次正规数
+    } else if (exp == 0x1F) {
+        v = (mant != 0) ? std::numeric_limits<double>::quiet_NaN()
+                        : std::numeric_limits<double>::infinity();
+    } else {
+        v = std::ldexp(static_cast<double>(mant) / 1024.0 + 1.0, static_cast<int>(exp) - 15);
+    }
+    return sign ? -v : v;
+}
+
+// bfloat16 位模式（高 16 位与 float32 相同）→ double。
+inline double bfloat16BitsToDouble(std::uint16_t h) {
+    const std::uint32_t bits = static_cast<std::uint32_t>(h) << 16;
+    float f = 0.0f;
+    std::memcpy(&f, &bits, sizeof(float));
+    return static_cast<double>(f);
+}
+
 // 把一段连续的 float 值按目标 dtype 写进行主序字节缓冲（单元素）。
 inline void writeScalarAsFloat(std::uint8_t* dst, onnx_engine::ElementType t, float v) {
     switch (t) {
@@ -116,8 +156,8 @@ inline float readScalarAsFloat(const std::uint8_t* src, onnx_engine::ElementType
     switch (t) {
     case onnx_engine::ElementType::Float32:  { float v;    std::memcpy(&v, src, 4); return v; }
     case onnx_engine::ElementType::Float64:  { double v;   std::memcpy(&v, src, 8); return static_cast<float>(v); }
-    case onnx_engine::ElementType::Float16:  { std::uint16_t v; std::memcpy(&v, src, 2); return static_cast<float>(v); }
-    case onnx_engine::ElementType::BFloat16: { std::uint16_t v; std::memcpy(&v, src, 2); return static_cast<float>(v); }
+    case onnx_engine::ElementType::Float16:  { std::uint16_t v; std::memcpy(&v, src, 2); return static_cast<float>(halfBitsToDouble(v)); }
+    case onnx_engine::ElementType::BFloat16: { std::uint16_t v; std::memcpy(&v, src, 2); return static_cast<float>(bfloat16BitsToDouble(v)); }
     case onnx_engine::ElementType::Int8:     { std::int8_t v;   std::memcpy(&v, src, 1); return static_cast<float>(v); }
     case onnx_engine::ElementType::Int16:    { std::int16_t v;  std::memcpy(&v, src, 2); return static_cast<float>(v); }
     case onnx_engine::ElementType::Int32:    { std::int32_t v;  std::memcpy(&v, src, 4); return static_cast<float>(v); }
@@ -130,6 +170,10 @@ inline float readScalarAsFloat(const std::uint8_t* src, onnx_engine::ElementType
 
 inline double readScalarAsDouble(const std::uint8_t* src, onnx_engine::ElementType t) {
     switch (t) {
+    case onnx_engine::ElementType::Float32:  { float v;    std::memcpy(&v, src, 4); return static_cast<double>(v); }
+    case onnx_engine::ElementType::Float64:  { double v;   std::memcpy(&v, src, 8); return v; }
+    case onnx_engine::ElementType::Float16:  { std::uint16_t v; std::memcpy(&v, src, 2); return halfBitsToDouble(v); }
+    case onnx_engine::ElementType::BFloat16: { std::uint16_t v; std::memcpy(&v, src, 2); return bfloat16BitsToDouble(v); }
     case onnx_engine::ElementType::Int8:   { std::int8_t v;   std::memcpy(&v, src, 1); return static_cast<double>(v); }
     case onnx_engine::ElementType::Int16:  { std::int16_t v;  std::memcpy(&v, src, 2); return static_cast<double>(v); }
     case onnx_engine::ElementType::Int32:  { std::int32_t v;  std::memcpy(&v, src, 4); return static_cast<double>(v); }
@@ -166,15 +210,17 @@ inline std::size_t numelOf(const std::vector<int64_t>& shape) {
 }
 
 // 由 TensorBuffer 构造 Tensorvia::Tensor（按 §4.1 映射 dtype；UInt8 按无符号解释转 INT16）。
+// 失败（不支持的 dtype、空 shape、data 长度不符）返回默认构造的空 Tensor。
 inline Tensor bufferToTensor(const onnx_engine::TensorBuffer& b) {
-    const std::vector<int64_t> shape = b.shape;
-    Tensor t(shape, toViaType(b.type));
-    const std::size_t n = numelOf(shape);
-    if (n == 0 || b.data.empty()) return t;
+    if (!isSupported(b.type)) return Tensor{};
+    if (b.shape.empty()) return Tensor{};  // Tensorvia 不接受空 shape（见 tensorToNodeData 的标量路径）
 
+    const std::size_t n = numelOf(b.shape);
     const std::size_t srcSize = static_cast<std::size_t>(onnx_engine::elementTypeSize(b.type));
+    if (srcSize == 0 || b.data.size() != n * srcSize) return Tensor{};
+
+    Tensor t(b.shape, toViaType(b.type));
     const std::size_t dstSize = via::calc_dtype_size(t.dtype());
-    if (srcSize == 0) return t;
 
     if (srcSize == dstSize) {
         std::memcpy(t.data(), b.data.data(), n * srcSize);
@@ -213,20 +259,28 @@ inline onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
         cv::cvtColor(work, work, cv::COLOR_BGR2RGB);
 
     const std::size_t rank = targetShape.size();
-    const bool nchw = (rank == 4 && targetShape[1] == 3);
+    const int64_t imgChannels = img.channels();
+    bool nchw = false;
+    if (rank == 4) {
+        // 用图像实际通道数判定布局：NCHW 要求 shape[1]==C，NHWC 要求 shape[3]==C。
+        const bool asNchw = (targetShape[1] == imgChannels);
+        const bool asNhwc = (targetShape[3] == imgChannels);
+        if (asNchw == asNhwc) return out;  // 两者皆真或皆假：无法判定 → 失败
+        nchw = asNchw;
+    }
     auto get = [&](std::size_t i, int64_t fb) -> int64_t {
         return (i < rank && targetShape[i] > 0) ? targetShape[i] : fb;
     };
 
     int64_t N = 1, C = 0, H = 0, W = 0;
     if (nchw) {
-        N = get(0, 1); C = get(1, img.channels()); H = get(2, img.rows); W = get(3, img.cols);
+        N = get(0, 1); H = get(2, img.rows); W = get(3, img.cols);
     } else if (rank == 4) {
-        N = get(0, 1); H = get(1, img.rows); W = get(2, img.cols); C = get(3, img.channels());
+        N = get(0, 1); H = get(1, img.rows); W = get(2, img.cols);
     } else {
-        H = img.rows; W = img.cols; C = img.channels();
+        H = img.rows; W = img.cols;
     }
-    if (C <= 0) C = img.channels();
+    C = imgChannels;
     if (H <= 0) H = img.rows;
     if (W <= 0) W = img.cols;
     if (N <= 0) N = 1;
@@ -303,9 +357,10 @@ inline onnx_engine::TensorBuffer tensorToBuffer(const Tensor& t) {
     const std::size_t n = t.numel();
     const std::size_t esize = via::calc_dtype_size(t.dtype());
     if (n > 0 && esize > 0) {
-        // Tensorvia 提供 to_host()（非 const）。复制一份并确保数据位于 host 后再取指针，
-        // 避免在不同后端（CUDA/SYCL/...）下直接解引用设备指针。本应用为 CPU 后端，to_host() 为无操作。
-        Tensor host = t;
+        // 先取连续副本，再确保数据位于 host，避免直接解引用非连续/设备指针。
+        // Tensorvia 提供 contiguous() 与 to_host()（均非 const）。本应用为 CPU 后端，
+        // to_host() 为无操作；contiguous() 对已连续张量可能返回共享 impl 的浅拷贝。
+        Tensor host = t.contiguous();
         host.to_host();
         b.data.resize(n * esize);
         std::memcpy(b.data.data(), host.data(), n * esize);
@@ -313,17 +368,25 @@ inline onnx_engine::TensorBuffer tensorToBuffer(const Tensor& t) {
     return b;
 }
 
-// 中性张量 → NodeData：Bool 标量→bool；整型标量→double；否则→Tensor。
-// 不支持的 dtype（UInt16/UInt32/...）返回 monostate，调用方须检查并报告错误。
+// 中性张量 → NodeData：
+//   - numel == 1（shape 为空或 {}、{1}、{1,1,...} 等）视为标量：Bool→bool，其余→double；
+//   - numel > 1 → Tensorvia::Tensor；
+//   - 不支持的 dtype、data 长度非法、无法构造 Tensor → monostate（调用方须检查并报告错误）。
 inline NodeData tensorToNodeData(const onnx_engine::TensorBuffer& b) {
     if (!isSupported(b.type)) return NodeData{std::monostate{}};
-    if (b.shape.empty()) {
-        if (b.type == onnx_engine::ElementType::Bool)
-            return b.data.empty() ? NodeData(false) : NodeData(b.data[0] != 0);
-        if (detail::isIntegerType(b.type) && !b.data.empty())
-            return NodeData(detail::readScalarAsDouble(b.data.data(), b.type));
+
+    const std::size_t esize = static_cast<std::size_t>(onnx_engine::elementTypeSize(b.type));
+    const std::size_t n = detail::numelOf(b.shape);
+    if (esize == 0 || b.data.size() != n * esize) return NodeData{std::monostate{}};
+
+    if (n == 1) {
+        if (b.type == onnx_engine::ElementType::Bool) return NodeData(b.data[0] != 0);
+        return NodeData(detail::readScalarAsDouble(b.data.data(), b.type));
     }
-    return detail::bufferToTensor(b);
+
+    Tensor t = detail::bufferToTensor(b);
+    if (t.numel() == 0) return NodeData{std::monostate{}};  // 构造失败
+    return NodeData(std::move(t));
 }
 
 } // namespace onnx_convert

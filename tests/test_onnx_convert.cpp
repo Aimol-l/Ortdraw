@@ -16,11 +16,11 @@ private slots:
     }
 
     void imageToTensorNchwDiv255() {
-        cv::Mat bgr(2, 3, CV_8UC3, cv::Scalar(0, 0, 255));   // BGR 全红
-        const auto t = onnx_convert::imageToTensor(bgr, {1, 3, 2, 3},
+        cv::Mat bgr(2, 2, CV_8UC3, cv::Scalar(0, 0, 255));   // BGR 全红
+        const auto t = onnx_convert::imageToTensor(bgr, {1, 3, 2, 2},
                                                    onnx_engine::ElementType::Float32,
                                                    "div255", {}, {}, "rgb", "keep");
-        QCOMPARE(t.shape, (std::vector<int64_t>{1, 3, 2, 3}));
+        QCOMPARE(t.shape, (std::vector<int64_t>{1, 3, 2, 2}));
         QCOMPARE(t.type, onnx_engine::ElementType::Float32);
         const float* p = reinterpret_cast<const float*>(t.data.data());
         QCOMPARE(p[0], 1.0f);   // RGB 的 R 通道 = 255/255 = 1
@@ -64,10 +64,50 @@ private slots:
 
     void imageToTensorKeepSizeMismatchReturnsEmpty() {
         cv::Mat bgr(2, 3, CV_8UC3, cv::Scalar(0, 0, 255));
-        const auto t = onnx_convert::imageToTensor(bgr, {1, 3, 100, 3},
+        const auto t = onnx_convert::imageToTensor(bgr, {1, 3, 100, 7},
                                                    onnx_engine::ElementType::Float32,
                                                    "div255", {}, {}, "rgb", "keep");
         QVERIFY(t.data.empty());
+    }
+
+    void imageToTensorGrayNchw() {
+        cv::Mat gray(2, 3, CV_8U, cv::Scalar(128));
+        const auto t = onnx_convert::imageToTensor(gray, {1, 1, 2, 3},
+                                                   onnx_engine::ElementType::Float32,
+                                                   "div255", {}, {}, "auto", "keep");
+        QCOMPARE(t.shape, (std::vector<int64_t>{1, 1, 2, 3}));
+        const float* p = reinterpret_cast<const float*>(t.data.data());
+        QVERIFY(qAbs(p[0] - 128.0f/255.0f) < 1e-6f);
+    }
+
+    void imageToTensorChannelMismatchReturnsEmpty() {
+        cv::Mat gray(2, 3, CV_8U, cv::Scalar(128));
+        const auto t = onnx_convert::imageToTensor(gray, {1, 3, 2, 3},
+                                                   onnx_engine::ElementType::Float32,
+                                                   "div255", {}, {}, "auto", "keep");
+        QVERIFY(t.data.empty());
+    }
+
+    void rank0FloatYieldsNumber() {
+        onnx_engine::TensorBuffer b; b.type = onnx_engine::ElementType::Float32;
+        b.shape = {}; b.data.resize(4); float v = 3.5f; std::memcpy(b.data.data(), &v, 4);
+        const NodeData d = onnx_convert::tensorToNodeData(b);
+        QVERIFY(std::holds_alternative<double>(d));
+        QCOMPARE(std::get<double>(d), 3.5);
+    }
+
+    void singleElementShape1IntYieldsNumber() {
+        onnx_engine::TensorBuffer b; b.type = onnx_engine::ElementType::Int64;
+        b.shape = {1}; b.data.resize(8); int64_t v = 7; std::memcpy(b.data.data(), &v, 8);
+        const NodeData d = onnx_convert::tensorToNodeData(b);
+        QVERIFY(std::holds_alternative<double>(d));
+        QCOMPARE(std::get<double>(d), 7.0);
+    }
+
+    void shortBufferYieldsFailure() {
+        onnx_engine::TensorBuffer b; b.type = onnx_engine::ElementType::Float32;
+        b.shape = {2, 2}; b.data.resize(4);   // 需要 16 字节
+        QVERIFY(std::holds_alternative<std::monostate>(onnx_convert::tensorToNodeData(b)));
     }
 
     void unsupportedTypeYieldsMonostate() {
