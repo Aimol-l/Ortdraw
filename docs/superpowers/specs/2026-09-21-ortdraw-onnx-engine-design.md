@@ -83,6 +83,7 @@ public:
 
     // 读取模型 IO 元数据（内部缓存；文件变化自动失效重建）
     ModelInfo modelInfo(const std::string& path, const SessionOptions& opts = {});
+    ModelInfo modelInfo(const std::string& path, const SessionOptions& opts, std::string& error);
     // 取得共享会话；失败返回 nullptr 并置 error
     // —— 上层无需管理生命周期：缓存/引用计数/淘汰/失效都在库内完成
     std::shared_ptr<Session> session(const std::string& path, const SessionOptions& opts,
