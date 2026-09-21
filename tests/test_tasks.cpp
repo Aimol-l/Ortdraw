@@ -237,6 +237,22 @@ private slots:
         QCOMPARE(out.rows, 240);
     }
 
+    void yoloDetectMetaSizeMismatchFails() {
+        std::vector<float> v(84, 0.0f);
+        v[0] = 160; v[1] = 120; v[2] = 100; v[3] = 100; v[4 + 5] = 0.9f;
+        Tensor detect(v, std::vector<int64_t>{1, 84, 1});
+        cv::Mat original(240, 320, CV_8UC3, cv::Scalar(20, 20, 20));
+        // 元信息记录的原图尺寸（640x480）与实际原图（320x240）不一致
+        std::vector<float> mv{0, 640, 480, 640, 480, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_detect"},
+            {"params", QVariantMap{{"conf", 0.25}}}},
+            QVector<NodeData>{ detect, original, meta });
+        QVERIFY(!r.ok);
+        QVERIFY(r.error.contains(QStringLiteral("不一致")));
+    }
+
     void yoloDetectMissingInputs() {
         std::vector<float> v(84, 0.0f);
         Tensor detect(v, std::vector<int64_t>{1, 84, 1});

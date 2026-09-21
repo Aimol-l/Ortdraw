@@ -234,7 +234,7 @@ inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
         if (drawScore) text += QLatin1Char(' ') + QString::number(double(d.score), 'f', 2);
         cv::putText(canvas, text.toStdString(),
                     cv::Point(int(std::lround(d.box.x)), std::max(12, int(std::lround(d.box.y)) - 4)),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, col, 1, cv::LINE_AA);
+                    cv::FONT_HERSHEY_SIMPLEX, 1, col, 1, cv::LINE_AA);
     }
 }
 
@@ -329,6 +329,10 @@ inline void registerBuiltinPostProcessTasks() {
             GeometryMeta meta;
             if (!parseMeta(metaBuf, meta))
                 return {false, QStringLiteral("元信息张量无效"), {}};
+            // 约束：元信息记录的原图尺寸必须与输入原图一致
+            if (int(std::lround(meta.origW)) != img->cols
+                || int(std::lround(meta.origH)) != img->rows)
+                return {false, QStringLiteral("元信息中的原图尺寸与输入原图不一致"), {}};
 
             const float conf = p.value("conf", 0.25).toFloat();
             const float iou = p.value("iou", 0.45).toFloat();
@@ -383,6 +387,10 @@ inline void registerBuiltinPostProcessTasks() {
             GeometryMeta meta;
             if (!parseMeta(metaBuf, meta))
                 return {false, QStringLiteral("元信息张量无效"), {}};
+            // 约束：元信息记录的原图尺寸必须与输入原图一致
+            if (int(std::lround(meta.origW)) != img->cols
+                || int(std::lround(meta.origH)) != img->rows)
+                return {false, QStringLiteral("元信息中的原图尺寸与输入原图不一致"), {}};
 
             ProtoView pv;
             if (!ProtoView::make(protos, pv))
