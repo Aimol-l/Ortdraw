@@ -192,7 +192,8 @@ struct TaskSpec {
     std::function<ExecResult(const QVariantMap&, const QVector<NodeData>&)> compute;
 };
 ```
-- 节点为单一 `PreProcessNode`，参数 `task` 选择任务；**切换任务即按其 spec 重建端口**（复用 §5.1 机制）。
+- 节点为单一 `PreProcessNode`，参数 `task` 通过**下拉**选择；**切换任务即按其 spec 重建端口**（复用 §5.1 机制）。
+- **无预览**（张量不适合直接预览）。
 - 首批任务（输入=图像，输出=张量）：
   - **图像 → 张量**：参数 布局（NCHW/NHWC）、通道（auto/RGB/BGR）、归一化（无 / `/255` / `(x-mean)/std`，可填 mean/std）、尺寸（按目标 W×H resize / 保持）。
   - **YOLO letterbox**：参数 目标尺寸、填充值、布局、通道；等比缩放 + 边缘填充后输出张量。
@@ -201,11 +202,12 @@ struct TaskSpec {
 
 ### 5.3 「后处理」`PostProcessNode` + 任务框架
 
-- 结构同 §5.2（同一 `TaskSpec` 机制，独立 `PostProcessRegistry`）。
+- 结构同 §5.2（同一 `TaskSpec` 机制，独立 `PostProcessRegistry`）；`task` 通过**下拉**选择。
 - 首批任务：
   - **YOLO 检测**：输入 `1×Tensor` → 输出 `1×Image`（在**网络输入分辨率**画布上画框 + 类别 id + 置信度）。参数：网络尺寸（默认 640）、置信度阈值、NMS IoU、最大框数、框颜色/线宽、是否画分数。
   - **YOLO 分割**：输入 `2×Tensor`（检测头 + 掩码原型）→ 输出 `1×Image`（掩码半透明叠加，画布同网络尺寸）。
-  - **图像分类**：输入 `1×Tensor` → 输出 `Tensor`（Top-K 分数/索引）+ `Number`（Top-1 类别 id）。
+  - **图像分类**：输入 `1×Tensor` → **输出仅 `1×Number`（Top-1 类别 id）**；Top-K（id + 分数）只通过**节点显示通道**（§5.6）回传供面板展示，**不占端口**。
+- 预览：检测/分割输出图像并在节点内**显示图像预览**；分类**无图像预览**，面板直接显示类别 id 与 Top-K 列表。
 - **不假定类别 id 对应的文本**：不要求类别名文件，绘制只用 id 与置信度。
 - 预处理/后处理均在**应用侧**实现（使用 `Tensorvia::Tensor` / `cv::Mat`），SDK 不参与。
 
@@ -214,6 +216,15 @@ struct TaskSpec {
 - 共用描述符 `TaskSpec`（端口规格 + 参数描述 + `compute`）与两个注册表：`PreProcessRegistry`、`PostProcessRegistry`。
 - 新增任务 = 注册一个 `TaskSpec` 并实现 `compute`；节点与 UI 无需改动（控件由参数描述自动生成）。
 - 任务节点为单一类（`PreProcessNode`/`PostProcessNode`），`task` 变化即重建端口；端口重建与断线复用 §5.1 机制。
+
+### 5.6 节点显示通道（非端口）
+
+- 为「结果面板」这类富信息展示提供**非端口**通道：
+  - `GraphExecutor` 新增信号 `nodeDisplay(const QString& uuid, const QVariantMap& data)`（经队列信号回 GUI 线程，沿用 `nodeImageReady` 的 runId 校验）；
+  - 执行器通过 `ExecuteContext` 提供的回调（新增 `display(QVariantMap)`）上报显示数据；
+  - `NodeManager` 转发到节点（如 `PostProcessNode::setDisplayData(QVariantMap)`），节点 QML 按需渲染（分类示例：`{ topk: [{id, score}...], top1: 5 }`）；
+  - 每次运行开始时清空各节点显示数据。
+- 该通道不改端口与连线语义，纯展示用途；分类后处理用它显示 Top-K。
 
 ### 5.5 目录/注册
 
@@ -239,6 +250,7 @@ struct TaskSpec {
 - 执行器单测（并入 `test_executors` 或新套件）：构造 `OnnxInferExecutor` 的 params（含路径与每输入设置），喂两个 `Tensorvia::Tensor`，校验输出；
 - 预处理单测：`图像→张量`（断言 NCHW/NHWC 形状、RGB/BGR、`/255` 与 mean/std 数值）、`YOLO letterbox`（断言缩放比、填充、输出尺寸）。
 - 后处理单测（用**合成张量**，不依赖真实 ONNX 模型）：
+  - `classify`：输出端口只有 1 个 `Number`（Top-1 id）；显示数据含 Top-K 列表。
   - `yolo_detect`：构造已知检测输出 → 断言框数量/坐标/置信度与输出图像尺寸；
   - `yolo_segment`：两输入 → 断言输出掩码图像尺寸/通道；
   - `classify`：构造 logits → 断言 Top-1 `Number` 与 Top-K 张量；
