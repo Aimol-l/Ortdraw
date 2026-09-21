@@ -17,6 +17,7 @@
 #include "port/Port.hpp"
 
 
+struct PortSpec { QString name; DataType type; };
 
 
 class BaseNode:public QQuickItem{
@@ -123,6 +124,17 @@ public:
     }
     void setColor(const QColor &bgColor) {
         m_bg_color = bgColor;
+    }
+    // 重建输入/输出端口（动态节点用）；调用方需先断开将失效端口的连线
+    void rebuildPorts(const QVector<PortSpec>& ins, const QVector<PortSpec>& outs) {
+        qDeleteAll(m_input_ports);  m_input_ports.clear();
+        qDeleteAll(m_output_ports); m_output_ports.clear();
+        for (const auto& s : ins)
+            m_input_ports.push_back(new Port(s.name, PortType::Input, s.type, QPointF(0,0), this));
+        for (const auto& s : outs)
+            m_output_ports.push_back(new Port(s.name, PortType::Output, s.type, QPointF(0,0), this));
+        emit inputPortsChanged();
+        emit outputPortsChanged();
     }
 signals:
     void nameChanged();

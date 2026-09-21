@@ -594,6 +594,23 @@ public:
         }
         refresh();
     }
+    // 重建节点端口：先经命令删除涉及旧端口的边，再重建端口，保证撤销一致
+    Q_INVOKABLE void rebuildNodePorts(BaseNode* node, const QVector<PortSpec>& ins,
+                                      const QVector<PortSpec>& outs){
+        if(!m_paint_board || !node) return;
+        QVector<Edge> to_remove;
+        for(const Edge& e : m_paint_board->m_graph.getAllEdges()){
+            if(!e.start_port || !e.stop_port) continue;
+            if(e.start_port->father() == node || e.stop_port->father() == node)
+                to_remove.append(e);
+        }
+        for(const Edge& e : to_remove){
+            auto cmd = std::make_unique<RemoveEdgeCMD>(e.start_port, e.stop_port, m_paint_board);
+            m_cmd_manager.executeCommand(std::move(cmd));
+        }
+        node->rebuildPorts(ins, outs);
+        refresh();
+    }
     Q_INVOKABLE void clearGraph(){
         if(!m_paint_board) return;
         // 清空图前先取消正在运行的求值，避免工作线程在节点已删除后回写图像/错误
