@@ -22,6 +22,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/Conv.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/onnx/OnnxTensorConvert.hpp
     ${PROJECT_SOURCE_DIR}/include/ExecQueueModel.hpp
     ${PROJECT_SOURCE_DIR}/include/QueueFilterProxyModel.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/NodeStatus.hpp
