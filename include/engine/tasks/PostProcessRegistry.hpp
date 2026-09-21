@@ -2,11 +2,14 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <opencv2/core/mat.hpp>
+#include <print>
 #include <utility>
 #include <vector>
 #include <QVariantList>
+#include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
 #include "engine/NodeData.hpp"
 #include "engine/onnx/OnnxTensorConvert.hpp"
@@ -50,9 +53,12 @@ inline const cv::Scalar& classColor(int cls) {
 
 // 取第 idx 个输入为 Tensor（不做拷贝）；失败返回 nullptr
 inline const Tensor* tensorInput(const QVector<NodeData>& inputs, int idx) {
-    if (idx < 0 || idx >= inputs.size()) return nullptr;
-    if (!std::holds_alternative<Tensor>(inputs[idx])) return nullptr;
+    if (idx < 0 || idx >= inputs.size()) 
+        return nullptr;
+    if (!std::holds_alternative<Tensor>(inputs[idx])) 
+        return nullptr;
     const Tensor& t = std::get<Tensor>(inputs[idx]);
+    
     return t.numel() == 0 ? nullptr : &t;
 }
 
@@ -171,17 +177,33 @@ inline bool parseDetectHead(const Tensor& b, bool& channelsFirst,
     return C >= 5;
 }
 
+// 统一检测头为 [1, M, 4+n]（channels-last）；若原为 [1, 4+n, M] 则转置一次。
+inline bool unifyDetectHead(const Tensor& host, Tensor& unified) {
+    bool cf = false;
+    int64_t C = 0, N = 0;
+    if (!parseDetectHead(host, cf, C, N)) return false;
+    if (!cf) {
+        unified = host;
+        return true;
+    }
+    Tensor t = host.permute({0, 2, 1});   // 视图 → 连续化
+    t = t.contiguous();
+    t.to_host();
+    unified = std::move(t);
+    return true;
+}
+
 // 解析检测头（含可选掩码系数范围 [coeffBegin, C)），过滤 conf 后做 NMS
 inline bool decodeDetections(const Tensor& b, float conf, float iou,
                              int maxBoxes, std::vector<Detection>& out) {
-    bool cf = false;
-    int64_t C = 0, N = 0;
-    if (!parseDetectHead(b, cf, C, N)) return false;
+    // 调用方已通过 unifyDetectHead 统一为 [1, M, 4+n]
+    const auto shape = b.shape();
+    if (shape.size() != 3 || shape[0] != 1) return false;
+    const int64_t N = shape[1], C = shape[2];
+    if (N <= 0 || C < 5) return false;
 
     auto at = [&](int64_t c, int64_t n) -> float {
-        const std::size_t idx = cf ? std::size_t(c) * std::size_t(N) + std::size_t(n)
-                                   : std::size_t(n) * std::size_t(C) + std::size_t(c);
-        return readElement(b, idx);
+        return readElement(b, std::size_t(n) * std::size_t(C) + std::size_t(c));
     };
 
     std::vector<Detection> cands;
@@ -202,21 +224,27 @@ inline bool decodeDetections(const Tensor& b, float conf, float iou,
         cands.push_back(std::move(d));
     }
 
-    // 按分数降序 NMS
-    std::sort(cands.begin(), cands.end(),
-              [](const Detection& a, const Detection& b) { return a.score > b.score; });
+    // 类内 NMS：用 OpenCV dnn 的 NMSBoxesBatched（同一类别内抑制重叠框；
+    // 不同类别的重叠框都会保留，这是 YOLO 的正确行为）
     out.clear();
+    if (cands.empty()) return true;
+
+    std::vector<cv::Rect2d> boxes;
+    std::vector<float> scores;
+    std::vector<int> classIds;
+    boxes.reserve(cands.size());
+    scores.reserve(cands.size());
+    classIds.reserve(cands.size());
     for (const Detection& d : cands) {
-        if (int(out.size()) >= maxBoxes) break;
-        bool keep = true;
-        for (const Detection& k : out) {
-            const float inter = (d.box & k.box).area();
-            const float uni = d.box.area() + k.box.area() - inter;
-            const float iouv = uni > 0.0f ? inter / uni : 0.0f;
-            if (iouv > iou) { keep = false; break; }
-        }
-        if (keep) out.push_back(d);
+        boxes.emplace_back(d.box.x, d.box.y, d.box.width, d.box.height);
+        scores.push_back(d.score);
+        classIds.push_back(d.cls);
     }
+
+    std::vector<int> keep;
+    cv::dnn::NMSBoxesBatched(boxes, scores, classIds, conf, iou, keep, 1.0f, maxBoxes);
+    out.reserve(keep.size());
+    for (int i : keep) out.push_back(cands[std::size_t(i)]);
     return true;
 }
 
@@ -321,14 +349,15 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            const Tensor* head = tensorInput(inputs, 0);
+            const Tensor* head = tensorInput(inputs, 0); // [batch,4+n,M] or [batch,M,4+n]
             const cv::Mat* img = imageInputAt(inputs, 1);
             const Tensor* metaIn = tensorInput(inputs, 2);
             if (!head || !img || !metaIn)
                 return {false, QStringLiteral("需要 检测/原图/元信息 三个输入"), {}};
 
             Tensor headHost, metaHost;
-            if (!onnx_convert::toHostTensor(*head, headHost))
+            if (!onnx_convert::toHostTensor(*head, headHost)
+                || !unifyDetectHead(headHost, headHost))
                 return {false, QStringLiteral("YOLO 输出形状无法解析"), {}};
             if (!onnx_convert::toHostTensor(*metaIn, metaHost))
                 return {false, QStringLiteral("元信息张量无效"), {}};
@@ -338,8 +367,7 @@ inline void registerBuiltinPostProcessTasks() {
                 return {false, QStringLiteral("元信息张量无效"), {}};
 
             // 约束：元信息记录的原图尺寸必须与输入原图一致
-            if (int(std::lround(meta.origW)) != img->cols
-                || int(std::lround(meta.origH)) != img->rows)
+            if (int(std::lround(meta.origW)) != img->cols || int(std::lround(meta.origH)) != img->rows)
                 return {false, QStringLiteral("元信息中的原图尺寸与输入原图不一致"), {}};
 
             const float iou      = p.value("iou", 0.45).toFloat();
@@ -393,8 +421,10 @@ inline void registerBuiltinPostProcessTasks() {
                 return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
 
             Tensor head, protos, metaHost;
-            if (!onnx_convert::toHostTensor(*headIn, head) ||
-                !onnx_convert::toHostTensor(*protoIn, protos) ||
+            if (!onnx_convert::toHostTensor(*headIn, head)
+                || !unifyDetectHead(head, head))
+                return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
+            if (!onnx_convert::toHostTensor(*protoIn, protos) ||
                 !onnx_convert::toHostTensor(*metaIn, metaHost))
                 return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
 
@@ -415,17 +445,17 @@ inline void registerBuiltinPostProcessTasks() {
             const float alpha = p.value("alpha", 0.45).toFloat();
             const int maxBoxes = std::max(1, p.value("maxBoxes", 300).toInt());
 
-            // 检测头维度 = 4 + nc + nm，已知 nm 反推类别数
-            bool cf = false;
-            int64_t C = 0, N = 0;
-            if (!parseDetectHead(head, cf, C, N) || C < 4 + pv.nm)
+            // 检测头已统一为 [1, M, 4+nc+nm]
+            const auto hs = head.shape();
+            if (hs.size() != 3 || hs[0] != 1)
+                return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
+            const int64_t N = hs[1], C = hs[2];
+            if (C < 4 + pv.nm)
                 return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
 
-            // 逐框读取掩码系数（复用解码逻辑，手动填入 coeff）
+            // 逐框读取掩码系数（channels-last 索引）
             auto at = [&](int64_t c, int64_t n) -> float {
-                const std::size_t idx = cf ? std::size_t(c) * std::size_t(N) + std::size_t(n)
-                                           : std::size_t(n) * std::size_t(C) + std::size_t(c);
-                return readElement(head, idx);
+                return readElement(head, std::size_t(n) * std::size_t(C) + std::size_t(c));
             };
             const int64_t nc = C - 4 - pv.nm;
 

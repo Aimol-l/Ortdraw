@@ -237,6 +237,45 @@ private slots:
         QCOMPARE(out.rows, 240);
     }
 
+    void nmsIsPerClassAware() {
+        // 直接测试解码+NMS：两个完全重叠的框
+        auto makeHead = [](bool secondIsAnotherClass) {
+            std::vector<float> v(2 * 84, 0.0f);
+            for (int n = 0; n < 2; ++n) {
+                v[n * 84 + 0] = 100; v[n * 84 + 1] = 100;
+                v[n * 84 + 2] = 60;  v[n * 84 + 3] = 60;
+            }
+            v[0 * 84 + 4] = 0.90f;                              // 框0：类别 0
+            v[1 * 84 + (secondIsAnotherClass ? 5 : 4)] = 0.80f; // 框1：类别 1 或 0
+            return Tensor(v, std::vector<int64_t>{1, 2, 84});
+        };
+        std::vector<postprocess_detail::Detection> dets;
+        // 同类重叠 → 抑制为一个
+        QVERIFY(postprocess_detail::decodeDetections(makeHead(false), 0.25f, 0.45f, 300, dets));
+        QCOMPARE(dets.size(), std::size_t(1));
+        // 异类重叠 → 都保留（类内 NMS）
+        QVERIFY(postprocess_detail::decodeDetections(makeHead(true), 0.25f, 0.45f, 300, dets));
+        QCOMPARE(dets.size(), std::size_t(2));
+    }
+
+    void yoloDetectChannelsLastLayout() {
+        // 同一检测结果，但检测头为 [1, M, 4+n]（channels-last，M=1）
+        std::vector<float> v(84, 0.0f);
+        v[0] = 160; v[1] = 120; v[2] = 100; v[3] = 100; v[4 + 5] = 0.9f;
+        Tensor detect(v, std::vector<int64_t>{1, 1, 84});
+        cv::Mat original(240, 320, CV_8UC3, cv::Scalar(20, 20, 20));
+        std::vector<float> mv{0, 320, 240, 320, 240, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_detect"},
+            {"params", QVariantMap{{"conf", 0.25}, {"iou", 0.45}}}},
+            QVector<NodeData>{ detect, original, meta });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.cols, 320);
+        QCOMPARE(out.rows, 240);
+    }
+
     void yoloDetectMetaSizeMismatchFails() {
         std::vector<float> v(84, 0.0f);
         v[0] = 160; v[1] = 120; v[2] = 100; v[3] = 100; v[4 + 5] = 0.9f;
