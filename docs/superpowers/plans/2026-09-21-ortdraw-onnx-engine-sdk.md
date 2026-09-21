@@ -20,6 +20,7 @@
 ## 文件结构
 
 - Create: `onnx_engine/CMakeLists.txt`
+- Create: `onnx_engine/include/onnx_engine/export.hpp`（导出宏 `ONNX_ENGINE_API`）
 - Create: `onnx_engine/include/onnx_engine/types.hpp`（中性类型）
 - Create: `onnx_engine/include/onnx_engine/runtime.hpp`（`Runtime`/`Session` 声明）
 - Create: `onnx_engine/src/impl.hpp`（pimpl 定义）
@@ -41,7 +42,23 @@
 - Create: `onnx_engine/src/runtime.cpp`
 - Modify: `CMakeLists.txt`
 
-- [ ] **Step 1: 写 `onnx_engine/include/onnx_engine/types.hpp`**
+- [ ] **Step 1: 写 `onnx_engine/include/onnx_engine/export.hpp`**
+
+```cpp
+#pragma once
+// 动态库导出宏：hidden 可见性下，公开类型/函数必须标注，否则符号不导出
+#if defined(_WIN32)
+#  if defined(ONNX_ENGINE_BUILD)
+#    define ONNX_ENGINE_API __declspec(dllexport)
+#  else
+#    define ONNX_ENGINE_API __declspec(dllimport)
+#  endif
+#else
+#  define ONNX_ENGINE_API __attribute__((visibility("default")))
+#endif
+```
+
+- [ ] **Step 2: 写 `onnx_engine/include/onnx_engine/types.hpp`**
 
 ```cpp
 #pragma once
@@ -49,6 +66,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "onnx_engine/export.hpp"
 
 namespace onnx_engine {
 
@@ -88,10 +106,10 @@ struct SessionOptions {
     int intraThreads = 0;           // 0 = onnxruntime 默认
 };
 
-const char* elementTypeName(ElementType t);
+ONNX_ENGINE_API const char* elementTypeName(ElementType t);
 
 // 返回元素字节大小；Unknown 返回 0
-int elementTypeSize(ElementType t);
+ONNX_ENGINE_API int elementTypeSize(ElementType t);
 
 } // namespace onnx_engine
 ```
@@ -102,13 +120,14 @@ int elementTypeSize(ElementType t);
 #pragma once
 #include <memory>
 #include <string>
+#include "onnx_engine/export.hpp"
 #include "onnx_engine/types.hpp"
 
 namespace onnx_engine {
 
 class Session;   // pimpl
 
-class Session {
+class ONNX_ENGINE_API Session {
 public:
     virtual ~Session() = default;
     virtual const ModelInfo& info() const = 0;
@@ -118,7 +137,7 @@ public:
                      std::string& error) = 0;
 };
 
-class Runtime {
+class ONNX_ENGINE_API Runtime {
 public:
     static Runtime& instance();
 
@@ -175,13 +194,17 @@ add_library(onnx_engine SHARED
 )
 target_include_directories(onnx_engine PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${ONNXRUNTIME_INCLUDE_DIR}"
 )
+# ORT 头仅本库实现使用，不向消费者泄漏
+target_include_directories(onnx_engine PRIVATE "${ONNXRUNTIME_INCLUDE_DIR}")
 target_link_libraries(onnx_engine PRIVATE "${ONNXRUNTIME_LIB}")
+target_compile_definitions(onnx_engine PRIVATE ONNX_ENGINE_BUILD)
 set_target_properties(onnx_engine PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
-    POSITION_INDEPENDENT_CODE ON
+    VERSION 0.1.0
+    SOVERSION 0
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
 )
 ```
 
@@ -410,8 +433,10 @@ git commit -m "feat(onnx_engine): standalone shared lib skeleton with ort detect
 ```bash
 mkdir -p tests/data
 cp /home/aimol/.local/lib/python3.13/site-packages/onnx/backend/test/data/node/test_add/model.onnx tests/data/add.onnx
-ls -la tests/data/add.onnx
+# 动态维夹具（A[-1,4] + B[-1,4] -> C[-1,4]）已随仓库提供：
+ls -la tests/data/add.onnx tests/data/add_dynamic.onnx
 ```
+> `tests/data/add_dynamic.onnx`（101B）由 onnx 生成，已在仓库中；用于验证**动态维**（shape 中 `-1`）。
 
 - [ ] **Step 2: 链接测试目标（Modify `tests/CMakeLists.txt`）**
 
@@ -452,7 +477,18 @@ private slots:
                  QString("f32"));
         QVERIFY(info.inputs[0].isTensor);
         for (const auto& t : info.inputs)
-            for (int64_t d : t.shape) QVERIFY(d > 0);   // 静态维
+            for (int64_t d : t.shape) QVERIFY(d != 0);   // 静态夹具里无 0 维
+    }
+
+    void modelInfoAllowsDynamicDims() {
+        const std::string dyn = std::string(ORTDRAW_TEST_DATA_DIR) + "/add_dynamic.onnx";
+        auto info = Runtime::instance().modelInfo(dyn);
+        QCOMPARE(info.inputs.size(), std::size_t(2));
+        QCOMPARE(info.outputs.size(), std::size_t(1));
+        // 第一维动态 -> -1，第二维 4
+        QCOMPARE(info.inputs[0].shape.size(), std::size_t(2));
+        QCOMPARE(info.inputs[0].shape[0], int64_t(-1));
+        QCOMPARE(info.inputs[0].shape[1], int64_t(4));
     }
 
     void missingFileReturnsError() {
@@ -519,7 +555,7 @@ SessionImpl::SessionImpl(std::shared_ptr<Ort::Env> e) : ort(nullptr) {
 > - 按 `opts.device`/`cudaAvailable()` 追加 `CUDAExecutionProvider` 或 `CPUExecutionProvider`，设置 `SetIntraOpNumThreads`；
 > - `Ort::Session(env, path, so)`；
 > - `GetInputCount/GetOutputCount` + `GetInputNameAllocated/GetInputTypeInfo`，用 `Ort::TypeInfo` 判定 `ONNX_TYPE_TENSOR` 与元素类型，`GetTensorTypeAndShapeInfo().GetShape()`；
-> - 任一 shape 非静态 → 抛错（由 `Impl::get` 转成 `error = "暂不支持动态维度"`）；
+> - **允许动态维**：`shape` 中 `-1` 原样保留（不拒绝）；
 > - 记录 `mtime/size/weightBytes`。
 
 `Impl::get`：
@@ -601,6 +637,19 @@ git commit -m "feat(onnx_engine): model metadata (static-only) and session loadi
         QCOMPARE(outs[0].data.size(), std::size_t(4));
         float got = 0; std::memcpy(&got, outs[0].data.data(), 4);
         QCOMPARE(got, 5.0f);
+    }
+
+    void runDynamicAdd() {
+        const std::string dyn = std::string(ORTDRAW_TEST_DATA_DIR) + "/add_dynamic.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(dyn, {}, err);
+        QVERIFY2(s, err.c_str());
+        auto mk = [](float v){ TensorBuffer b; b.type=ElementType::Float32; b.shape={2,4};
+                               b.data.resize(8*sizeof(float)); for(int i=0;i<8;i++) std::memcpy(b.data.data()+i*4,&v,4); return b; };
+        std::vector<TensorBuffer> ins{mk(1.0f), mk(2.0f)}, outs;
+        QVERIFY2(s->run(ins, outs, err), err.c_str());
+        QCOMPARE(outs.size(), std::size_t(1));
+        QCOMPARE(outs[0].shape, (std::vector<int64_t>{2,4}));
     }
 
     void runWrongInputCountFails() {
