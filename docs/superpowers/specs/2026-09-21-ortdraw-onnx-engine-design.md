@@ -2,8 +2,8 @@
 
 - 日期：2026-09-21
 - 状态：待评审
-- 范围：封装 ONNX Runtime 为**独立的动态库 SDK**（仅依赖 onnxruntime），并在 Ortdraw 中提供「ONNX 推理」节点与「张量 → 图像」节点，支持**多输入多输出**、按模型元数据自动生成端口与类型映射、每输入端口独立的预处理设置、CPU/CUDA 设备与线程配置。
-- 非目标：训练/反向传播；把 ONNX 图展开为 Ortdraw 节点；动态 batch 自动批处理；异步推理；多输出合并为单端口。
+- 范围：封装 ONNX Runtime 为**独立的动态库 SDK**（仅依赖 onnxruntime），并在 Ortdraw 中提供「ONNX 推理」节点与**可扩展的「后处理」节点**，支持**多输入多输出**、按模型元数据自动生成端口与类型映射、每输入端口独立的预处理设置、CPU/CUDA 设备与线程配置。
+- 非目标：训练/反向传播；把 ONNX 图展开为 Ortdraw 节点；**动态维度模型**（仅静态）；异步推理；多输出合并为单端口；通用「张量 → 图像」节点（由任务化后处理替代）。
 
 ## 1. 目标
 
@@ -14,7 +14,8 @@
    - 输出端口按 ONNX 元素类型映射：float/double → `Tensor`；bool → `Bool`；整型/单值 → `Number`；不支持/非张量 → `Any`。
 4. 每输入端口独立的预处理：模式（自动/图像/原样）、归一化（无 / `/255` / `(x-mean)/std`）、布局通道（自动/RGB/BGR）、尺寸策略（按模型自动 resize / 保持并报错）。
 5. 设备与线程：节点参数 `device = 自动 / CPU / CUDA`、`threads`（0=默认）；会话按 `(模型路径, 设备, 线程)` 缓存复用。
-6. 新增「张量 → 图像」节点，自动识别布局/通道/数值范围并转成 `cv::Mat`。
+6. 新增**可扩展的「后处理」节点**：节点上选择具体任务（如 YOLO 检测/分割、图像分类），**任务决定其端口数量与类型约束**（例如 YOLO 检测 = 1 张量 → 1 图像；YOLO 分割 = 2 张量 → 1 图像）。**不提供通用「张量 → 图像」节点。**
+7. **仅支持静态 ONNX**（所有维度为固定正整数）；含动态维度的模型被拒绝并给出明确错误。
 7. onnxruntime 为**硬依赖**：CMake 找不到则构建失败并提示。
 
 ## 2. 现状与约束
@@ -155,7 +156,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
                                    resize:"auto"|"keep",
                                    channel:"auto"|"rgb"|"bgr" } , ... }
   ```
-- 载入模型：调 `Runtime::modelInfo()` → 生成端口。
+- 载入模型：调 `Runtime::modelInfo()` → 校验**所有输入/输出维度均为固定正整数**（无动态维/-1/dim_param），否则拒绝并给出「暂不支持动态维度」错误；通过后生成端口。
   - 输入端口：`DataType::Any`，名 = 模型输入名，tooltip 显示 dtype/shape。
   - 输出端口：按元数据映射（见 §1.3），名 = 模型输出名。
   - **换模型/重载**：重建端口；如端口集合变化，断开引用被移除端口的连线（复用现有删边路径）。
@@ -172,16 +173,39 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   3. `session->run(...)` → 输出 `TensorBuffer` 列表 → 转 `NodeData`（按输出端口类型）。
 - UI（QML `OnnxInferNode.qml`）：模型路径选择/重载；设备下拉；线程输入；**每个输入端口的设置行**（归一化/通道/尺寸，`mean/std` 在多值输入框）；输入/输出端口名与 shape 概览；错误徽标沿用节点错误机制。
 
-### 5.2 「张量 → 图像」`TensorToImageNode` + `TensorToImageExecutor`
+### 5.2 「后处理」`PostProcessNode` + 可注册任务框架
 
-- 参数：`layout`（auto/NCHW/NHWC/HW/HWC/HW1）、`channels`（auto/1/3/4）、`scale`（auto / 指定倍率）。
-- 规则：自动识别布局与通道；数值范围自适应（`[0,1]` → ×255 并 clamp，否则截断到 `[0,255]`）；`auto` 判断依据维度与通道数（1→灰度、3→BGR、4→BGRA）。
+**任务描述符（应用侧注册表 `PostProcessRegistry`）**
+```cpp
+struct PostProcSpec {
+    QString id;                  // "yolo_detect" / "yolo_segment" / "classify" / ...
+    QString name;                // 显示名
+    QVector<PortSpec> inputs;    // 输入端口规格（名称 + DataType，多为 Tensor）
+    QVector<PortSpec> outputs;   // 输出端口规格（Image / Tensor / Number ...）
+    QVariantMap defaults;        // 默认参数
+    QVector<ParamDesc> params;   // 参数描述（键/名称/类型/范围/选项）→ UI 自动生成控件
+    std::function<ExecResult(const QVariantMap& params,
+                             const QVector<NodeData>& inputs)> compute;
+};
+```
+- 节点为单一 `PostProcessNode`，参数 `task` 选择任务；**切换任务即按其 spec 重建端口**（复用 §5.1 的 `rebuildPorts` 机制与断线逻辑）。
+- 节点 UI 按 `params` 描述**自动生成控件**（下拉/开关/数值/文本），无需为每个任务单独写 QML。
+- 内置任务（首批）：
+  - **YOLO 检测**：输入 `1×Tensor` → 输出 `1×Image`（在图上画出框 + 类别 id + 置信度）。参数：置信度阈值、NMS IoU、最大框数、框颜色/线宽、是否画分数。
+  - **YOLO 分割**：输入 `2×Tensor`（检测头 + 掩码原型）→ 输出 `1×Image`（掩码半透明叠加）。
+  - **图像分类**：输入 `1×Tensor` → 输出 `Tensor`（Top-K 分数/索引）+ `Number`（Top-1 类别 id）。
+- **不假定类别 id 对应的文本**：不要求类别名文件，绘制只使用 id 与置信度（若用户自行提供名称映射也不强制）。
+- 后处理在**应用侧**实现（使用 `Tensorvia::Tensor` / `cv::Mat`），SDK 不参与。
+
+### 5.2.1 任务扩展方式
+- 新增任务 = 在 `PostProcessRegistry` 注册一个 `PostProcSpec` 并实现 `compute`；可选补充参数描述。节点无需改动。
 
 ### 5.3 目录/注册
 
-- 节点：`include/node/OnnxInfer.hpp`、`include/node/TensorToImage.hpp`；QML：`qml/node/OnnxInferNode.qml`、`qml/node/TensorToImageNode.qml`。
-- 执行器：`include/engine/executors/OnnxInferExecutor.hpp`、`TensorToImageExecutor.hpp`，在 `registerBuiltinExecutors()` 注册。
-- `NodeCatalog`：新增 `OnnxInfer`（分类 `math`，图标）与 `TensorToImage`（分类 `process`）。
+- 节点：`include/node/OnnxInfer.hpp`、`include/node/PostProcess.hpp`；QML：`qml/node/OnnxInferNode.qml`、`qml/node/PostProcessNode.qml`。
+- 执行器：`include/engine/executors/OnnxInferExecutor.hpp`、`PostProcessExecutor.hpp`（转发到 `PostProcessRegistry`），在 `registerBuiltinExecutors()` 注册。
+- 后处理：`include/engine/postproc/PostProcessRegistry.hpp` 与内置任务实现。
+- `NodeCatalog`：新增 `OnnxInfer`（分类 `math`）与 `PostProcess`（分类 `process`）。
 
 ## 6. 错误处理
 
@@ -197,9 +221,13 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   - 缺文件 / dtype 不符 / 输入个数不符 → 返回错误；
   - `cudaAvailable()` 不崩溃（返回值不作断言）。
 - 执行器单测（并入 `test_executors` 或新套件）：构造 `OnnxInferExecutor` 的 params（含路径与每输入设置），喂两个 `Tensorvia::Tensor`，校验输出；
-- `TensorToImage`：NCHW `[1,3,2,2]` 与 `[1,1,2,2]` 转换的尺寸/通道断言。
+- 后处理单测（用**合成张量**，不依赖真实 ONNX 模型）：
+  - `yolo_detect`：构造已知检测输出 → 断言框数量/坐标/置信度与输出图像尺寸；
+  - `yolo_segment`：两输入 → 断言输出掩码图像尺寸/通道；
+  - `classify`：构造 logits → 断言 Top-1 `Number` 与 Top-K 张量；
+  - 端口规格：`PostProcessRegistry` 各任务的输入/输出端口数/类型符合 spec。
 - 缓存/生命周期：同一 `(path,device,threads)` 两次 `session()` 返回**同一对象**（`get()==`）；不同 threads 返回不同对象；修改模型文件 mtime 后 `session()` 返回**新对象**；`clearCache()` 后重新加载；`setCacheLimits` 后超限淘汰（可用两个不同模型验证）。
-- 实机：用 `test_abs`（单输入）把图像接入 ONNX 节点，验证自动转换、端口生成、输出接「张量 → 图像」显示；再验证换模型重建端口与断线。
+- 实机：用 `test_abs`（单输入静态模型）把图像接入 ONNX 节点，验证自动转换与端口生成；再在工作区分别放置「ONNX 推理」与「后处理」节点，切换后处理任务验证端口重建与断线；如本机有 YOLO 模型则端到端验证检测/分割。
 
 ## 8. 风险与不改动
 
