@@ -484,17 +484,19 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
                     "onnx_engine: 输出 {} 元素数为 0", want.name));
             }
             std::vector<int64_t> shape = ti.GetShape();
-            if (shape.empty()) shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
+            if (shape.empty()) 
+                shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
             const via::DataType dt = toViaDataType(ot);
             Tensor out(shape, dt, via::Device::CPU);
+
             const int srcSize = elementTypeSize(ot);
             const int dstSize = int(via::calc_dtype_size(dt));
             const std::uint8_t* src = v.GetTensorData<std::uint8_t>();
+
             if (srcSize == dstSize) {
                 std::memcpy(out.data(), src, elems * std::size_t(srcSize));
             } else {
-                return std::unexpected(std::format(
-                    "onnx_engine: 输出 {} 的类型映射暂不支持", want.name));
+                return std::unexpected(std::format("onnx_engine: 输出 {} 的类型映射暂不支持", want.name));
             }
             tmpOuts.push_back(std::move(out));
         }

@@ -161,6 +161,51 @@ private slots:
         QCOMPARE(int64_t(t.shape()[3]), int64_t(32));
     }
 
+    void preMetaForLetterbox() {
+        cv::Mat img(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));   // rows=480, cols=640
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "yolo_letterbox"},
+            {"params", QVariantMap{{"size", 320}, {"pad", 114}}}},
+            imageInputs(img));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(r.outputs.size(), 2);                          // 张量 + 元信息
+        QVERIFY(std::holds_alternative<Tensor>(r.outputs[1]));
+        const Tensor& m = std::get<Tensor>(r.outputs[1]);
+        QCOMPARE(int64_t(m.numel()), int64_t(8));
+        const float* v = reinterpret_cast<const float*>(m.data());
+        QCOMPARE(v[0], 1.0f);      // mode = letterbox
+        QCOMPARE(v[1], 640.0f);    // origW
+        QCOMPARE(v[2], 480.0f);    // origH
+        QCOMPARE(v[3], 320.0f);    // netW
+        QCOMPARE(v[4], 320.0f);    // netH
+        QCOMPARE(v[5], 0.5f);      // scale = 320/640
+        QCOMPARE(v[6], 0.0f);      // padX
+        QCOMPARE(v[7], 40.0f);     // padY = (320-240)/2
+    }
+
+    void preMetaForStandardKeep() {
+        cv::Mat img(7, 9, CV_8UC3, cv::Scalar(10, 20, 30));     // rows=7, cols=9
+        PreProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{
+            {"task", "standard"},
+            {"params", QVariantMap{{"size", "keep"}, {"layout", "NCHW"},
+                                   {"channel", "rgb"}, {"dtype", "fp32"}}}},
+            imageInputs(img));
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(r.outputs.size(), 2);
+        const Tensor& m = std::get<Tensor>(r.outputs[1]);
+        const float* v = reinterpret_cast<const float*>(m.data());
+        QCOMPARE(v[0], 0.0f);      // mode = resize
+        QCOMPARE(v[1], 9.0f);      // origW
+        QCOMPARE(v[2], 7.0f);      // origH
+        QCOMPARE(v[3], 9.0f);      // netW = 原尺寸 → 恒等
+        QCOMPARE(v[4], 7.0f);      // netH
+        QCOMPARE(v[5], 1.0f);
+        QCOMPARE(v[6], 0.0f);
+        QCOMPARE(v[7], 0.0f);
+    }
+
     void registryHasPostTasks() {
         const auto& all = PostProcessRegistry::instance().all();
         QStringList ids;
@@ -171,18 +216,34 @@ private slots:
     }
 
     void yoloDetectSynthetic() {
-        // [1,84,1]：类别 5 分数 0.9，框 cx=320,cy=320,w=100,h=100
+        // [1,84,1]：类别 5 分数 0.9，框 cx=160,cy=120,w=100,h=100（网络=原图恒等）
         std::vector<float> v(84, 0.0f);
-        v[0] = 320; v[1] = 320; v[2] = 100; v[3] = 100; v[4 + 5] = 0.9f;
-        std::vector<int64_t> sh{1, 84, 1};
-        Tensor t(v, sh);
+        v[0] = 160; v[1] = 120; v[2] = 100; v[3] = 100; v[4 + 5] = 0.9f;
+        Tensor detect(v, std::vector<int64_t>{1, 84, 1});
+        cv::Mat original(240, 320, CV_8UC3, cv::Scalar(20, 20, 20));
+
+        // mode=0 恒等元信息
+        std::vector<float> mv{0, 320, 240, 320, 240, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+
         PostProcessExecutor ex;
         const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_detect"},
-            {"params", QVariantMap{{"networkSize", 640}, {"conf", 0.25}, {"iou", 0.45}}}},
-            QVector<NodeData>{ t });
+            {"params", QVariantMap{{"conf", 0.25}, {"iou", 0.45}}}},
+            QVector<NodeData>{ detect, original, meta });
         QVERIFY2(r.ok, qPrintable(r.error));
         QVERIFY(std::holds_alternative<cv::Mat>(r.outputs[0]));
-        QCOMPARE(std::get<cv::Mat>(r.outputs[0]).cols, 640);
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.cols, 320);   // 输出为原图尺寸，不再是网络尺寸
+        QCOMPARE(out.rows, 240);
+    }
+
+    void yoloDetectMissingInputs() {
+        std::vector<float> v(84, 0.0f);
+        Tensor detect(v, std::vector<int64_t>{1, 84, 1});
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_detect"},
+            {"params", QVariantMap{{"conf", 0.25}}}}, QVector<NodeData>{ detect });
+        QVERIFY(!r.ok);            // 缺「原图」「元信息」→ 报错
     }
 
     void classifySyntheticReportsDisplay() {

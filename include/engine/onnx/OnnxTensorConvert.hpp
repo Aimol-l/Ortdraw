@@ -373,13 +373,6 @@ inline TensorBuffer tensorToBuffer(const Tensor& t) {
 }
 
 // Tensorvia::Tensor → NodeData。
-//
-// Tensorvia 没有 Bool，ONNX Bool 与 Int8 都映射为 INT8，单看张量无法区分，
-// 故提供 declType：模型声明的输出 ElementType（来自 session->info().outputs[i].type）。
-//   - 空张量（numel == 0）→ monostate（调用方须检查并报告错误）；
-//   - declType == Bool 且 numel == 1 → bool；
-//   - 其余标量（numel == 1，含整型/浮点/Unknown）→ double；
-//   - numel > 1 → Tensorvia::Tensor。
 inline NodeData tensorToNodeData(const Tensor& t, onnx_engine::ElementType declType) {
     if (t.numel() == 0) return NodeData{std::monostate{}};
 

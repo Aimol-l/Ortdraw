@@ -28,24 +28,32 @@ private slots:
         QVERIFY(pre);
         const ExecResult r1 = pre->compute({}, QVariantMap{{"size",640},{"pad",114},{"channel","rgb"}}, in);
         QVERIFY2(r1.ok, qPrintable(r1.error));
+        QCOMPARE(r1.outputs.size(), 2);                          // 张量 + 元信息
         QVERIFY(std::holds_alternative<Tensor>(r1.outputs[0]));
+        QVERIFY(std::holds_alternative<Tensor>(r1.outputs[1]));
 
+        // 只把张量（index 0）喂 ONNX
+        QVector<NodeData> onnxIn; onnxIn.push_back(r1.outputs[0]);
         OnnxInferExecutor onnx;
-        const ExecResult r2 = onnx.execute({}, QVariantMap{{"modelPath", model}, {"device","cpu"}}, r1.outputs);
+        const ExecResult r2 = onnx.execute({}, QVariantMap{{"modelPath", model}, {"device","cpu"}}, onnxIn);
         QVERIFY2(r2.ok, qPrintable(r2.error));
         QVERIFY(std::holds_alternative<Tensor>(r2.outputs[0]));
         const Tensor& o = std::get<Tensor>(r2.outputs[0]);
         QCOMPARE(int64_t(o.shape()[0]), int64_t(1));
 
+        // 后处理：检测张量 + 原图 + 元信息
+        QVector<NodeData> postIn;
+        postIn.push_back(r2.outputs[0]);
+        postIn.push_back(img);
+        postIn.push_back(r1.outputs[1]);
         auto* post = PostProcessRegistry::instance().find("yolo_detect");
         QVERIFY(post);
-        const ExecResult r3 = post->compute({}, QVariantMap{{"networkSize",640},{"conf",0.25}},
-                                            r2.outputs);
+        const ExecResult r3 = post->compute({}, QVariantMap{{"conf",0.25}}, postIn);
         QVERIFY2(r3.ok, qPrintable(r3.error));
         QVERIFY(std::holds_alternative<cv::Mat>(r3.outputs[0]));
         const cv::Mat& out = std::get<cv::Mat>(r3.outputs[0]);
-        QCOMPARE(out.cols, 640);
-        QCOMPARE(out.rows, 640);
+        QCOMPARE(out.cols, img.cols);   // 输出为原图尺寸
+        QCOMPARE(out.rows, img.rows);
     }
 };
 

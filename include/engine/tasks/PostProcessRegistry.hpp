@@ -55,10 +55,84 @@ inline bool tensorBufferInput(const QVector<NodeData>& inputs, int idx,
     return !out.data.empty();
 }
 
+// 取第 idx 个输入为非空图像；失败返回 nullptr
+inline const cv::Mat* imageInputAt(const QVector<NodeData>& inputs, int idx = 0) {
+    if (idx < 0 || idx >= inputs.size()) return nullptr;
+    if (!std::holds_alternative<cv::Mat>(inputs[idx])) return nullptr;
+    const cv::Mat& m = std::get<cv::Mat>(inputs[idx]);
+    return m.empty() ? nullptr : &m;
+}
+
 // 按 (channel, index) 读取张量元素，自动按 row-major 计算偏移
 inline float readElement(const onnx_convert::TensorBuffer& b, std::size_t idx) {
     const int esize = onnx_engine::elementTypeSize(b.type);
     return onnx_convert::detail::readScalarAsFloat(b.data.data() + idx * std::size_t(esize), b.type);
+}
+
+// 几何元信息（与预处理端 1x8 布局一致）
+struct GeometryMeta {
+    int mode = 0;                       // 0=resize，1=letterbox
+    float origW = 0.0f, origH = 0.0f;
+    float netW = 0.0f, netH = 0.0f;
+    float scale = 1.0f;
+    float padX = 0.0f, padY = 0.0f;
+};
+
+// 解析元信息张量：要求至少 8 个元素，取前 8 个
+inline bool parseMeta(const onnx_convert::TensorBuffer& b, GeometryMeta& m) {
+    if (onnx_convert::detail::numelOf(b.shape) < 8) return false;
+    m.mode = int(std::lround(readElement(b, 0)));
+    m.origW = readElement(b, 1);
+    m.origH = readElement(b, 2);
+    m.netW = readElement(b, 3);
+    m.netH = readElement(b, 4);
+    m.scale = readElement(b, 5);
+    m.padX = readElement(b, 6);
+    m.padY = readElement(b, 7);
+    return m.origW > 0.0f && m.origH > 0.0f;
+}
+
+// 用元信息把网络坐标框逆变换回原图坐标并 clamp 到原图边界
+inline cv::Rect2f mapBoxToOriginal(const cv::Rect2f& box, const GeometryMeta& m) {
+    float x0 = box.x, y0 = box.y, x1 = box.x + box.width, y1 = box.y + box.height;
+    if (m.mode == 1) {
+        if (m.scale > 0.0f) {
+            x0 = (x0 - m.padX) / m.scale;
+            y0 = (y0 - m.padY) / m.scale;
+            x1 = (x1 - m.padX) / m.scale;
+            y1 = (y1 - m.padY) / m.scale;
+        }
+    } else {
+        const float sx = m.netW > 0.0f ? m.origW / m.netW : 1.0f;
+        const float sy = m.netH > 0.0f ? m.origH / m.netH : 1.0f;
+        x0 *= sx; x1 *= sx;
+        y0 *= sy; y1 *= sy;
+    }
+    x0 = std::clamp(x0, 0.0f, m.origW);
+    x1 = std::clamp(x1, 0.0f, m.origW);
+    y0 = std::clamp(y0, 0.0f, m.origH);
+    y1 = std::clamp(y1, 0.0f, m.origH);
+    return cv::Rect2f(x0, y0, std::max(0.0f, x1 - x0), std::max(0.0f, y1 - y0));
+}
+
+// 把网络空间掩码还原到原图：letterbox 先裁掉填充区，再缩放到原图尺寸
+inline cv::Mat maskToOriginal(const cv::Mat& netMask, const GeometryMeta& m) {
+    const int ow = std::max(1, int(std::lround(m.origW)));
+    const int oh = std::max(1, int(std::lround(m.origH)));
+    cv::Mat src = netMask;
+    if (m.mode == 1 && m.scale > 0.0f) {
+        const int x0 = int(std::lround(m.padX));
+        const int y0 = int(std::lround(m.padY));
+        const int cw = int(std::lround(m.scale * m.origW));
+        const int ch = int(std::lround(m.scale * m.origH));
+        cv::Rect roi = cv::Rect(x0, y0, cw, ch) & cv::Rect(0, 0, netMask.cols, netMask.rows);
+        if (roi.width <= 0 || roi.height <= 0)
+            return cv::Mat::zeros(oh, ow, CV_8U);
+        src = netMask(roi);
+    }
+    cv::Mat out;
+    cv::resize(src, out, cv::Size(ow, oh), 0, 0, cv::INTER_NEAREST);
+    return out;
 }
 
 inline float sigmoid(float x) { return 1.0f / (1.0f + std::exp(-x)); }
@@ -145,7 +219,7 @@ inline bool decodeDetections(const onnx_convert::TensorBuffer& b, float conf, fl
     return true;
 }
 
-// 在 networkSize×networkSize 黑色画布上画框 + "<cls> <score两位小数>"
+// 在画布上画框 + "<cls> <score两位小数>"
 inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,
                            bool drawScore, int lineWidth) {
     const int lw = lineWidth > 0 ? lineWidth : 1;
@@ -200,9 +274,9 @@ struct ProtoView {
     }
 };
 
-// 生成单个框的掩码（sigmoid(系数·原型) > maskThr），返回 networkSize×networkSize 的 CV_8U（0/255）
+// 生成单个框的掩码（sigmoid(系数·原型) > maskThr），返回 netSize 的 CV_8U（0/255）
 inline cv::Mat buildMask(const std::vector<float>& coeff, const ProtoView& pv,
-                         float maskThr, int networkSize) {
+                         float maskThr, cv::Size netSize) {
     cv::Mat prob(int(pv.mh), int(pv.mw), CV_32F);
     for (int64_t y = 0; y < pv.mh; ++y)
         for (int64_t x = 0; x < pv.mw; ++x) {
@@ -214,7 +288,7 @@ inline cv::Mat buildMask(const std::vector<float>& coeff, const ProtoView& pv,
     cv::Mat bin;
     cv::compare(prob, maskThr, bin, cv::CMP_GT);
     cv::Mat resized;
-    cv::resize(bin, resized, cv::Size(networkSize, networkSize), 0, 0, cv::INTER_NEAREST);
+    cv::resize(bin, resized, netSize, 0, 0, cv::INTER_NEAREST);
     return resized;
 }
 
@@ -231,12 +305,13 @@ inline void registerBuiltinPostProcessTasks() {
         TaskSpec s;
         s.id = "yolo_detect";
         s.name = QStringLiteral("YOLO 检测");
-        s.inputs = {{QStringLiteral("input0"), DataType::Tensor}};
+        s.inputs = {{QStringLiteral("检测"), DataType::Tensor},
+                    {QStringLiteral("原图"), DataType::Image},
+                    {QStringLiteral("元信息"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.defaults = QVariantMap{{"networkSize", 640}, {"conf", 0.25}, {"iou", 0.45},
+        s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45},
                                  {"maxBoxes", 300}, {"drawScore", true}, {"lineWidth", 2}};
         s.params = {
-            {"networkSize", QStringLiteral("网络尺寸"), "int", 640, {}},
             {"conf", QStringLiteral("置信度"), "float", 0.25, {}},
             {"iou", QStringLiteral("IoU"), "float", 0.45, {}},
             {"maxBoxes", QStringLiteral("最大框数"), "int", 300, {}},
@@ -245,11 +320,16 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_convert::TensorBuffer buf;
-            if (!tensorBufferInput(inputs, 0, buf))
-                return {false, QStringLiteral("输入不是张量"), {}};
+            onnx_convert::TensorBuffer buf, metaBuf;
+            const cv::Mat* img = imageInputAt(inputs, 1);
+            if (!tensorBufferInput(inputs, 0, buf) || !img ||
+                !tensorBufferInput(inputs, 2, metaBuf))
+                return {false, QStringLiteral("需要 检测/原图/元信息 三个输入"), {}};
 
-            const int size = std::max(1, p.value("networkSize", 640).toInt());
+            GeometryMeta meta;
+            if (!parseMeta(metaBuf, meta))
+                return {false, QStringLiteral("元信息张量无效"), {}};
+
             const float conf = p.value("conf", 0.25).toFloat();
             const float iou = p.value("iou", 0.45).toFloat();
             const int maxBoxes = std::max(1, p.value("maxBoxes", 300).toInt());
@@ -260,7 +340,10 @@ inline void registerBuiltinPostProcessTasks() {
             if (!decodeDetections(buf, conf, iou, maxBoxes, dets))
                 return {false, QStringLiteral("YOLO 输出形状无法解析"), {}};
 
-            cv::Mat canvas(size, size, CV_8UC3, cv::Scalar(0, 0, 0));
+            // 网络坐标 → 原图坐标
+            for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
+
+            cv::Mat canvas = img->clone();
             drawDetections(canvas, dets, drawScore, lineWidth);
 
             ExecResult r;
@@ -275,13 +358,14 @@ inline void registerBuiltinPostProcessTasks() {
         TaskSpec s;
         s.id = "yolo_segment";
         s.name = QStringLiteral("YOLO 分割");
-        s.inputs = {{QStringLiteral("input0"), DataType::Tensor},
-                    {QStringLiteral("input1"), DataType::Tensor}};
+        s.inputs = {{QStringLiteral("检测"), DataType::Tensor},
+                    {QStringLiteral("原型"), DataType::Tensor},
+                    {QStringLiteral("原图"), DataType::Image},
+                    {QStringLiteral("元信息"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.defaults = QVariantMap{{"networkSize", 640}, {"conf", 0.25}, {"maskThr", 0.5},
+        s.defaults = QVariantMap{{"conf", 0.25}, {"maskThr", 0.5},
                                  {"alpha", 0.45}, {"maxBoxes", 300}};
         s.params = {
-            {"networkSize", QStringLiteral("网络尺寸"), "int", 640, {}},
             {"conf", QStringLiteral("置信度"), "float", 0.25, {}},
             {"maskThr", QStringLiteral("掩码阈值"), "float", 0.5, {}},
             {"alpha", QStringLiteral("透明度"), "float", 0.45, {}},
@@ -289,17 +373,21 @@ inline void registerBuiltinPostProcessTasks() {
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            onnx_convert::TensorBuffer head, protos;
-            if (!tensorBufferInput(inputs, 0, head))
-                return {false, QStringLiteral("检测头输入不是张量"), {}};
-            if (!tensorBufferInput(inputs, 1, protos))
-                return {false, QStringLiteral("原型输入不是张量"), {}};
+            onnx_convert::TensorBuffer head, protos, metaBuf;
+            const cv::Mat* img = imageInputAt(inputs, 2);
+            if (!tensorBufferInput(inputs, 0, head) ||
+                !tensorBufferInput(inputs, 1, protos) || !img ||
+                !tensorBufferInput(inputs, 3, metaBuf))
+                return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
+
+            GeometryMeta meta;
+            if (!parseMeta(metaBuf, meta))
+                return {false, QStringLiteral("元信息张量无效"), {}};
 
             ProtoView pv;
             if (!ProtoView::make(protos, pv))
                 return {false, QStringLiteral("分割原型形状无法解析"), {}};
 
-            const int size = std::max(1, p.value("networkSize", 640).toInt());
             const float conf = p.value("conf", 0.25).toFloat();
             const float maskThr = p.value("maskThr", 0.5).toFloat();
             const float alpha = p.value("alpha", 0.45).toFloat();
@@ -346,15 +434,21 @@ inline void registerBuiltinPostProcessTasks() {
                 dets.push_back(d);
             }
 
-            cv::Mat canvas(size, size, CV_8UC3, cv::Scalar(0, 0, 0));
+            cv::Mat canvas = img->clone();
             // 首版复杂度控制：仅对第一个（最高分）框生成掩码并半透明叠加；
             // 其余框只画检测框。后续可对每个框重复此流程。
             if (!dets.empty()) {
-                const cv::Mat mask = buildMask(dets[0].coeff, pv, maskThr, size);
+                const int netW = std::max(1, int(std::lround(meta.netW > 0.0f ? meta.netW : meta.origW)));
+                const int netH = std::max(1, int(std::lround(meta.netH > 0.0f ? meta.netH : meta.origH)));
+                const cv::Mat netMask = buildMask(dets[0].coeff, pv, maskThr, cv::Size(netW, netH));
+                const cv::Mat mask = maskToOriginal(netMask, meta);
                 cv::Mat overlay = canvas.clone();
-                overlay.setTo(classColor(dets[0].cls), mask);
+                if (mask.size() == canvas.size())
+                    overlay.setTo(classColor(dets[0].cls), mask);
                 cv::addWeighted(overlay, alpha, canvas, 1.0 - alpha, 0.0, canvas);
             }
+            // 网络坐标 → 原图坐标后画框
+            for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
             drawDetections(canvas, dets, true, 2);
 
             ExecResult r;

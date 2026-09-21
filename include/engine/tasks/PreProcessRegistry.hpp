@@ -61,6 +61,21 @@ inline bool pushTensor(const Tensor& t, ExecResult& r, const QString& err) {
     return true;
 }
 
+// 几何元信息：[mode, origW, origH, netW, netH, scale, padX, padY]（1x8 float32）
+struct GeometryMeta {
+    float mode = 0.0f;      // 0=resize（各轴拉伸/恒等），1=letterbox
+    float origW = 0.0f, origH = 0.0f;
+    float netW = 0.0f, netH = 0.0f;
+    float scale = 1.0f;
+    float padX = 0.0f, padY = 0.0f;
+};
+
+inline Tensor metaToTensor(const GeometryMeta& m) {
+    std::vector<float> v{m.mode, m.origW, m.origH, m.netW, m.netH,
+                         m.scale, m.padX, m.padY};
+    return Tensor(v, std::vector<int64_t>{1, 8});
+}
+
 } // namespace preprocess_detail
 
 inline void registerBuiltinPreProcessTasks() {
@@ -80,7 +95,8 @@ inline void registerBuiltinPreProcessTasks() {
         s.id = "standard";
         s.name = QStringLiteral("标准预处理");
         s.inputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
+        s.outputs = {{QStringLiteral("张量"), DataType::Tensor},
+                     {QStringLiteral("元信息"), DataType::Tensor}};
         s.defaults = QVariantMap{
             {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp32"},
             {"norm", "unit"}, {"mean", "0.485,0.456,0.406"}, {"std", "0.229,0.224,0.225"},
@@ -145,8 +161,20 @@ inline void registerBuiltinPreProcessTasks() {
             if (buf.numel() == 0)
                 return {false, QStringLiteral("标准预处理失败（通道或尺寸不匹配）"), {}};
 
+            // 元信息：mode=0（各轴拉伸）；原尺寸时 netW/H 与 origW/H 相同 → 恒等
+            GeometryMeta meta;
+            meta.mode = 0.0f;
+            meta.origW = float(img->cols);
+            meta.origH = float(img->rows);
+            meta.netW = float(W);
+            meta.netH = float(H);
+            meta.scale = 1.0f;
+            meta.padX = 0.0f;
+            meta.padY = 0.0f;
+
             ExecResult r;
             pushTensor(buf, r, QStringLiteral("标准预处理失败（数据无效）"));
+            pushTensor(metaToTensor(meta), r, QStringLiteral("标准预处理元信息无效"));
             return r;
         };
         reg.add(std::move(s));
@@ -158,7 +186,8 @@ inline void registerBuiltinPreProcessTasks() {
         s.id = "yolo_letterbox";
         s.name = QStringLiteral("YOLO 预处理");
         s.inputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor}};
+        s.outputs = {{QStringLiteral("张量"), DataType::Tensor},
+                     {QStringLiteral("元信息"), DataType::Tensor}};
         s.defaults = QVariantMap{{"size", 640}, {"pad", 114}, {"dtype", "fp32"}};
         s.params = {
             {"size", QStringLiteral("尺寸"), "int", 640, {}},
@@ -201,8 +230,20 @@ inline void registerBuiltinPreProcessTasks() {
             if (buf.numel() == 0)
                 return {false, QStringLiteral("YOLO 预处理失败（尺寸或通道不匹配）"), {}};
 
+            // 元信息：mode=1（等比缩放 + 居中填充）
+            GeometryMeta meta;
+            meta.mode = 1.0f;
+            meta.origW = float(bgr.cols);
+            meta.origH = float(bgr.rows);
+            meta.netW = float(size);
+            meta.netH = float(size);
+            meta.scale = float(scale);
+            meta.padX = float(left);
+            meta.padY = float(top);
+
             ExecResult r;
             pushTensor(buf, r, QStringLiteral("YOLO 预处理失败"));
+            pushTensor(metaToTensor(meta), r, QStringLiteral("YOLO 预处理元信息无效"));
             return r;
         };
         reg.add(std::move(s));
