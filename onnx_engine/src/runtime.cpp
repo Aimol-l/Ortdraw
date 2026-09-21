@@ -47,7 +47,14 @@ ONNXTensorElementDataType ortElementType(ElementType t) {
     }
 }
 
-ElementType unmapElement(ONNXTensorElementDataType t) { return mapElementType(t); }
+std::string shapeStr(const std::vector<int64_t>& shape) {
+    std::string s = "[";
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        if (i) s += ",";
+        s += std::to_string(shape[i]);
+    }
+    return s + "]";
+}
 
 } // namespace
 
@@ -170,6 +177,19 @@ static std::shared_ptr<SessionImpl> makeSession(std::shared_ptr<Ort::Env> env,
     };
     readIO(s->ort.GetInputCount(), true, s->info_.inputs);
     readIO(s->ort.GetOutputCount(), false, s->info_.outputs);
+
+    // 一次性缓存名字与稳定的 c_str 指针（reserve 后不再修改，指针保持有效）
+    auto cacheNames = [](const std::vector<TensorInfo>& io, std::vector<std::string>& names,
+                         std::vector<const char*>& ptrs) {
+        names.clear();
+        names.reserve(io.size());
+        for (const TensorInfo& t : io) names.push_back(t.name);
+        ptrs.clear();
+        ptrs.reserve(names.size());
+        for (const std::string& n : names) ptrs.push_back(n.c_str());
+    };
+    cacheNames(s->info_.inputs, s->inputNames, s->inputNamePtrs);
+    cacheNames(s->info_.outputs, s->outputNames, s->outputNamePtrs);
     return s;
 }
 
@@ -281,13 +301,16 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<Tenso
     try {
         Ort::MemoryInfo mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
         std::vector<Ort::Value> ortInputs;
-        std::vector<std::string> inNames, outNames;
         ortInputs.reserve(inputs.size());
         for (std::size_t i = 0; i < inputs.size(); ++i) {
             const TensorBuffer& b = inputs[i];
             const TensorInfo& want = info_.inputs[i];
             if (!want.isTensor) {
                 error = "onnx_engine: 输入 " + want.name + " 不是张量";
+                return false;
+            }
+            if (b.type == ElementType::Unknown || elementTypeSize(b.type) == 0) {
+                error = "onnx_engine: 输入 " + want.name + " 的元素类型不受支持";
                 return false;
             }
             if (b.type != want.type) {
@@ -297,44 +320,71 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs, std::vector<Tenso
             }
             // 形状校验：秩必须一致；期望维 -1（动态）接受任意，其余必须相等
             if (b.shape.size() != want.shape.size()) {
-                error = "onnx_engine: 输入 " + want.name + " 秩不符";
+                error = "onnx_engine: 输入 " + want.name + " 秩不符，期望 "
+                      + std::to_string(want.shape.size()) + "，实际 "
+                      + std::to_string(b.shape.size());
                 return false;
             }
             for (std::size_t d = 0; d < b.shape.size(); ++d) {
                 if (want.shape[d] != -1 && b.shape[d] != want.shape[d]) {
-                    error = "onnx_engine: 输入 " + want.name + " 形状不符";
+                    error = "onnx_engine: 输入 " + want.name + " 形状不符，期望 "
+                          + shapeStr(want.shape) + "，实际 " + shapeStr(b.shape);
                     return false;
                 }
             }
-            inNames.push_back(want.name);
+            // 预校验 data 字节数 == 形状元素数 * 元素大小
+            std::size_t elems = 1;
+            for (int64_t dm : b.shape) {
+                if (dm < 0) {
+                    error = "onnx_engine: 输入 " + want.name + " 形状含非法维 "
+                          + shapeStr(b.shape);
+                    return false;
+                }
+                elems *= std::size_t(dm);
+            }
+            const std::size_t wantBytes = elems * std::size_t(elementTypeSize(b.type));
+            if (b.data.size() != wantBytes) {
+                error = "onnx_engine: 输入 " + want.name + " 数据大小不符，期望 "
+                      + std::to_string(wantBytes) + " 字节，实际 "
+                      + std::to_string(b.data.size()) + " 字节";
+                return false;
+            }
             // buffer 由调用方保证在 Run 期间存活（inputs 为 const 引用，同步调用）
             ortInputs.emplace_back(Ort::Value::CreateTensor(
                 mem, const_cast<std::uint8_t*>(b.data.data()), b.data.size(),
                 b.shape.data(), b.shape.size(), ortElementType(b.type)));
         }
-        for (const TensorInfo& o : info_.outputs) outNames.push_back(o.name);
-
-        std::vector<const char*> inPtrs, outPtrs;
-        inPtrs.reserve(inNames.size());
-        outPtrs.reserve(outNames.size());
-        for (const std::string& n : inNames) inPtrs.push_back(n.c_str());
-        for (const std::string& n : outNames) outPtrs.push_back(n.c_str());
 
         std::vector<Ort::Value> res =
-            ort.Run(Ort::RunOptions{nullptr}, inPtrs.data(), ortInputs.data(), ortInputs.size(),
-                    outPtrs.data(), outPtrs.size());
+            ort.Run(Ort::RunOptions{nullptr}, inputNamePtrs.data(), ortInputs.data(),
+                    ortInputs.size(), outputNamePtrs.data(), outputNamePtrs.size());
 
+        if (res.size() != info_.outputs.size()) {
+            error = "onnx_engine: 输出个数不符，期望 " + std::to_string(info_.outputs.size())
+                  + "，实际 " + std::to_string(res.size());
+            return false;
+        }
         outputs.clear();
         outputs.reserve(res.size());
-        for (Ort::Value& v : res) {
+        for (std::size_t i = 0; i < res.size(); ++i) {
+            const TensorInfo& want = info_.outputs[i];
+            Ort::Value& v = res[i];
+            if (!want.isTensor || !v.IsTensor()) {
+                error = "onnx_engine: 输出 " + want.name + " 不是张量，暂不支持";
+                return false;
+            }
             Ort::TensorTypeAndShapeInfo ti = v.GetTensorTypeAndShapeInfo();
             TensorBuffer b;
-            b.type = unmapElement(ti.GetElementType());
+            b.type = mapElementType(ti.GetElementType());
+            if (b.type == ElementType::Unknown || elementTypeSize(b.type) == 0) {
+                error = "onnx_engine: 输出 " + want.name + " 的元素类型不受支持";
+                return false;
+            }
             b.shape = ti.GetShape();
-            const int esz = elementTypeSize(b.type);
-            const std::size_t bytes = std::size_t(ti.GetElementCount()) * std::size_t(esz);
+            const std::size_t bytes =
+                std::size_t(ti.GetElementCount()) * std::size_t(elementTypeSize(b.type));
             const std::uint8_t* p = v.GetTensorData<std::uint8_t>();
-            b.data.assign(p, p + bytes);
+            if (bytes != 0) b.data.assign(p, p + bytes);
             outputs.push_back(std::move(b));
         }
         error.clear();

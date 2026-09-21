@@ -133,6 +133,54 @@ private slots:
         QVERIFY(!s->run({f32buf({2,4}, 1.0f), f32buf({3,4}, 1.0f)}, outs, err));
         QVERIFY(!err.empty());
     }
+
+    void runWrongDtypeFails() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(fx, {}, err);
+        QVERIFY(s);
+        TensorBuffer i32;
+        i32.type = ElementType::Int32;
+        i32.shape = {3,4};
+        i32.data.resize(12 * sizeof(std::int32_t));
+        std::vector<TensorBuffer> outs;
+        QVERIFY(!s->run({i32, i32}, outs, err));
+        QVERIFY(!err.empty());
+    }
+
+    void runWrongRankFails() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(fx, {}, err);
+        QVERIFY(s);
+        std::vector<TensorBuffer> outs;
+        QVERIFY(!s->run({f32buf({3,4}, 1.0f), f32buf({3,4,1}, 1.0f)}, outs, err));
+        QVERIFY(!err.empty());
+    }
+
+    void runWrongDataSizeFails() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(fx, {}, err);
+        QVERIFY(s);
+        TensorBuffer truncated = f32buf({3,4}, 1.0f);
+        truncated.data.resize(truncated.data.size() - sizeof(float));
+        std::vector<TensorBuffer> outs;
+        QVERIFY(!s->run({truncated, f32buf({3,4}, 2.0f)}, outs, err));
+        QVERIFY(!err.empty());
+    }
+
+    void runRejectsNonTensorOutput() {
+        const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/seq_out.onnx";
+        std::string err;
+        auto s = Runtime::instance().session(fx, {}, err);
+        QVERIFY2(s, err.c_str());
+        QCOMPARE(s->info().outputs.size(), std::size_t(1));
+        QVERIFY(!s->info().outputs[0].isTensor);
+        std::vector<TensorBuffer> ins{f32buf({2}, 1.0f)}, outs;
+        QVERIFY(!s->run(ins, outs, err));
+        QVERIFY(!err.empty());
+    }
 };
 QTEST_MAIN(TestOnnxEngine)
 #include "test_onnx_engine.moc"
