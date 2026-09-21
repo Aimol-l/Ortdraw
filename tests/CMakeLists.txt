@@ -63,6 +63,7 @@ foreach(src ${TEST_SOURCES})
     target_compile_features(${name} PRIVATE cxx_std_23)
     target_compile_definitions(${name} PRIVATE
         ORTDRAW_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+        ORTDRAW_MODELS_DIR="${PROJECT_SOURCE_DIR}/models"
     )
     target_link_libraries(${name} PRIVATE
         Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test
