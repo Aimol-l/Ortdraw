@@ -81,11 +81,19 @@ class Runtime {
 public:
     static Runtime& instance();
 
-    // 读取模型 IO 元数据（首次会建立/缓存会话）
+    // 读取模型 IO 元数据（内部缓存；文件变化自动失效重建）
     ModelInfo modelInfo(const std::string& path, const SessionOptions& opts = {});
-    // 取得（缓存复用的）会话；失败返回 nullptr 并置 error
+    // 取得共享会话；失败返回 nullptr 并置 error
+    // —— 上层无需管理生命周期：缓存/引用计数/淘汰/失效都在库内完成
     std::shared_ptr<Session> session(const std::string& path, const SessionOptions& opts,
                                      std::string& error);
+
+    // 可选：手动使某模型（其所有 key）失效 / 清空全部缓存
+    void reload(const std::string& path);
+    void clearCache();
+
+    // 可选：缓存上限（LRU）。默认 maxSessions=4，maxBytes=1GiB（按模型文件大小估算权重）
+    void setCacheLimits(int maxSessions, std::size_t maxBytes);
 
     static bool cudaAvailable();     // 探测 CUDA provider 是否可用
 };
@@ -105,12 +113,22 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 }
 ```
 
-### 3.3 会话缓存与并发
+### 3.3 会话生命周期、缓存与并发（全部在 SDK 内部管理）
 
-- `Runtime` 内维护 `key = (path, device, intraThreads)` → `weak/shared_ptr<Session>` 的进程级缓存，互斥保护。
-- `Ort::Session::Run` 本身线程安全，会话可被并发调用；缓存读写加锁，运行时不持有锁。
-- `Device::Auto`：`cudaAvailable()` 为真则注册 CUDA provider，否则 CPU。
-- 失败路径统一返回 `error` 文本（模型加载失败、provider 不可用、输入不匹配等）。
+**上层使用者只需 `session(path, opts)`；不持有、不卸载、不关心淘汰。**
+
+- **键**：`key = (绝对路径, device, intraThreads)`。同 key → 同一个 `Ort::Session`：
+  - **多个 ONNX 节点用同一模型（同 device/threads）共享同一会话，权重只有一份**；
+  - 同路径但不同 device/threads → 不同会话（provider/线程配置在会话内，无法共享）。
+- **引用计数 + LRU**：
+  - 缓存持有强引用（`shared_ptr`），执行器运行期间持有一份 → 该会话在本轮推理结束前**不会被淘汰**；
+  - 超过上限（默认 `maxSessions=4` 且 `maxBytes=1GiB`，权重按模型文件大小估算）时，淘汰**最久未使用**且当前无外部引用的会话；
+  - 上层无需干预；也可用 `setCacheLimits()` 调整、`clearCache()` 清空。
+- **失效/重载**：缓存条目记录 `(mtime, size)`；`session()/modelInfo()` 发现文件已变则重建并替换旧条目；模型被删除则返回加载错误。因此「换文件」对上层透明，节点上的「重载」按钮只是显式触发。
+- **淘汰/重建时机**：会话在**首次使用时惰性创建**；`clearCache()` 立即释放无引用条目。
+- **并发**：缓存读写与淘汰由库内互斥保护；`Ort::Session::Run` 线程安全，可并发；`run()` 期间不持有缓存锁，仅持有该会话的 `shared_ptr`。
+- **设备**：`Device::Auto` → `cudaAvailable()` 为真时注册 CUDA provider，否则 CPU；provider 初始化失败时回退 CPU 并给出日志/错误。
+- **失败路径**：模型加载失败、provider 不可用、IO 个数/类型/形状不匹配等，统一通过 `error` 文本返回。
 
 ## 4. 应用侧适配层
 
@@ -125,6 +143,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 
 ### 5.1 「ONNX 推理」`OnnxInferNode` + `OnnxInferExecutor`
 
+- 生命周期：节点**只保存参数**（路径/设备/线程/每输入设置），**不持有会话**；会话由 SDK 缓存统一管理。多个节点指向同一模型即自动共享权重；节点上的「重载」按钮调用 `Runtime::reload(path)`，其余无需上层干预。
 - 参数（可序列化）：
   ```
   modelPath : string
@@ -179,6 +198,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   - `cudaAvailable()` 不崩溃（返回值不作断言）。
 - 执行器单测（并入 `test_executors` 或新套件）：构造 `OnnxInferExecutor` 的 params（含路径与每输入设置），喂两个 `Tensorvia::Tensor`，校验输出；
 - `TensorToImage`：NCHW `[1,3,2,2]` 与 `[1,1,2,2]` 转换的尺寸/通道断言。
+- 缓存/生命周期：同一 `(path,device,threads)` 两次 `session()` 返回**同一对象**（`get()==`）；不同 threads 返回不同对象；修改模型文件 mtime 后 `session()` 返回**新对象**；`clearCache()` 后重新加载；`setCacheLimits` 后超限淘汰（可用两个不同模型验证）。
 - 实机：用 `test_abs`（单输入）把图像接入 ONNX 节点，验证自动转换、端口生成、输出接「张量 → 图像」显示；再验证换模型重建端口与断线。
 
 ## 8. 风险与不改动
