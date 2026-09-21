@@ -13,3 +13,4 @@ build/
 .vscode/
 bin/
 .superpowers/
+models/

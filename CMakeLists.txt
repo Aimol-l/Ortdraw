@@ -63,5 +63,8 @@ target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     Qt6::Core Qt6::Gui Qt6::Quick Qt6::Widgets
 )
 
+add_subdirectory(onnx_engine)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE onnx_engine)
+
 enable_testing()
 add_subdirectory(tests)

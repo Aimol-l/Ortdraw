@@ -16,9 +16,19 @@
 #include "engine/executors/ResizeExecutor.hpp"
 #include "engine/executors/ThresholdExecutor.hpp"
 #include "engine/executors/TensorExecutor.hpp"
+#include "engine/executors/PreProcessExecutor.hpp"
+#include "engine/executors/PostProcessExecutor.hpp"
+#include "engine/executors/OnnxInferExecutor.hpp"
+#include "engine/tasks/PreProcessRegistry.hpp"
+#include "engine/tasks/PostProcessRegistry.hpp"
 
 inline void registerBuiltinExecutors() {
     auto& r = NodeRegistry::instance();
+    registerBuiltinPreProcessTasks();
+    registerBuiltinPostProcessTasks();
+    r.registerExecutor("PreProcess", std::make_shared<PreProcessExecutor>());
+    r.registerExecutor("PostProcess", std::make_shared<PostProcessExecutor>());
+    r.registerExecutor("OnnxInfer", std::make_shared<OnnxInferExecutor>());
     r.registerExecutor("ImageLoad", std::make_shared<ImageLoadExecutor>());
     r.registerExecutor("ImageSave", std::make_shared<ImageSaveExecutor>());
     r.registerExecutor("ImageShow", std::make_shared<ImageShowExecutor>());

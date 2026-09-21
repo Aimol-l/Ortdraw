@@ -18,7 +18,10 @@ QtObject {
         { type:"FlipRotate", title:"翻转/旋转", desc:"翻转或旋转图像",      cat:"process", icon:"rotate" },
         { type:"BrightnessContrast", title:"亮度/对比度", desc:"调整亮度与对比度", cat:"process", icon:"adjust" },
         { type:"Conv",      title:"卷积",     desc:"自定义卷积核",       cat:"math",    icon:"conv"    },
-        { type:"Tensor",    title:"张量 / 卷积核", desc:"自定义卷积核", cat:"math",    icon:"conv"    }
+        { type:"Tensor",    title:"张量 / 卷积核", desc:"自定义卷积核", cat:"math",    icon:"conv"    },
+        { type:"OnnxInfer", title:"ONNX 推理",  desc:"按模型元数据生成张量端口", cat:"math", icon:"onnx" },
+        { type:"PreProcess", title:"预处理",    desc:"按任务生成端口与参数",  cat:"process", icon:"pre" },
+        { type:"PostProcess", title:"后处理",   desc:"检测/分割/分类与显示",   cat:"process", icon:"post" }
     ]
 
     readonly property var categoryNames: ({
@@ -42,6 +45,9 @@ QtObject {
         if (type === "BrightnessContrast") return "qrc:/BrightnessContrastNode.qml"
         if (type === "Conv")      return "qrc:/ConvNode.qml"
         if (type === "Tensor")    return "qrc:/TensorNode.qml"
+        if (type === "OnnxInfer") return "qrc:/OnnxInferNode.qml"
+        if (type === "PreProcess") return "qrc:/PreProcessNode.qml"
+        if (type === "PostProcess") return "qrc:/PostProcessNode.qml"
         return ""
     }
 

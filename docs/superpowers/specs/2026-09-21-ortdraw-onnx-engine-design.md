@@ -3,7 +3,7 @@
 - 日期：2026-09-21
 - 状态：待评审
 - 范围：封装 ONNX Runtime 为**独立的动态库 SDK**（仅依赖 onnxruntime），并在 Ortdraw 中提供「ONNX 推理」节点与**可扩展的「预处理」「后处理」节点**，支持**多输入多输出**、按模型元数据自动生成端口与类型映射、CPU/CUDA 设备与线程配置。
-- 非目标：训练/反向传播；把 ONNX 图展开为 Ortdraw 节点；**动态维度模型**（仅静态）；异步推理；多输出合并为单端口；通用「张量 → 图像」节点（由任务化后处理替代）；预处理/后处理的自动串联（用户手动连线）。
+- 非目标：训练/反向传播；把 ONNX 图展开为 Ortdraw 节点；异步推理；多输出合并为单端口；通用「张量 → 图像」节点（由任务化后处理替代）；预处理/后处理的自动串联（用户手动连线）。
 
 ## 1. 目标
 
@@ -13,7 +13,7 @@
 4. 预处理由独立的「预处理」节点承担（图像/张量 → 模型输入张量）；ONNX 节点只做**最小适配**（dtype 转换与形状校验）。
 5. 设备与线程：节点参数 `device = 自动 / CPU / CUDA`、`threads`（0=默认）；会话按 `(模型路径, 设备, 线程)` 缓存复用。
 6. 新增**可扩展的「预处理」节点**（图像/张量 → 模型输入张量）与**「后处理」节点**（模型输出张量 → 图像/类别），共用任务框架；**任务决定端口数量与类型**（如 YOLO 检测后处理 = 1 张量 → 1 图像；YOLO 分割 = 2 张量 → 1 图像）。**不提供通用「张量 → 图像」节点。**
-7. **仅支持静态 ONNX**（所有维度为固定正整数）；含动态维度的模型被拒绝并给出明确错误。
+7. **支持动态维度**：`shape` 中 `-1` 表示未知维；校验只针对已知维；预处理的目标尺寸由节点参数给出，后处理按运行时形状解析。静态模型是其特例。
 7. onnxruntime 为**硬依赖**：CMake 找不到则构建失败并提示。
 
 ## 2. 现状与约束
@@ -83,6 +83,7 @@ public:
 
     // 读取模型 IO 元数据（内部缓存；文件变化自动失效重建）
     ModelInfo modelInfo(const std::string& path, const SessionOptions& opts = {});
+    ModelInfo modelInfo(const std::string& path, const SessionOptions& opts, std::string& error);
     // 取得共享会话；失败返回 nullptr 并置 error
     // —— 上层无需管理生命周期：缓存/引用计数/淘汰/失效都在库内完成
     std::shared_ptr<Session> session(const std::string& path, const SessionOptions& opts,
@@ -166,7 +167,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   device    : "auto" | "cpu" | "cuda"
   threads   : int
   ```
-- 载入模型：调 `Runtime::modelInfo()` → 校验**所有输入/输出维度均为固定正整数**（无动态维），否则拒绝并报「暂不支持动态维度」；通过后生成端口。
+- 载入模型：调 `Runtime::modelInfo()` → 生成端口；**允许动态维**（`-1` 在 tooltip 显示为「动态」/`-1`）。
   - **输入端口：`DataType::Tensor`**（名 = 模型输入名，tooltip 显示 dtype/shape）——上游由「预处理」节点产出张量；
   - 输出端口：按元数据映射（见 §1.3），名 = 模型输出名；
   - **换模型/重载**：重建端口；端口集合变化时断开引用被移除端口的连线。
@@ -176,7 +177,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   - 端口集合在模型载入完成后固定，运行期不再增删（除非重载/换模型）。
 - 执行（worker 线程）：
   1. `session(modelPath, {device,threads})`；失败 → 节点错误。
-  2. 按 `info().inputs` 顺序取 `inputs[i]`，要求为 `Tensorvia::Tensor`（否则报「输入类型不符」）；做**最小适配**：dtype 转换到模型 dtype、校验形状一致（静态形状，不符即报错并提示期望 shape）。
+  2. 按 `info().inputs` 顺序取 `inputs[i]`，要求为 `Tensorvia::Tensor`（否则报「输入类型不符」）；做**最小适配**：dtype 转换到模型 dtype、校验形状（**仅比较已知维**，`-1` 跳过；秩必须一致）。
   3. `session->run(...)` → `TensorBuffer` 列表 → 转 `Tensorvia::Tensor` 的 `NodeData`（**所有输出端口都是 `Tensor`**）。
 - UI（`OnnxInferNode.qml`）：模型路径选择/重载、设备下拉、线程输入、输入/输出端口名与 shape/dtype 概览、错误徽标沿用现有机制。
 

@@ -71,6 +71,19 @@ private:
             ++m_image_revision;
             emit imageRevisionChanged();
         });
+        QObject::connect(&m_executor, &GraphExecutor::nodeDisplay, this,
+                         [this](const QString& uuid, const QVariantMap& d) {
+            // m_paint_board 可能为空（尚未挂载画布）或节点未实现 setDisplayData，
+            // 此时 invokeMethod 返回 false，安全忽略即可。
+            if (!m_paint_board) return;
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
+                if (n->uuid().toString() == uuid) {
+                    QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
+                                              Q_ARG(QVariantMap, d));
+                    break;
+                }
+            }
+        });
         QObject::connect(&m_executor, &GraphExecutor::nodeStarted, this,
                          [this](const QString& uuid) {
             const int grp = groupOf(uuid);
@@ -296,6 +309,11 @@ public:
         Log::info(QStringLiteral("运行图求值：节点 %1 个，边 %2 条")
                       .arg(nodeCount()).arg(edgeCount()));
         clearNodeErrors();
+        // 清空各节点上一轮的显示数据（非端口通道），避免残留过期结果
+        if (m_paint_board)
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+                QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
+                                          Q_ARG(QVariantMap, QVariantMap{}));
         // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
         // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
         return m_executor.run();
@@ -592,6 +610,37 @@ public:
             auto cmd = std::make_unique<RemoveEdgeCMD>(e.start_port, e.stop_port, m_paint_board);
             m_cmd_manager.executeCommand(std::move(cmd));
         }
+        refresh();
+    }
+    // 该节点当前是否有任意连线（用于 setParams 判断能否安全重建端口）
+    Q_INVOKABLE bool nodeHasEdges(BaseNode* node) const {
+        if(!node || !m_paint_board) return false;
+        for(const Edge& e : m_paint_board->m_graph.getAllEdges()){
+            if(!e.start_port || !e.stop_port) continue;
+            if(e.start_port->father() == node || e.stop_port->father() == node)
+                return true;
+        }
+        return false;
+    }
+    // 重建节点端口：先直接删边，再重建端口，避免留下悬垂 Port*
+    Q_INVOKABLE void rebuildNodePorts(BaseNode* node, const QVector<PortSpec>& ins,
+                                      const QVector<PortSpec>& outs){
+        if(!m_paint_board || !node) return;
+        // 1) 先删除涉及该节点旧端口的所有边。此处刻意不使用命令入栈：
+        //    RemoveEdgeCMD 持有裸 Port*，若入栈则撤销/重做会访问即将被删除的端口。
+        //    按值复制边列表，避免删除过程中迭代器失效。
+        const QVector<Edge> edges = m_paint_board->m_graph.getAllEdges();
+        for(const Edge& e : edges){
+            if(!e.start_port || !e.stop_port) continue;
+            if(e.start_port->father() == node || e.stop_port->father() == node)
+                m_paint_board->m_graph.removeEdge(e.start_port, e.stop_port);
+        }
+        // 2) 清空历史：旧历史项可能引用本节点刚删除的端口或已删除的边指针，
+        //    保留会导致后续撤销访问悬垂指针；不做选择性裁剪，整体清空最安全。
+        m_cmd_manager.clear();
+        // 3) 旧边已删除，重建端口不再有悬垂引用
+        node->rebuildPorts(ins, outs);
+        syncLastState();
         refresh();
     }
     Q_INVOKABLE void clearGraph(){

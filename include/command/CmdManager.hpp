@@ -37,6 +37,7 @@ public:
         }
         return false;
     }
+    void clear() { m_commands.clear(); m_cmd_idx = -1; }
     bool canUndo() const { return m_cmd_idx >= 0; }
     bool canRedo() const {
         return m_cmd_idx + 1 < static_cast<std::ptrdiff_t>(m_commands.size());

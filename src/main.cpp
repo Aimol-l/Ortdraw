@@ -20,6 +20,9 @@
 #include "node/BrightnessContrast.hpp"
 #include "node/Conv.hpp"
 #include "node/Tensor.hpp"
+#include "node/OnnxInfer.hpp"
+#include "node/PreProcess.hpp"
+#include "node/PostProcess.hpp"
 #include "engine/BuiltinExecutors.hpp"
 #include "engine/ImageStore.hpp"
 #include <QApplication>
@@ -67,6 +70,9 @@ int main(int argc, char *argv[]){
     qmlRegisterType<BrightnessContrastNode>("BrightnessContrastNode", 1, 0, "BrightnessContrastNode");
     qmlRegisterType<ConvNode>("ConvNode", 1, 0, "ConvNode");
     qmlRegisterType<TensorNode>("TensorNode", 1, 0, "TensorNode");
+    qmlRegisterType<OnnxInferNode>("OnnxInferNode", 1, 0, "OnnxInferNode");
+    qmlRegisterType<PreProcessNode>("PreProcessNode", 1, 0, "PreProcessNode");
+    qmlRegisterType<PostProcessNode>("PostProcessNode", 1, 0, "PostProcessNode");
     qmlRegisterSingletonInstance("NodeManager", 1, 0, "NodeManager", NodeManager::instance());
     qmlRegisterSingletonInstance("Settings", 1, 0, "Settings", Settings::instance());
     qmlRegisterSingletonInstance("Theme", 1, 0, "Theme", Theme::instance());

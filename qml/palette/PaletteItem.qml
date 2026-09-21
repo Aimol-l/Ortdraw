@@ -113,6 +113,25 @@ Item {
             line(14.7, 4, 14.7, 20)
             line(4, 9.3, 20, 9.3)
             line(4, 14.7, 20, 14.7)
+        } else if (name === "onnx") {
+            line(6.5, 12, 11, 6.5)
+            line(6.5, 12, 11, 17.5)
+            line(11, 6.5, 16.5, 12)
+            line(11, 17.5, 16.5, 12)
+            ctx.beginPath(); ctx.arc(6.5, 12, 2.2, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(11, 6.5, 2.2, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(11, 17.5, 2.2, 0, Math.PI * 2); ctx.fill()
+            ctx.beginPath(); ctx.arc(16.5, 12, 2.2, 0, Math.PI * 2); ctx.fill()
+        } else if (name === "pre") {
+            rr(3.5, 5, 17, 14, 2.5); ctx.stroke()
+            line(7, 12, 16.5, 12)
+            ctx.beginPath(); ctx.moveTo(13.5, 8.5); ctx.lineTo(17, 12); ctx.lineTo(13.5, 15.5)
+            ctx.stroke()
+        } else if (name === "post") {
+            rr(3.5, 5, 17, 14, 2.5); ctx.stroke()
+            line(7.5, 12, 17, 12)
+            ctx.beginPath(); ctx.moveTo(10.5, 8.5); ctx.lineTo(7, 12); ctx.lineTo(10.5, 15.5)
+            ctx.stroke()
         } else if (name === "median") {
             for (var my = 0; my < 3; ++my)
                 for (var mx = 0; mx < 3; ++mx) {

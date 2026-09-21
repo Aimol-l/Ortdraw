@@ -21,7 +21,17 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/node/BrightnessContrast.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Conv.hpp
     ${PROJECT_SOURCE_DIR}/include/node/Tensor.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/PreProcess.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/PostProcess.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/OnnxInfer.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/executors/TensorExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/PreProcessExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/OnnxInferExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/executors/PostProcessExecutor.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/TaskSpec.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/PreProcessRegistry.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/tasks/PostProcessRegistry.hpp
+    ${PROJECT_SOURCE_DIR}/include/engine/onnx/OnnxTensorConvert.hpp
     ${PROJECT_SOURCE_DIR}/include/ExecQueueModel.hpp
     ${PROJECT_SOURCE_DIR}/include/QueueFilterProxyModel.hpp
     ${PROJECT_SOURCE_DIR}/include/engine/NodeStatus.hpp
@@ -51,10 +61,15 @@ foreach(src ${TEST_SOURCES})
         ${OpenCV_INCLUDE_DIRS}
     )
     target_compile_features(${name} PRIVATE cxx_std_23)
+    target_compile_definitions(${name} PRIVATE
+        ORTDRAW_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
+        ORTDRAW_MODELS_DIR="${PROJECT_SOURCE_DIR}/models"
+    )
     target_link_libraries(${name} PRIVATE
         Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test
         ${OpenCV_LIBRARIES}
         Tensorvia::tensorvia
+        onnx_engine
     )
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
