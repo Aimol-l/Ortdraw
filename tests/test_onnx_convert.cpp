@@ -61,6 +61,20 @@ private slots:
         QCOMPARE(b.type, onnx_engine::ElementType::Float32);
         QCOMPARE(b.data.size(), std::size_t(4 * sizeof(float)));
     }
+
+    void imageToTensorKeepSizeMismatchReturnsEmpty() {
+        cv::Mat bgr(2, 3, CV_8UC3, cv::Scalar(0, 0, 255));
+        const auto t = onnx_convert::imageToTensor(bgr, {1, 3, 100, 3},
+                                                   onnx_engine::ElementType::Float32,
+                                                   "div255", {}, {}, "rgb", "keep");
+        QVERIFY(t.data.empty());
+    }
+
+    void unsupportedTypeYieldsMonostate() {
+        onnx_engine::TensorBuffer b; b.type = onnx_engine::ElementType::UInt16;
+        b.shape = {2}; b.data.resize(4);
+        QVERIFY(std::holds_alternative<std::monostate>(onnx_convert::tensorToNodeData(b)));
+    }
 };
 
 QTEST_MAIN(TestOnnxConvert)

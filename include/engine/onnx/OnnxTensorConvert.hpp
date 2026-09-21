@@ -42,6 +42,26 @@ inline onnx_engine::ElementType fromViaType(via::DataType t) {
     }
 }
 
+// 设计 §4.1：仅下列类型可被表示（UInt8/Bool 经映射承载）；
+// UInt16/UInt32/UInt64/String/Complex/Unknown 不受支持，调用方须先检查。
+inline bool isSupported(onnx_engine::ElementType t) {
+    switch (t) {
+    case onnx_engine::ElementType::Float32:
+    case onnx_engine::ElementType::Float64:
+    case onnx_engine::ElementType::Float16:
+    case onnx_engine::ElementType::BFloat16:
+    case onnx_engine::ElementType::Int8:
+    case onnx_engine::ElementType::Int16:
+    case onnx_engine::ElementType::Int32:
+    case onnx_engine::ElementType::Int64:
+    case onnx_engine::ElementType::UInt8:
+    case onnx_engine::ElementType::Bool:
+        return true;
+    default:
+        return false;
+    }
+}
+
 namespace detail {
 
 // 把一段连续的 float 值按目标 dtype 写进行主序字节缓冲（单元素）。
@@ -180,6 +200,9 @@ inline onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
                                                const QString& channel, const QString& resize) {
     onnx_engine::TensorBuffer out;
     if (img.empty()) return out;
+    // 不支持的 dtype（UInt16/UInt32/... 或 Unknown）不尝试转换：返回空缓冲，
+    // 由调用方向用户报告「不支持的张量类型」。
+    if (!isSupported(dtype)) return out;
 
     cv::Mat work = img;
 
@@ -207,9 +230,16 @@ inline onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
     if (H <= 0) H = img.rows;
     if (W <= 0) W = img.cols;
     if (N <= 0) N = 1;
+    if (H <= 0 || W <= 0) return out;
 
-    if (resize == QStringLiteral("auto") && (work.rows != H || work.cols != W))
-        cv::resize(work, work, cv::Size(static_cast<int>(W), static_cast<int>(H)), 0, 0, cv::INTER_LINEAR);
+    if (resize == QStringLiteral("auto")) {
+        if (work.rows != H || work.cols != W)
+            cv::resize(work, work, cv::Size(static_cast<int>(W), static_cast<int>(H)), 0, 0, cv::INTER_LINEAR);
+    } else if (work.rows != H || work.cols != W) {
+        // resize != "auto"（如 "keep"）且目标空间维与图像不符：不做缩放，
+        // 直接返回空缓冲，避免后续按 H/W 越界读取 f。
+        return out;
+    }
 
     cv::Mat f;
     work.convertTo(f, CV_32FC(work.channels()));
@@ -273,14 +303,20 @@ inline onnx_engine::TensorBuffer tensorToBuffer(const Tensor& t) {
     const std::size_t n = t.numel();
     const std::size_t esize = via::calc_dtype_size(t.dtype());
     if (n > 0 && esize > 0) {
+        // Tensorvia 提供 to_host()（非 const）。复制一份并确保数据位于 host 后再取指针，
+        // 避免在不同后端（CUDA/SYCL/...）下直接解引用设备指针。本应用为 CPU 后端，to_host() 为无操作。
+        Tensor host = t;
+        host.to_host();
         b.data.resize(n * esize);
-        std::memcpy(b.data.data(), t.data(), n * esize);
+        std::memcpy(b.data.data(), host.data(), n * esize);
     }
     return b;
 }
 
 // 中性张量 → NodeData：Bool 标量→bool；整型标量→double；否则→Tensor。
+// 不支持的 dtype（UInt16/UInt32/...）返回 monostate，调用方须检查并报告错误。
 inline NodeData tensorToNodeData(const onnx_engine::TensorBuffer& b) {
+    if (!isSupported(b.type)) return NodeData{std::monostate{}};
     if (b.shape.empty()) {
         if (b.type == onnx_engine::ElementType::Bool)
             return b.data.empty() ? NodeData(false) : NodeData(b.data[0] != 0);
