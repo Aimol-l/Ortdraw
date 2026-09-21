@@ -202,15 +202,14 @@ namespace onnx_engine {
 
 struct SessionImpl : Session {
     Ort::Session ort{nullptr};
-    ModelInfo info;
+    ModelInfo info_;   // 注意：不能与 info() 方法同名
     std::string path;
     std::int64_t mtime = 0;
     std::uint64_t size = 0;
     std::size_t weightBytes = 0;   // 估算权重（= 模型文件大小）
 
     explicit SessionImpl(std::shared_ptr<Ort::Env> env);
-    const ModelInfo& info_() const;
-    const ModelInfo& info() const override { return info; }
+    const ModelInfo& info() const override { return info_; }
     bool run(const std::vector<TensorBuffer>& inputs,
              std::vector<TensorBuffer>& outputs, std::string& error) override;
 };
@@ -625,8 +624,8 @@ Expected: `runAdd` 失败（`run` 未实现）。
 ```cpp
 bool SessionImpl::run(const std::vector<TensorBuffer>& inputs,
                       std::vector<TensorBuffer>& outputs, std::string& error) {
-    if (inputs.size() != info.inputs.size()) {
-        error = "输入个数不符：期望 " + std::to_string(info.inputs.size())
+    if (inputs.size() != info_.inputs.size()) {
+        error = "输入个数不符：期望 " + std::to_string(info_.inputs.size())
               + "，实际 " + std::to_string(inputs.size());
         return false;
     }
@@ -636,7 +635,7 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs,
         std::vector<std::string> inNames, outNames;
         for (std::size_t i = 0; i < inputs.size(); ++i) {
             const auto& b = inputs[i];
-            const auto& want = info.inputs[i];
+            const auto& want = info_.inputs[i];
             if (b.type != want.type) {
                 error = "输入 " + want.name + " 类型不符：" + std::string(elementTypeName(b.type))
                       + " != " + std::string(elementTypeName(want.type));
@@ -652,7 +651,7 @@ bool SessionImpl::run(const std::vector<TensorBuffer>& inputs,
                                                      ortType(b.type)));
             inNames.push_back(want.name);
         }
-        for (const auto& o : info.outputs) outNames.push_back(o.name);
+        for (const auto& o : info_.outputs) outNames.push_back(o.name);
         std::vector<const char*> ip, op;
         for (auto& n : inNames) ip.push_back(n.c_str());
         for (auto& n : outNames) op.push_back(n.c_str());
@@ -844,5 +843,5 @@ git add -A && git commit -m "chore(onnx_engine): standalone build verification"
 
 - **Spec 覆盖**：§3.1 目录/构建/硬依赖（Task 1）；§3.2 API（Task 1/2/3/4）；§3.3 生命周期/LRU/mtime（Task 5）；§4.1 dtype 映射（Task 2/3 的 `mapElement`/`ortType`）；测试（Task 2-5）。
 - **占位符**：无 TBD；每步给出代码或明确命令。Task 2 的实现说明较长（`makeSession` 细节），但给出了关键代码与必测断言。
-- **类型一致性**：`ElementType/Device/TensorInfo/ModelInfo/TensorBuffer/SessionOptions` 在 Task 1 定义，后续任务复用；`Runtime::session` 返回 `shared_ptr<Session>`，`SessionImpl : Session`。
+- **类型一致性**：`ElementType/Device/TensorInfo/ModelInfo/TensorBuffer/SessionOptions` 在 Task 1 定义，后续任务复用；`Runtime::session` 返回 `shared_ptr<Session>`，`SessionImpl : Session`。**`SessionImpl` 的元数据成员名统一为 `info_`**（避免与 `info()` 方法同名）。
 - **注意**：Task 3 的 `Run` 重载必须同时传输入名与输出名数组（示例已是正确写法）。
