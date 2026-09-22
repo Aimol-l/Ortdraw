@@ -103,24 +103,24 @@ inline void registerBuiltinPreProcessTasks() {
             {"size", "keep"}, {"sizeWH", "0x0"},
         };
         s.params = {
-            {"layout", QStringLiteral("布局"), "select", "NCHW",
+            {"layout", QStringLiteral("数据布局"), "select", "NCHW",
              {{"NCHW", "NCHW"}, {"NHWC", "NHWC"}}, 1, 0, {}, ""},
-            {"channel", QStringLiteral("通道"), "select", "rgb",
+            {"channel", QStringLiteral("目标通道"), "select", "rgb",
              {{"rgb", "RGB"}, {"bgr", "BGR"}}, 1, 0, {}, ""},
-            {"dtype", QStringLiteral("精度"), "select", "fp32",
+            {"dtype", QStringLiteral("数据精度"), "select", "fp32",
              {{"fp32", "fp32"}, {"fp16", "fp16"}}, 1, 0, {}, ""},
             {"norm", QStringLiteral("处理方式"), "select", "unit",
-             {{"unit", QStringLiteral("0~1 (/255)")},
-              {"zscore", QStringLiteral("Z-score")},
-              {"pm1", QStringLiteral("[-1,1]")},
-              {"minmax", QStringLiteral("逐通道 Min-Max")}}, 0, 0, {}, ""},
+             {{"unit", QStringLiteral("x / 255")},
+              {"zscore", QStringLiteral("(x / 255 - mean) / std")},
+              {"pm1", QStringLiteral("(x / 255.0 - 0.5)/ 0.5")},
+              {"minmax", QStringLiteral("(x - min)/(max - min)")}}, 0, 0, {}, ""},
             {"mean", QStringLiteral("均值"), "floats", "0.485,0.456,0.406", {}, 0, 3,
              "norm", "zscore"},
             {"std", QStringLiteral("标准差"), "floats", "0.229,0.224,0.225", {}, 0, 3,
              "norm", "zscore"},
-            {"size", QStringLiteral("尺寸"), "select", "keep",
-             {{"keep", QStringLiteral("原尺寸")},
-              {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
+            {"size", QStringLiteral("输出尺寸"), "select", "keep",
+             {{"keep", QStringLiteral("保持大小")},
+              {"resize", QStringLiteral("指定大小")}}, 2, 0, {}, ""},
             {"sizeWH", QStringLiteral("宽高"), "size2", "0x0", {}, 2, 0, {}, ""},
         };
         s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
@@ -190,9 +190,9 @@ inline void registerBuiltinPreProcessTasks() {
                      {QStringLiteral("元信息"), DataType::Tensor}};
         s.defaults = QVariantMap{{"size", 640}, {"pad", 114}, {"dtype", "fp32"}};
         s.params = {
-            {"size", QStringLiteral("尺寸"), "int", 640, {}},
-            {"pad", QStringLiteral("填充值"), "int", 114, {}},
-            {"dtype", QStringLiteral("精度"), "select", "fp32",
+            {"size", QStringLiteral("输出尺寸"), "int", 640, {}},
+            {"pad", QStringLiteral("边界填充值"), "int", 114, {}},
+            {"dtype", QStringLiteral("数据精度"), "select", "fp32",
              {{"fp32", "fp32"}, {"fp16", "fp16"}}},
         };
         s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
