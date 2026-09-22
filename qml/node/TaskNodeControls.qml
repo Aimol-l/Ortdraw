@@ -37,6 +37,15 @@ Column {
             w += s.charCodeAt(i) > 255 ? px : px * 0.56
         return w
     }
+    function groupOf(d) { return d.group === undefined ? 0 : d.group }
+    // 两个参数能否拼成一行：都不跨列，且 group>0 的参数只与同 group 成行（不与 group 0 混排）
+    function pairOK(a, b, cellW) {
+        if (naturalWidth(a) > cellW || naturalWidth(b) > cellW) return false
+        var ga = groupOf(a), gb = groupOf(b)
+        if (ga > 0 || gb > 0) return ga > 0 && ga === gb
+        return true
+    }
+
     // 参数的固有宽度；-1 表示“标量，恒为单列”
     function naturalWidth(d) {
         if (!d) return -1
@@ -45,7 +54,7 @@ Column {
             var n = d.vecCount ? d.vecCount : 1
             return lw + n * 40 + (n - 1) * 4
         }
-        if (d.kind === "size2") return lw + 44 + 14 + 44
+        if (d.kind === "size2") return lw + 38 + 3 + 7 + 3 + 38   // 两格 38 + “×” + 间距
         if (d.kind === "select") {
             // 用最长选项（而非当前值）估算，保证切换选项时布局稳定
             var maxOpt = 0
@@ -97,21 +106,23 @@ Column {
             for (var k = 1; k < descs.length; ++k) rest.push(descs[k])
         }
 
-        // 网格：相邻两个非跨列参数成一行；跨列参数独占一行（不重排顺序）
+        // 网格：可配对的两个参数成一行；跨列参数独占整行（不重排顺序）
         var rows = []
         var r = 0
         while (r < rest.length) {
             if (naturalWidth(rest[r]) > cellW) {
                 rows.push({ cells: [{ desc: rest[r], w: W }] })
                 ++r
-            } else if (r + 1 < rest.length && naturalWidth(rest[r + 1]) <= cellW) {
+                continue
+            }
+            if (r + 1 < rest.length && pairOK(rest[r], rest[r + 1], cellW)) {
                 rows.push({ cells: [{ desc: rest[r], w: cellW },
                                     { desc: rest[r + 1], w: cellW }] })
                 r += 2
-            } else {
-                rows.push({ cells: [{ desc: rest[r], w: cellW }] })
-                ++r
+                continue
             }
+            rows.push({ cells: [{ desc: rest[r], w: cellW }] })
+            ++r
         }
         return { task: taskParam, rows: rows }
     }

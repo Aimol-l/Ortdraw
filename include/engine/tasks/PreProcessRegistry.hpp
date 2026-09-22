@@ -121,7 +121,7 @@ inline void registerBuiltinPreProcessTasks() {
             {"size", QStringLiteral("尺寸"), "select", "keep",
              {{"keep", QStringLiteral("原尺寸")},
               {"resize", QStringLiteral("指定")}}, 2, 0, {}, ""},
-            {"sizeWH", QStringLiteral("宽x高"), "size2", "0x0", {}, 2, 0, {}, ""},
+            {"sizeWH", QStringLiteral("宽高"), "size2", "0x0", {}, 2, 0, {}, ""},
         };
         s.compute = [dtypeOf](const ExecuteContext&, const QVariantMap& p,
                               const QVector<NodeData>& inputs) -> ExecResult {

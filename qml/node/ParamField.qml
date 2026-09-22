@@ -253,7 +253,7 @@ Item {
         visible: field.kind === "size2"
         width: field.width
         height: field.height
-        spacing: 4
+        spacing: 3
 
         // 引用 revision 以在参数变化（如下拉切换）时重新求值
         readonly property var parts: (field.revision,
@@ -272,7 +272,7 @@ Item {
             renderType: field.textRenderType
         }
         Rectangle {
-            width: 44
+            width: 38
             height: field.height
             radius: 5
             color: Theme.bg
@@ -300,7 +300,7 @@ Item {
             renderType: field.textRenderType
         }
         Rectangle {
-            width: 44
+            width: 38
             height: field.height
             radius: 5
             color: Theme.bg
