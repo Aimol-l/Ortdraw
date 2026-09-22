@@ -125,6 +125,30 @@ Item {
         color: Qt.rgba(0, 0, 0, Theme.dark ? 0.30 : 0.08)
     }
 
+    // 整卡兜底输入层：吃掉落在卡片上、但没有被任何控件接收的点击/右键。
+    // 否则 Qt 的命中测试会继续往 z 序更低的兄弟节点找接收者，出现「隔着上层节点点到下层节点」的穿透。
+    // 声明在 bg 之前（z 序更低），因此所有控件/表头仍优先收到事件。
+    MouseArea {
+        id: cardInput
+        anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressed: (mouse) => {
+            // 平移模式下不拦截，交给画布（空格拖拽/拖拽平移）
+            if (UiBus.spaceHeld || !Settings.spaceToPan) {
+                mouse.accepted = false
+                return
+            }
+            var p = card.coordItem ? mapToItem(card.coordItem, mouse.x, mouse.y)
+                                   : Qt.point(0, 0)
+            NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
+            if (mouse.button === Qt.RightButton && Settings.contextMenu) {
+                var g = mapToItem(null, mouse.x, mouse.y)
+                UiBus.contextMenuRequested(g.x, g.y, "node",
+                                           { uid: card.node ? card.node.uuid : "" })
+            }
+        }
+    }
+
     Rectangle {
         id: bg
         anchors.fill: parent

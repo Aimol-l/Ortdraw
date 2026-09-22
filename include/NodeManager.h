@@ -14,6 +14,7 @@
 #include "PaintBoard.h"
 #include "Settings.h"
 #include "Log.hpp"
+#include <limits>
 #include "utils/DAGraph.hpp"
 #include "command/AddNode.hpp"
 #include "command/AddEdge.hpp"
@@ -731,21 +732,49 @@ public:
             m_paint_board->setHoveredEdge(-1);
         }
     }
+    // 世界坐标 pos 处最上层的节点（z 最大；z 相同取遍历顺序靠后 = 子项堆叠靠上）。
+    // 供命中测试与 QML 控件做“最上层校验”，避免隔着上层节点操作被压住的下层节点。
+    BaseNode* topNodeAtWorld(const QPointF& pos){
+        if(!m_paint_board) return nullptr;
+        BaseNode* hit = nullptr;
+        qreal best = std::numeric_limits<qreal>::lowest();
+        for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
+            // pos 是图（世界）坐标：节点在 world 内含 Scale/Translate 变换，而 m_paint_board
+            // 是未变换的视口项，用它映射会在 zoom/pan 非恒等时整体偏移，故用节点的父层。
+            QQuickItem* space = node->parentItem() ? node->parentItem()
+                                                   : static_cast<QQuickItem*>(m_paint_board);
+            if(node->contains(node->mapFromItem(space, pos)) && node->z() >= best){
+                best = node->z();
+                hit = node;
+            }
+        }
+        return hit;
+    }
+    // 世界坐标处最上层节点的 uuid；没有返回空串
+    Q_INVOKABLE QString topNodeUuidAt(qreal x, qreal y){
+        BaseNode* n = topNodeAtWorld(QPointF(x, y));
+        return n ? n->uuid().toString() : QString();
+    }
+    // 把指定节点提到最上层（不居中、不改选中）
+    Q_INVOKABLE void bringToFront(const QString& uuid){
+        if(!m_paint_board) return;
+        for(BaseNode* n : m_paint_board->m_graph.getAllNodes())
+            if(n->uuid().toString() == uuid){ raiseNode(n); refresh(); return; }
+    }
+
     Q_INVOKABLE void mousePressEvent(const QPointF& pos, bool ctrl = false){
         if(!m_paint_board) return;
         ctrl = ctrl && Settings::settings()->ctrlMultiSelect();
-        bool node_hit = false;
-        BaseNode* hit_node = nullptr;
+        BaseNode* hit_node = topNodeAtWorld(pos);
+        const bool node_hit = (hit_node != nullptr);
         for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
-            QPointF local = node->mapFromItem(m_paint_board, pos);
-            if(node->contains(local)){
-                node_hit = true;
+            if(node == hit_node)
                 node->setSelected(ctrl ? !node->selected() : true);
-                hit_node = node->selected() ? node : nullptr;
-            }else if(!ctrl){
+            else if(!ctrl)
                 node->setSelected(false);
-            }
         }
+        if(hit_node && hit_node->selected() == false)
+            hit_node = nullptr;   // ctrl 反选后不再作为选中目标
         const LinkRenderMode mode = Edge::modeFrom(Settings::settings()->renderMode());
         for(Edge& edge : m_paint_board->m_graph.getAllEdges())
             edge.seleected = node_hit ? false : edge.isPointOnCurve(pos, mode);
