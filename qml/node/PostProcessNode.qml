@@ -22,6 +22,7 @@ PostProcessNode {
     // displayData 中的 Top-K 列表（分类任务）
     readonly property var topkList: root.displayData ? root.displayData.topk : null
     readonly property bool hasTopk: topkList !== undefined && topkList !== null && topkList.length > 0
+    readonly property int topkRowHeight: 12
 
     NodeCard {
         id: card
@@ -40,65 +41,89 @@ PostProcessNode {
             }
 
             // ---- 分类 Top-K 结果面板（非端口显示数据）----
-            Column {
+            Item {
                 visible: root.hasTopk
                 width: parent.width
-                spacing: 3
+                height: root.hasTopk ? (root.topkRowHeight + root.topkList.length * root.topkRowHeight) : 0
 
-                Text {
-                    text: "Top-K" + (root.displayData && root.displayData.top1 !== undefined
-                                     ? "   类别 id: " + root.displayData.top1 : "")
-                    color: Theme.fgBright
-                    font.pixelSize: 11
-                    renderType: root.textRenderType
+                Item {
+                    width: parent.width
+                    height: root.topkRowHeight
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "类别"
+                        color: Theme.fgDim
+                        font.pixelSize: 9
+                        renderType: root.textRenderType
+                    }
+                    Text {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "置信度"
+                        color: Theme.fgDim
+                        font.pixelSize: 9
+                        renderType: root.textRenderType
+                    }
                 }
 
-                Repeater {
-                    model: root.topkList
-                    delegate: Row {
-                        id: barRow
-                        required property var modelData
-                        width: parent.width
-                        spacing: 6
+                Column {
+                    anchors.top: parent.top
+                    anchors.topMargin: root.topkRowHeight
+                    width: parent.width
+                    spacing: 0
 
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 54
-                            text: "类别 " + barRow.modelData.id
-                            color: Theme.fg
-                            font.pixelSize: 10
-                            elide: Text.ElideRight
-                            renderType: root.textRenderType
-                        }
+                    Repeater {
+                        model: root.topkList
+                        delegate: Row {
+                            id: barRow
+                            required property var modelData
+                            width: parent.width
+                            height: root.topkRowHeight
+                            spacing: 6
 
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Math.max(0, barRow.width - 54 - scoreText.width
-                                            - barRow.spacing * 2)
-                            height: 10
-                            radius: 3
-                            color: Theme.bg
-                            border.width: 1
-                            border.color: Theme.borderSoft
-                            clip: true
-
-                            Rectangle {
-                                width: parent.width * Math.max(0, Math.min(1, barRow.modelData.score))
-                                height: parent.height
-                                radius: 3
-                                color: Theme.blue
+                            Text {
+                                height: barRow.height
+                                width: 46
+                                verticalAlignment: Text.AlignVCenter
+                                text: "类 " + barRow.modelData.id
+                                color: Theme.fg
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                renderType: root.textRenderType
                             }
-                        }
+                            Item {
+                                width: Math.max(0, barRow.width - 46 - 34 - barRow.spacing * 2)
+                                height: barRow.height
 
-                        Text {
-                            id: scoreText
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 40
-                            horizontalAlignment: Text.AlignRight
-                            text: "" + (Math.round(barRow.modelData.score * 1000) / 1000)
-                            color: Theme.fgDim
-                            font.pixelSize: 10
-                            renderType: root.textRenderType
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width
+                                    height: 6
+                                    radius: 3
+                                    color: Theme.bg
+                                    clip: true
+
+                                    Rectangle {
+                                        width: parent.width * Math.max(0, Math.min(1,
+                                                   barRow.modelData.score))
+                                        height: parent.height
+                                        radius: 3
+                                        color: Theme.blue
+                                    }
+                                }
+                            }
+                            Text {
+                                height: barRow.height
+                                width: 34
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignRight
+                                text: "" + (Math.round(barRow.modelData.score * 1000) / 1000)
+                                color: Theme.fgDim
+                                font.pixelSize: 10
+                                renderType: root.textRenderType
+                            }
                         }
                     }
                 }

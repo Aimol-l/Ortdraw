@@ -4,8 +4,9 @@ import Theme
 import Settings
 import NodeManager
 
-// 任务节点通用控件：任务下拉 + 按 paramDescs() 自动生成参数行。
-// 用于 PreProcessNode / PostProcessNode。
+// 任务节点通用控件（紧凑版）：
+//   任务行 = 任务下拉（贴文本宽，clamp 80–132）+ 首个 bool 参数（无 bool 时为首个参数）
+//   其余参数 = 两列网格（列距 10、行距 4）；固有宽度超单列的参数独占一行
 Column {
     id: root
 
@@ -13,12 +14,50 @@ Column {
     // 参数/任务变化时递增，用于强制重新求值（函数调用绑定不会自动刷新）
     property int revision: 0
 
-    spacing: 6
+    readonly property int gap: 10
+    readonly property int ctlHeight: 20
+
+    spacing: 4
     width: parent ? parent.width : implicitWidth
 
     readonly property int textRenderType:
         Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
 
+    TextMetrics {
+        id: taskMetrics
+        font.pixelSize: 11
+        text: (root.revision, root.taskLabel())
+    }
+
+    // 粗略文本宽：中文字宽≈字号，ASCII≈0.56 倍（用于跨列判断，无需精确）
+    function textWidth(s, px) {
+        if (!s) return 0
+        var w = 0
+        for (var i = 0; i < s.length; ++i)
+            w += s.charCodeAt(i) > 255 ? px : px * 0.56
+        return w
+    }
+    // 参数的固有宽度；-1 表示“标量，恒为单列”
+    function naturalWidth(d) {
+        if (!d) return -1
+        var lw = textWidth(d.label, 10) + 10
+        if (d.kind === "floats") {
+            var n = d.vecCount ? d.vecCount : 1
+            return lw + n * 40 + (n - 1) * 4
+        }
+        if (d.kind === "size2") return lw + 44 + 14 + 44
+        if (d.kind === "select") {
+            // 用最长选项（而非当前值）估算，保证切换选项时布局稳定
+            var maxOpt = 0
+            var opts = d.options ? d.options : []
+            for (var i = 0; i < opts.length; ++i) {
+                var w = textWidth(opts[i].label, 11)
+                if (w > maxOpt) maxOpt = w
+            }
+            return lw + maxOpt + 26
+        }
+        return -1
+    }
     function taskLabel() {
         if (!node) return ""
         var opts = node.taskOptions()
@@ -27,21 +66,54 @@ Column {
         return node.task
     }
 
-    function paramValue(key) {
-        if (!node) return ""
-        var m = node.taskParams()
-        return m[key] === undefined ? "" : m[key]
-    }
+    // 计算：任务行参数 + 网格行（每行 cells: [{desc, w}]）
+    readonly property var layout: {
+        if (!node) return { task: null, rows: [] }
+        root.revision
+        var W = root.width
+        var cellW = Math.max(0, (W - root.gap) / 2)
 
-    function boolValue(key) {
-        return String(root.paramValue(key)) === "true"
-    }
+        var all = node.paramDescs()
+        var cur = node.taskParams()
+        var descs = []
+        for (var i = 0; i < all.length; ++i) {
+            var d = all[i]
+            if (d.showIfKey !== undefined && d.showIfKey !== "" &&
+                ("" + cur[d.showIfKey]) !== ("" + d.showIfValue)) continue
+            descs.push(d)
+        }
 
-    function optionLabel(options, val) {
-        if (!options) return "" + val
-        for (var i = 0; i < options.length; ++i)
-            if ("" + options[i].value === "" + val) return options[i].label
-        return "" + val
+        // 任务行：优先第一个 bool；否则第一个参数
+        var taskParam = null
+        var rest = []
+        var boolIdx = -1
+        for (var b = 0; b < descs.length; ++b)
+            if (descs[b].kind === "bool") { boolIdx = b; break }
+        if (boolIdx >= 0) {
+            taskParam = descs[boolIdx]
+            for (var j = 0; j < descs.length; ++j) if (j !== boolIdx) rest.push(descs[j])
+        } else if (descs.length > 0) {
+            taskParam = descs[0]
+            for (var k = 1; k < descs.length; ++k) rest.push(descs[k])
+        }
+
+        // 网格：相邻两个非跨列参数成一行；跨列参数独占一行（不重排顺序）
+        var rows = []
+        var r = 0
+        while (r < rest.length) {
+            if (naturalWidth(rest[r]) > cellW) {
+                rows.push({ cells: [{ desc: rest[r], w: W }] })
+                ++r
+            } else if (r + 1 < rest.length && naturalWidth(rest[r + 1]) <= cellW) {
+                rows.push({ cells: [{ desc: rest[r], w: cellW },
+                                    { desc: rest[r + 1], w: cellW }] })
+                r += 2
+            } else {
+                rows.push({ cells: [{ desc: rest[r], w: cellW }] })
+                ++r
+            }
+        }
+        return { task: taskParam, rows: rows }
     }
 
     Connections {
@@ -51,161 +123,122 @@ Column {
         function onTaskPortsChanged() { root.revision++ }
     }
 
-    // ---- 任务下拉 ----
-    Rectangle {
-        id: taskBox
-        width: parent.width
-        height: 24
-        radius: 5
-        color: taskHover.hovered || taskMenu.visible ? Theme.bgHover : Theme.bg
-        border.width: 1
-        border.color: Theme.border
+    // ---- 任务行 ----
+    Row {
+        id: taskRow
+        width: root.width
+        height: root.ctlHeight
+        spacing: root.gap
 
-        Text {
-            anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 20
-            verticalAlignment: Text.AlignVCenter
-            text: root.node ? (root.revision, root.taskLabel()) : ""
-            color: Theme.fg
-            font.pixelSize: 11
-            elide: Text.ElideRight
-            renderType: root.textRenderType
-        }
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: "▾"
-            color: Theme.fgDim
-            font.pixelSize: 11
-            renderType: root.textRenderType
-        }
+        Rectangle {
+            id: taskBox
+            width: Math.max(80, Math.min(132, taskMetrics.advanceWidth + 30))
+            height: root.ctlHeight
+            radius: 5
+            color: taskHover.hovered || taskMenu.visible ? Theme.bgHover : Theme.bg
+            border.width: 1
+            border.color: Theme.border
 
-        HoverHandler { id: taskHover }
-        TapHandler { onTapped: taskMenu.visible ? taskMenu.close() : taskMenu.open() }
-
-        Menu {
-            id: taskMenu
-            // 渲染到窗口 overlay 层，避免被节点内后续子项遮挡
-            parent: Overlay.overlay
-            onAboutToShow: {
-                var p = taskBox.mapToItem(null, 0, taskBox.height + 6)
-                x = p.x
-                y = p.y
+            Text {
+                anchors.fill: parent
+                anchors.leftMargin: 7
+                anchors.rightMargin: 18
+                verticalAlignment: Text.AlignVCenter
+                text: root.node ? (root.revision, root.taskLabel()) : ""
+                color: Theme.fg
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                renderType: root.textRenderType
             }
-            background: Rectangle {
-                implicitWidth: 200
-                color: Theme.bgElev
-                border.width: 1
-                border.color: Theme.border
-                radius: 8
+            Text {
+                anchors.right: parent.right
+                anchors.rightMargin: 6
+                anchors.verticalCenter: parent.verticalCenter
+                text: "▾"
+                color: Theme.fgDim
+                font.pixelSize: 10
+                renderType: root.textRenderType
             }
-            Instantiator {
-                model: root.node ? root.node.taskOptions() : []
-                delegate: MenuItem {
-                    id: taskItem
-                    required property var modelData
-                    implicitHeight: 28
-                    text: modelData.name
-                    onTriggered: {
-                        if (root.node) {
-                            root.node.task = modelData.id
-                            NodeManager.commitNodeParams(root.node.uuid)
+
+            HoverHandler { id: taskHover }
+            TapHandler { onTapped: taskMenu.visible ? taskMenu.close() : taskMenu.open() }
+
+            Menu {
+                id: taskMenu
+                // 渲染到窗口 overlay 层，避免被节点内后续子项遮挡
+                parent: Overlay.overlay
+                onAboutToShow: {
+                    var p = taskBox.mapToItem(null, 0, taskBox.height + 6)
+                    x = p.x
+                    y = p.y
+                }
+                background: Rectangle {
+                    implicitWidth: 200
+                    color: Theme.bgElev
+                    border.width: 1
+                    border.color: Theme.border
+                    radius: 8
+                }
+                Instantiator {
+                    model: root.node ? root.node.taskOptions() : []
+                    delegate: MenuItem {
+                        id: taskItem
+                        required property var modelData
+                        implicitHeight: 28
+                        text: modelData.name
+                        onTriggered: {
+                            if (root.node) {
+                                root.node.task = modelData.id
+                                NodeManager.commitNodeParams(root.node.uuid)
+                            }
+                        }
+                        contentItem: Text {
+                            text: taskItem.text
+                            color: taskItem.hovered ? Theme.fgBright : Theme.fg
+                            font.pixelSize: 11
+                            leftPadding: 12
+                            rightPadding: 12
+                            verticalAlignment: Text.AlignVCenter
+                            renderType: root.textRenderType
+                        }
+                        background: Rectangle {
+                            radius: 6
+                            color: taskItem.hovered ? Theme.bgHover : "transparent"
                         }
                     }
-                    contentItem: Text {
-                        text: taskItem.text
-                        color: taskItem.hovered ? Theme.fgBright : Theme.fg
-                        font.pixelSize: 11
-                        leftPadding: 12
-                        rightPadding: 12
-                        verticalAlignment: Text.AlignVCenter
-                        renderType: root.textRenderType
-                    }
-                    background: Rectangle {
-                        radius: 6
-                        color: taskItem.hovered ? Theme.bgHover : "transparent"
-                    }
+                    onObjectAdded: (index, object) => taskMenu.insertItem(index, object)
+                    onObjectRemoved: (index, object) => taskMenu.removeItem(object)
                 }
-                onObjectAdded: (index, object) => taskMenu.insertItem(index, object)
-                onObjectRemoved: (index, object) => taskMenu.removeItem(object)
             }
+        }
+
+        ParamField {
+            visible: root.layout.task !== null
+            node: root.node
+            desc: root.layout.task
+            revision: root.revision
+            width: Math.max(0, taskRow.width - taskBox.width - root.gap)
         }
     }
 
-    // ---- 参数行：group>0 的参数排在同一行；特殊控件用自然宽度，其余等分 ----
-    function naturalWidth(it) {
-        if (it.kind === "size2") return 54 + 6 + 54              // [W]×[H]（无标签）
-        if (it.kind === "floats") {
-            var n = it.vecCount ? it.vecCount : 1
-            return 46 + n * 52 + (n - 1) * 4
-        }
-        return -1
-    }
-    function labelW(it, count) {
-        if (it.kind === "size2") return 0
-        if (it.kind === "floats") return 46
-        return count >= 3 ? 22 : count === 2 ? 24 : 46
-    }
-    readonly property var paramRows: {
-        if (!node) return []
-        root.revision
-        var descs = node.paramDescs()
-        var cur = node.taskParams()
-        var groups = []
-        for (var i = 0; i < descs.length; ++i) {
-            var d = descs[i]
-            if (d.showIfKey !== undefined && d.showIfKey !== "") {
-                if (("" + cur[d.showIfKey]) !== ("" + d.showIfValue)) continue
-            }
-            var g = d.group === undefined ? 0 : d.group
-            if (g > 0 && groups.length > 0 && groups[groups.length - 1].group === g)
-                groups[groups.length - 1].items.push(d)
-            else
-                groups.push({ group: g, items: [d] })
-        }
-        // 计算每列的 labelWidth/controlWidth
-        var rows = []
-        for (var r = 0; r < groups.length; ++r) {
-            var items = groups[r].items
-            var specialSum = 0, flexCount = 0
-            for (var j = 0; j < items.length; ++j) {
-                if (naturalWidth(items[j]) >= 0) specialSum += naturalWidth(items[j])
-                else ++flexCount
-            }
-            var gaps = Math.max(0, items.length - 1) * 8
-            var flexArea = Math.max(0, root.width - specialSum - gaps)
-            var perItem = flexCount > 0 ? flexArea / flexCount : 0
-            var cols = []
-            for (var k = 0; k < items.length; ++k) {
-                var it = items[k]
-                var lw = labelW(it, items.length)
-                cols.push({ desc: it, labelWidth: lw,
-                            controlWidth: naturalWidth(it) >= 0 ? 0
-                                          : Math.min(110, Math.max(36, perItem - lw - 6)) })
-            }
-            rows.push({ group: groups[r].group, cols: cols })
-        }
-        return rows
-    }
-
+    // ---- 两列参数网格 ----
     Repeater {
-        model: root.paramRows
+        model: root.layout.rows
         delegate: Row {
-            id: groupRow
+            id: gridRow
             required property var modelData
             width: root.width
-            spacing: 8
+            height: root.ctlHeight
+            spacing: root.gap
 
             Repeater {
-                model: groupRow.modelData.cols
+                model: gridRow.modelData.cells
                 delegate: ParamField {
+                    required property var modelData
                     node: root.node
-                    desc: groupRow.modelData.cols[index].desc
+                    desc: modelData.desc
                     revision: root.revision
-                    labelWidth: groupRow.modelData.cols[index].labelWidth
-                    controlWidth: groupRow.modelData.cols[index].controlWidth
+                    width: modelData.w
                 }
             }
         }
