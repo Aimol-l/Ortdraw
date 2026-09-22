@@ -136,7 +136,9 @@ Controls.ApplicationWindow {
             obj.x = d.x
             obj.y = d.y
             if (d.w) obj.width = d.w
-            if (d.h) obj.height = d.h
+            // 高度只在关闭“自适应内容”时恢复：否则赋值会打断节点 height 的绑定，
+            // 之后新增/隐藏参数行时节点不再长高，内容会溢出卡片（看起来像错位）
+            if (d.h && !Settings.autoHeight) obj.height = d.h
             if (d.name) obj.name = d.name
             if (d.params) obj.setParams(d.params)
             NodeManager.createNode(obj)
