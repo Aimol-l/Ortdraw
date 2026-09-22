@@ -24,6 +24,7 @@ Rectangle {
     }
 
     function requestRepaint() {
+        if (!Settings.showMinimap) return
         if (Settings.minimapFps > 0)
             throttle.restart()
         else
@@ -32,9 +33,16 @@ Rectangle {
 
     Timer {
         id: throttle
-        interval: Settings.minimapFps > 0 ? 1000 / Settings.minimapFps : 0
+        interval: (Settings.showMinimap && Settings.minimapFps > 0)
+                      ? 1000 / Settings.minimapFps : 0
         repeat: false
         onTriggered: cv.requestPaint()
+    }
+
+    // 重新显示时补一次绘制（隐藏期间不重绘）
+    Connections {
+        target: Settings
+        function onShowMinimapChanged() { if (Settings.showMinimap) cv.requestPaint() }
     }
 
     Canvas {

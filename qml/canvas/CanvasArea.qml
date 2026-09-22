@@ -182,6 +182,7 @@ Item {
     }
 
     Minimap {
+        visible: Settings.showMinimap
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 14

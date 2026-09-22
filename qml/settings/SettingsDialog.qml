@@ -67,6 +67,7 @@ Item {
             confirmDelete: Settings.confirmDelete,
             connectMode: Settings.connectMode,
             autoDisconnect: Settings.autoDisconnect,
+            showMinimap: Settings.showMinimap,
             minimapFps: Settings.minimapFps,
             antialias: Settings.antialias,
             asyncImage: Settings.asyncImage
@@ -107,6 +108,7 @@ Item {
         Settings.confirmDelete = s.confirmDelete
         Settings.connectMode = s.connectMode
         Settings.autoDisconnect = s.autoDisconnect
+        Settings.showMinimap = s.showMinimap
         Settings.minimapFps = s.minimapFps
         Settings.antialias = s.antialias
         Settings.asyncImage = s.asyncImage
@@ -768,9 +770,20 @@ Item {
                                 GroupTitle { text: "渲染" }
 
                                 SettingRow {
+                                    title: "显示 Minimap"
+                                    desc: "画布右下角显示缩略图与当前视口框"
+                                    keywords: "minimap 小地图 缩略图 导航 显示"
+                                    SwitchControl {
+                                        checked: Settings.showMinimap
+                                        onToggled: (v) => Settings.showMinimap = v
+                                    }
+                                }
+
+                                SettingRow {
                                     title: "Minimap 刷新频率上限"
-                                    desc: "拖动时限制重绘频率"
+                                    desc: "拖动时限制重绘频率（关闭 Minimap 时无效）"
                                     keywords: "minimap 刷新 fps 频率"
+                                    enabled: Settings.showMinimap
                                     SelectControl {
                                         options: [
                                             { value: 30, label: "30 FPS" },

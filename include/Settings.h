@@ -45,6 +45,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool antialias READ antialias WRITE setAntialias NOTIFY antialiasChanged)
     Q_PROPERTY(bool asyncImage READ asyncImage WRITE setAsyncImage NOTIFY asyncImageChanged)
     Q_PROPERTY(bool propsOpen READ propsOpen WRITE setPropsOpen NOTIFY propsOpenChanged)
+    Q_PROPERTY(bool showMinimap READ showMinimap WRITE setShowMinimap NOTIFY showMinimapChanged)
 public:
     explicit Settings(QObject* parent = nullptr)
         : QObject(parent) {
@@ -112,6 +113,7 @@ public:
     bool antialias() const { return m_antialias; }
     bool asyncImage() const { return m_asyncImage; }
     bool propsOpen() const { return m_propsOpen; }
+    bool showMinimap() const { return m_showMinimap; }
 
     void setTheme(const QString& v) {
         const QString n = oneOf(v, {"light", "dark"}, "light");
@@ -267,6 +269,11 @@ public:
         if (m_asyncImage == v) return;
         m_asyncImage = v; m_store->setValue("perf/asyncImage", v); emit asyncImageChanged();
     }
+    // 画布右下角的 Minimap 缩略图是否显示
+    void setShowMinimap(bool v) {
+        if (m_showMinimap == v) return;
+        m_showMinimap = v; m_store->setValue("canvas/showMinimap", v); emit showMinimapChanged();
+    }
     // 右侧属性面板是否展开（默认收起，记忆上次状态）
     void setPropsOpen(bool v) {
         if (m_propsOpen == v) return;
@@ -310,6 +317,7 @@ public:
         m_antialias = true; m_store->setValue("perf/antialias", m_antialias);
         m_asyncImage = true; m_store->setValue("perf/asyncImage", m_asyncImage);
         m_propsOpen = false; m_store->setValue("ui/propsOpen", m_propsOpen);
+        m_showMinimap = true; m_store->setValue("canvas/showMinimap", m_showMinimap);
 
         emit themeChanged();
         emit accentColorChanged();
@@ -343,6 +351,7 @@ public:
         emit antialiasChanged();
         emit asyncImageChanged();
         emit propsOpenChanged();
+        emit showMinimapChanged();
     }
 
     Q_INVOKABLE void sync() { m_store->sync(); }
@@ -390,6 +399,7 @@ signals:
     void antialiasChanged();
     void asyncImageChanged();
     void propsOpenChanged();
+    void showMinimapChanged();
 
 private:
     static QString oneOf(const QString& v, const QStringList& allowed, const QString& def) {
@@ -440,6 +450,7 @@ private:
         m_antialias = m_store->value("perf/antialias", true).toBool();
         m_asyncImage = m_store->value("perf/asyncImage", true).toBool();
         m_propsOpen = m_store->value("ui/propsOpen", false).toBool();
+        m_showMinimap = m_store->value("canvas/showMinimap", true).toBool();
     }
 
     std::unique_ptr<QSettings> m_store;
@@ -478,4 +489,5 @@ private:
     bool m_antialias = true;
     bool m_asyncImage = true;
     bool m_propsOpen = false;
+    bool m_showMinimap = true;
 };
