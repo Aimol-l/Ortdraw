@@ -100,7 +100,7 @@ public:
         emit paramsChanged();
     }
 
-    Q_INVOKABLE void setDisplayData(const QVariantMap&) {}
+    void setDisplayData(const QVariantMap&) override {}
 
 signals:
     void taskPortsChanged(const QString& task);

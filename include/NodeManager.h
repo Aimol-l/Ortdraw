@@ -74,8 +74,8 @@ private:
         });
         QObject::connect(&m_executor, &GraphExecutor::nodeDisplay, this,
                          [this](const QString& uuid, const QVariantMap& d) {
-            // m_paint_board 可能为空（尚未挂载画布）或节点未实现 setDisplayData，
-            // 此时 invokeMethod 返回 false，安全忽略即可。
+            // m_paint_board 可能为空（尚未挂载画布）；setDisplayData 在 BaseNode 有
+            // 默认空实现，所有节点都可调用。
             if (!m_paint_board) return;
             for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
                 if (n->uuid().toString() == uuid) {

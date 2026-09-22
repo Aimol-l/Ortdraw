@@ -95,7 +95,7 @@ public:
     // 显示通道：NodeManager 运行时经此注入；QML 绑定 displayData 渲染
     QVariantMap displayData() const { return m_display; }
 
-    Q_INVOKABLE void setDisplayData(const QVariantMap& d) {
+    void setDisplayData(const QVariantMap& d) override {
         if (m_display == d) return;
         m_display = d;
         emit displayChanged();

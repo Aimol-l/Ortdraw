@@ -53,6 +53,10 @@ public:
     // 节点参数序列化接口：子类按需覆写，用于图文件的保存/读取
     Q_INVOKABLE virtual QVariantMap params() const { return {}; }
     Q_INVOKABLE virtual void setParams(const QVariantMap&) {}
+    // 非端口“显示数据”通道（分类 Top-K 等）。默认忽略，需要展示的节点覆写即可；
+    // 放在基类是为了让 run()/nodeDisplay 对所有节点 invokeMethod 都成立（否则会打印
+    // “No such method ... setDisplayData”）。
+    Q_INVOKABLE virtual void setDisplayData(const QVariantMap&) {}
     Q_INVOKABLE void setInputPortPosition(int index, qreal x, qreal y){
         if(index >= 0 && index < m_input_ports.size())
             m_input_ports[index]->setPosition(QPointF(x, y));

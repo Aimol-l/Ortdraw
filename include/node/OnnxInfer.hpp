@@ -80,7 +80,7 @@ public:
         emit paramsChanged();
     }
 
-    Q_INVOKABLE void setDisplayData(const QVariantMap&) {}
+    void setDisplayData(const QVariantMap&) override {}
 
 signals:
     void modelPortsChanged(const QString& path);   // 通知 NodeManager 断边后重建端口
