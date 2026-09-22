@@ -21,7 +21,8 @@ Controls.ApplicationWindow {
     title: (dirty ? "• " : "") + docName() + " — Ortdraw"
 
     property bool leftCollapsed: false
-    property bool rightCollapsed: false
+    // 右侧属性面板：默认收起，并记忆用户上次的展开/收起（Settings.propsOpen）
+    property bool rightCollapsed: !Settings.propsOpen
     property string currentPath: ""
     property string savedSnapshot: ""
     property bool dirty: false
@@ -151,9 +152,15 @@ Controls.ApplicationWindow {
         dirty = false
     }
 
+    // 窄窗口强制收起（不改用户偏好）；宽窗口按用户偏好恢复
+    function applyResponsiveCollapse() {
+        if (width < 1180) rightCollapsed = true
+        else rightCollapsed = !Settings.propsOpen
+    }
+
     Component.onCompleted: {
         leftCollapsed = width < 960
-        rightCollapsed = width < 1180
+        applyResponsiveCollapse()
         savedSnapshot = NodeManager.graphJsonString()
         if (Qt.application.arguments.indexOf("--demo") >= 0)
             Qt.callLater(demoPopulate)
@@ -161,7 +168,7 @@ Controls.ApplicationWindow {
 
     onWidthChanged: {
         leftCollapsed = width < 960
-        rightCollapsed = width < 1180
+        applyResponsiveCollapse()
     }
 
     Item {
@@ -224,7 +231,10 @@ Controls.ApplicationWindow {
                     height: middleRow.height
                     visible: win.rightPanelWidth > 0
                     z: 1
-                    onCollapseRequested: win.rightCollapsed = true
+                    onCollapseRequested: {
+                        win.rightCollapsed = true
+                        Settings.propsOpen = false
+                    }
                 }
             }
 
@@ -286,7 +296,10 @@ Controls.ApplicationWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: win.rightCollapsed = false
+                    onClicked: {
+                        win.rightCollapsed = false
+                        Settings.propsOpen = true
+                    }
                 }
             }
         }
