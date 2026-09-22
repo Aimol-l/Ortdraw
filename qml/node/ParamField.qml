@@ -40,6 +40,19 @@ Item {
         NodeManager.commitNodeParams(node.uuid)
     }
 
+    // 最上层校验：把 item 上的点映射到“nodes/world”层，问该点最上层是不是本节点。
+    // 不是（本节点被别的节点压住）就不执行本次动作，改为选中并置顶最上层节点，
+    // 避免“隔着上层节点操作到下层控件”。
+    function claimClick(item, p) {
+        if (!node || !node.parent || !item) return true
+        var w = item.mapToItem(node.parent, p.x, p.y)
+        var top = NodeManager.topNodeUuidAt(w.x, w.y)
+        if (top === "" || top === ("" + node.uuid)) return true
+        NodeManager.bringToFront(top)
+        NodeManager.mousePressEvent(Qt.point(w.x, w.y), false)
+        return false
+    }
+
     // ---- bool：标签 + 开关（无外框，开关靠右）----
     Row {
         id: boolRow
@@ -63,6 +76,7 @@ Item {
             width: 30
             height: boolRow.height
             Rectangle {
+                id: boolSwitch
                 anchors.verticalCenter: parent.verticalCenter
                 width: 30
                 height: 17
@@ -80,7 +94,12 @@ Item {
                     color: field.boolValue() ? "#ffffff" : Theme.fgDim
                     Behavior on x { NumberAnimation { duration: 130 } }
                 }
-                TapHandler { onTapped: field.commit(!field.boolValue()) }
+                TapHandler {
+                    onTapped: (p) => {
+                        if (field.claimClick(boolSwitch, p.position))
+                            field.commit(!field.boolValue())
+                    }
+                }
             }
         }
     }
@@ -135,7 +154,12 @@ Item {
         }
 
         HoverHandler { id: selectHover }
-        TapHandler { onTapped: selectMenu.visible ? selectMenu.close() : selectMenu.open() }
+        TapHandler {
+            onTapped: (p) => {
+                if (!field.claimClick(selectBox, p.position)) return
+                selectMenu.visible ? selectMenu.close() : selectMenu.open()
+            }
+        }
 
         Menu {
             id: selectMenu
@@ -232,6 +256,11 @@ Item {
                     selectByMouse: true
                     renderType: field.textRenderType
                     text: cellBox.cellText
+                    onActiveFocusChanged: {
+                        if (activeFocus && !field.claimClick(cellIn,
+                                           Qt.point(cellIn.width / 2, cellIn.height / 2)))
+                            cellIn.focus = false
+                    }
                     onEditingFinished: floatsRow.joinCells()
                 }
 
@@ -288,6 +317,11 @@ Item {
                 selectByMouse: true
                 renderType: field.textRenderType
                 text: size2Row.parts.length > 0 ? ("" + size2Row.parts[0]).trim() : ""
+                onActiveFocusChanged: {
+                    if (activeFocus && !field.claimClick(wCell,
+                                       Qt.point(wCell.width / 2, wCell.height / 2)))
+                        wCell.focus = false
+                }
                 onEditingFinished: size2Row.commit2()
             }
         }
@@ -316,6 +350,11 @@ Item {
                 selectByMouse: true
                 renderType: field.textRenderType
                 text: size2Row.parts.length > 1 ? ("" + size2Row.parts[1]).trim() : ""
+                onActiveFocusChanged: {
+                    if (activeFocus && !field.claimClick(hCell,
+                                       Qt.point(hCell.width / 2, hCell.height / 2)))
+                        hCell.focus = false
+                }
                 onEditingFinished: size2Row.commit2()
             }
         }
@@ -358,6 +397,11 @@ Item {
             selectByMouse: true
             renderType: field.textRenderType
             text: (field.revision, "" + field.val(field.key))
+            onActiveFocusChanged: {
+                if (activeFocus && !field.claimClick(scalarIn,
+                                   Qt.point(scalarIn.width / 2, scalarIn.height / 2)))
+                    scalarIn.focus = false
+            }
             onEditingFinished: field.commit(text)
         }
 

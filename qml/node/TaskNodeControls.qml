@@ -67,6 +67,16 @@ Column {
         }
         return -1
     }
+    // 最上层校验（同 ParamField.claimClick）：被压住时不响应，改为选中并置顶最上层节点
+    function claimClick(item, p) {
+        if (!node || !node.parent || !item) return true
+        var w = item.mapToItem(node.parent, p.x, p.y)
+        var top = NodeManager.topNodeUuidAt(w.x, w.y)
+        if (top === "" || top === ("" + node.uuid)) return true
+        NodeManager.bringToFront(top)
+        NodeManager.mousePressEvent(Qt.point(w.x, w.y), false)
+        return false
+    }
     function taskLabel() {
         if (!node) return ""
         var opts = node.taskOptions()
@@ -172,7 +182,12 @@ Column {
             }
 
             HoverHandler { id: taskHover }
-            TapHandler { onTapped: taskMenu.visible ? taskMenu.close() : taskMenu.open() }
+            TapHandler {
+                onTapped: (p) => {
+                    if (!root.claimClick(taskBox, p.position)) return
+                    taskMenu.visible ? taskMenu.close() : taskMenu.open()
+                }
+            }
 
             Menu {
                 id: taskMenu
