@@ -4,28 +4,30 @@ import Theme
 import Settings
 import NodeManager
 
-// 单个任务参数控件：按 ParamDesc.kind 生成（bool/select/floats/其它文本）
-Row {
+// 单个任务参数控件（紧凑版）：标签内联到控件内部左侧（灰字，10px），
+// 高度统一 20；宽度由父级（任务行/网格列）给定。
+Item {
     id: field
 
     property var node
     property var desc
     property int revision: 0
-    property int labelWidth: 46
-    property int controlWidth: 90
 
-    spacing: 6
+    implicitHeight: 20
+    height: implicitHeight
 
     readonly property string kind: desc ? desc.kind : ""
+    readonly property string key: (desc && desc.key !== undefined) ? desc.key : ""
+    readonly property string labelText: desc ? desc.label : ""
     readonly property int textRenderType:
         Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
 
-    function val(key) {
-        if (!node) return ""
+    function val(k) {
+        if (!node || k === "") return ""
         var m = node.taskParams()
-        return m[key] === undefined ? "" : m[key]
+        return m[k] === undefined ? "" : m[k]
     }
-    function boolValue() { return String(val(desc.key)) === "true" }
+    function boolValue() { return (field.revision, String(field.val(field.key)) === "true") }
     function optionLabel(options, v) {
         if (!options) return "" + v
         for (var i = 0; i < options.length; ++i)
@@ -33,79 +35,102 @@ Row {
         return "" + v
     }
     function commit(v) {
-        if (!node) return
-        node.setTaskParam(desc.key, v)
+        if (!node || field.key === "") return
+        node.setTaskParam(field.key, v)
         NodeManager.commitNodeParams(node.uuid)
     }
 
-    Text {
-        anchors.verticalCenter: parent.verticalCenter
-        visible: field.labelWidth > 0
-        width: field.labelWidth
-        text: field.desc ? field.desc.label : ""
-        color: Theme.fgDim
-        font.pixelSize: 11
-        elide: Text.ElideRight
-        renderType: field.textRenderType
-    }
-
-    // ---- bool ----
-    Rectangle {
-        id: boolBox
+    // ---- bool：标签 + 开关（无外框，开关靠右）----
+    Row {
+        id: boolRow
         visible: field.kind === "bool"
-        anchors.verticalCenter: parent.verticalCenter
-        width: 40
-        height: 22
-        radius: 11
-        color: field.boolValue() ? Theme.blue : Theme.bg
-        border.width: 1
-        border.color: field.boolValue() ? Theme.blue : Theme.border
-        Behavior on color { ColorAnimation { duration: 130 } }
+        width: field.width
+        height: field.height
+        spacing: 6
 
-        Rectangle {
-            width: 16
-            height: 16
-            radius: 8
-            y: 2
-            x: field.boolValue() ? 21 : 2
-            color: field.boolValue() ? "#ffffff" : Theme.fgDim
-            Behavior on x { NumberAnimation { duration: 130 } }
+        Text {
+            width: Math.max(0, boolRow.width - boolToggleItem.width - boolRow.spacing)
+            height: boolRow.height
+            verticalAlignment: Text.AlignVCenter
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
+            elide: Text.ElideRight
+            renderType: field.textRenderType
         }
-
-        TapHandler { onTapped: field.commit(!field.boolValue()) }
+        Item {
+            id: boolToggleItem
+            width: 30
+            height: boolRow.height
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 30
+                height: 17
+                radius: 8.5
+                color: field.boolValue() ? Theme.blue : Theme.bg
+                border.width: 1
+                border.color: field.boolValue() ? Theme.blue : Theme.border
+                Behavior on color { ColorAnimation { duration: 130 } }
+                Rectangle {
+                    width: 13
+                    height: 13
+                    radius: 6.5
+                    y: 2
+                    x: field.boolValue() ? 15 : 2
+                    color: field.boolValue() ? "#ffffff" : Theme.fgDim
+                    Behavior on x { NumberAnimation { duration: 130 } }
+                }
+                TapHandler { onTapped: field.commit(!field.boolValue()) }
+            }
+        }
     }
 
-    // ---- select ----
+    // ---- select：标签 + 值 + ▾（一个内联框）----
     Rectangle {
         id: selectBox
         visible: field.kind === "select"
-        anchors.verticalCenter: parent.verticalCenter
-        width: field.controlWidth
-        height: 22
+        width: field.width
+        height: field.height
         radius: 5
         color: selectHover.hovered || selectMenu.visible ? Theme.bgHover : Theme.bg
         border.width: 1
         border.color: Theme.border
 
         Text {
-            anchors.fill: parent
-            anchors.leftMargin: 4
-            anchors.rightMargin: 12
-            verticalAlignment: Text.AlignVCenter
-            text: (field.revision, field.optionLabel(field.desc ? field.desc.options : null,
-                                                    field.val(field.desc ? field.desc.key : "")))
-            color: Theme.fg
-            font.pixelSize: 11
+            id: selectLabel
+            anchors.left: parent.left
+            anchors.leftMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, Math.max(0, selectBox.width * 0.45))
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
             elide: Text.ElideRight
             renderType: field.textRenderType
         }
         Text {
+            id: selectCaret
             anchors.right: parent.right
-            anchors.rightMargin: 7
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
             text: "▾"
             color: Theme.fgDim
             font.pixelSize: 10
+            renderType: field.textRenderType
+        }
+        Text {
+            anchors.left: selectLabel.right
+            anchors.leftMargin: 6
+            anchors.right: selectCaret.left
+            anchors.rightMargin: 4
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: Text.AlignRight
+            text: (field.revision,
+                   field.optionLabel(field.desc ? field.desc.options : null,
+                                     field.val(field.key)))
+            color: Theme.fg
+            font.pixelSize: 11
+            elide: Text.ElideRight
             renderType: field.textRenderType
         }
 
@@ -155,14 +180,15 @@ Row {
         }
     }
 
-    // ---- floats：按 vecCount 拆成多个输入框（逗号分隔存储） ----
+    // ---- floats：标签 + 每格 40px 输入框（逗号分隔存储）----
     Row {
         id: floatsRow
         visible: field.kind === "floats"
-        anchors.verticalCenter: parent.verticalCenter
+        width: field.width
+        height: field.height
         spacing: 4
 
-        readonly property var cells: ("" + field.val(field.desc ? field.desc.key : "")).split(",")
+        readonly property var cells: ("" + field.val(field.key)).split(",")
 
         function joinCells() {
             var parts = []
@@ -173,6 +199,14 @@ Row {
             field.commit(parts.join(","))
         }
 
+        Text {
+            height: floatsRow.height
+            verticalAlignment: Text.AlignVCenter
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
+            renderType: field.textRenderType
+        }
         Repeater {
             id: floatRepeater
             model: field.desc ? field.desc.vecCount : 0
@@ -180,10 +214,9 @@ Row {
                 id: cellBox
                 required property int index
                 property string cellText: floatsRow.cells[index] !== undefined
-                                          ? ("" + floatsRow.cells[index]).trim()
-                                          : ""
-                width: 52
-                height: 22
+                                          ? ("" + floatsRow.cells[index]).trim() : ""
+                width: 40
+                height: field.height
                 radius: 5
                 color: Theme.bg
                 border.width: 1
@@ -205,63 +238,82 @@ Row {
                 Connections {
                     target: field
                     function onRevisionChanged() {
-                        if (!cellIn.activeFocus) {
+                        if (!cellIn.activeFocus)
                             cellIn.text = floatsRow.cells[cellBox.index] !== undefined
                                           ? ("" + floatsRow.cells[cellBox.index]).trim() : ""
-                        }
                     }
                 }
             }
         }
     }
 
-    // ---- size2：宽x高（存储为 "WxH"） ----
+    // ---- size2：标签 + W × H（每格 44px，存储为 "WxH"）----
     Row {
         id: size2Row
         visible: field.kind === "size2"
-        anchors.verticalCenter: parent.verticalCenter
+        width: field.width
+        height: field.height
         spacing: 4
 
         // 引用 revision 以在参数变化（如下拉切换）时重新求值
         readonly property var parts: (field.revision,
-            ("" + field.val(field.desc ? field.desc.key : "")).split("x"))
+            ("" + field.val(field.key)).split("x"))
 
         function commit2() {
-            field.commit(parseInt(wIn.text, 10) + "x" + parseInt(hIn.text, 10))
+            field.commit(parseInt(wCell.text, 10) + "x" + parseInt(hCell.text, 10))
         }
 
+        Text {
+            height: size2Row.height
+            verticalAlignment: Text.AlignVCenter
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
+            renderType: field.textRenderType
+        }
         Rectangle {
-            width: 54; height: 22; radius: 5
+            width: 44
+            height: field.height
+            radius: 5
             color: Theme.bg
             border.width: 1
-            border.color: wIn.activeFocus ? Theme.blue : Theme.border
+            border.color: wCell.activeFocus ? Theme.blue : Theme.border
             TextInput {
-                id: wIn
+                id: wCell
                 anchors.fill: parent
                 horizontalAlignment: TextInput.AlignHCenter
                 verticalAlignment: TextInput.AlignVCenter
-                color: Theme.fg; font.pixelSize: 11; selectByMouse: true
+                color: Theme.fg
+                font.pixelSize: 11
+                selectByMouse: true
                 renderType: field.textRenderType
                 text: size2Row.parts.length > 0 ? ("" + size2Row.parts[0]).trim() : ""
                 onEditingFinished: size2Row.commit2()
             }
         }
         Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: "×"; color: Theme.fgDim; font.pixelSize: 11
+            height: size2Row.height
+            verticalAlignment: Text.AlignVCenter
+            text: "×"
+            color: Theme.fgDim
+            font.pixelSize: 10
             renderType: field.textRenderType
         }
         Rectangle {
-            width: 54; height: 22; radius: 5
+            width: 44
+            height: field.height
+            radius: 5
             color: Theme.bg
             border.width: 1
-            border.color: hIn.activeFocus ? Theme.blue : Theme.border
+            border.color: hCell.activeFocus ? Theme.blue : Theme.border
             TextInput {
-                id: hIn
+                id: hCell
                 anchors.fill: parent
                 horizontalAlignment: TextInput.AlignHCenter
                 verticalAlignment: TextInput.AlignVCenter
-                color: Theme.fg; font.pixelSize: 11; selectByMouse: true
+                color: Theme.fg
+                font.pixelSize: 11
+                selectByMouse: true
                 renderType: field.textRenderType
                 text: size2Row.parts.length > 1 ? ("" + size2Row.parts[1]).trim() : ""
                 onEditingFinished: size2Row.commit2()
@@ -269,37 +321,51 @@ Row {
         }
     }
 
-    // ---- int / float / text ----
+    // ---- int / float / text：内联标签 + 右对齐值 ----
     Rectangle {
-        id: textBox
+        id: scalarBox
         visible: field.kind !== "bool" && field.kind !== "select"
                  && field.kind !== "floats" && field.kind !== "size2"
-        anchors.verticalCenter: parent.verticalCenter
-        width: field.controlWidth
-        height: 22
+        width: field.width
+        height: field.height
         radius: 5
         color: Theme.bg
         border.width: 1
-        border.color: textIn.activeFocus ? Theme.blue : Theme.border
+        border.color: scalarIn.activeFocus ? Theme.blue : Theme.border
 
+        Text {
+            id: scalarLabel
+            anchors.left: parent.left
+            anchors.leftMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, Math.max(0, scalarBox.width - 22))
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
+            elide: Text.ElideRight
+            renderType: field.textRenderType
+        }
         TextInput {
-            id: textIn
-            anchors.fill: parent
-            horizontalAlignment: TextInput.AlignHCenter
-            verticalAlignment: TextInput.AlignVCenter
+            id: scalarIn
+            anchors.left: scalarLabel.right
+            anchors.leftMargin: 4
+            anchors.right: parent.right
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            horizontalAlignment: TextInput.AlignRight
             color: Theme.fg
             font.pixelSize: 11
             selectByMouse: true
             renderType: field.textRenderType
-            text: (field.revision, "" + field.val(field.desc ? field.desc.key : ""))
+            text: (field.revision, "" + field.val(field.key))
             onEditingFinished: field.commit(text)
         }
 
         Connections {
             target: field
             function onRevisionChanged() {
-                if (!textIn.activeFocus)
-                    textIn.text = "" + field.val(field.desc ? field.desc.key : "")
+                if (!scalarIn.activeFocus)
+                    scalarIn.text = "" + field.val(field.key)
             }
         }
     }
