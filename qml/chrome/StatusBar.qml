@@ -86,7 +86,7 @@ Rectangle {
             renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
             anchors.verticalCenter: parent.verticalCenter
             text: root.queueMode ? root.summaryText() : NodeManager.engineStatus
-            color: NodeManager.engineStatus === "失败" ? Theme.red : Theme.fgDim
+            color: NodeManager.engineStatus === "失败" ? Theme.red : Theme.fg
             font.pixelSize: root.fMain
         }
     }
@@ -297,7 +297,7 @@ Rectangle {
                     visible: del.index > 0 && !del.showGroupSep
                     anchors.verticalCenter: parent.verticalCenter
                     text: "→"
-                    color: Theme.fgDim
+                    color: Theme.fg
                     font.pixelSize: root.fSmall
                 }
 
@@ -312,7 +312,7 @@ Rectangle {
                     color: del.status === "failed"
                            ? Qt.rgba(Theme.red.r, Theme.red.g, Theme.red.b, 0.3)
                            : del.status === "ok"
-                               ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 1)
+                               ? Qt.rgba(Theme.success.r, Theme.success.g, Theme.success.b, 0.14)
                              : del.status === "skipped"
                                ? Qt.rgba(Theme.yellow.r, Theme.yellow.g, Theme.yellow.b, 0.16)
                                : Theme.bg
@@ -395,7 +395,7 @@ Rectangle {
                             renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.name
-                            color: Theme.fg
+                            color: Theme.fgBright
                             font.pixelSize: root.fMain
                         }
 
@@ -403,7 +403,7 @@ Rectangle {
                             renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
                             anchors.verticalCenter: parent.verticalCenter
                             text: del.ms > 0 ? del.ms + "ms" : ""
-                            color: Theme.fgDim
+                            color: Theme.fg
                             font.pixelSize: root.fSmall
                             opacity: del.ms > 0 ? 1 : 0
                             Behavior on opacity {
