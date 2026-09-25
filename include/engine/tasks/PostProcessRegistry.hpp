@@ -121,23 +121,23 @@ inline cv::Rect2f mapBoxToOriginal(const cv::Rect2f& box, const GeometryMeta& m)
     return cv::Rect2f(x0, y0, std::max(0.0f, x1 - x0), std::max(0.0f, y1 - y0));
 }
 
-// 把网络空间掩码还原到原图：letterbox 先裁掉填充区，再缩放到原图尺寸
-inline cv::Mat maskToOriginal(const cv::Mat& netMask, const GeometryMeta& m) {
+// 概率图还原到原图：letterbox 先裁掉填充区，再线性缩放到原图尺寸（保持 float）
+inline cv::Mat probToOriginal(const cv::Mat& prob, const GeometryMeta& m) {
     const int ow = std::max(1, int(std::lround(m.origW)));
     const int oh = std::max(1, int(std::lround(m.origH)));
-    cv::Mat src = netMask;
+    cv::Mat src = prob;
     if (m.mode == 1 && m.scale > 0.0f) {
         const int x0 = int(std::lround(m.padX));
         const int y0 = int(std::lround(m.padY));
         const int cw = int(std::lround(m.scale * m.origW));
         const int ch = int(std::lround(m.scale * m.origH));
-        cv::Rect roi = cv::Rect(x0, y0, cw, ch) & cv::Rect(0, 0, netMask.cols, netMask.rows);
+        cv::Rect roi = cv::Rect(x0, y0, cw, ch) & cv::Rect(0, 0, prob.cols, prob.rows);
         if (roi.width <= 0 || roi.height <= 0)
-            return cv::Mat::zeros(oh, ow, CV_8U);
-        src = netMask(roi);
+            return cv::Mat::zeros(oh, ow, CV_32F);
+        src = prob(roi);
     }
     cv::Mat out;
-    cv::resize(src, out, cv::Size(ow, oh), 0, 0, cv::INTER_NEAREST);
+    cv::resize(src, out, cv::Size(ow, oh), 0, 0, cv::INTER_LINEAR);
     return out;
 }
 
@@ -193,14 +193,25 @@ inline bool unifyDetectHead(const Tensor& host, Tensor& unified) {
     return true;
 }
 
-// 解析检测头（含可选掩码系数范围 [coeffBegin, C)），过滤 conf 后做 NMS
+// 解析检测头（含可选掩码系数范围 [coeffBegin, C)），过滤 conf 后做 NMS。
+// coeffBegin < 0 表示不提取掩码系数（yolo_detect）；yolo_segment 传 4+nc，
+// 此时类别通道为 [4, coeffBegin)，其余通道为掩码系数。
+// NMS 的 keep 为候选下标，系数随 Detection 一并保留。
 inline bool decodeDetections(const Tensor& b, float conf, float iou,
-                             int maxBoxes, std::vector<Detection>& out) {
+                             int maxBoxes, std::vector<Detection>& out,
+                             int64_t coeffBegin = -1) {
     // 调用方已通过 unifyDetectHead 统一为 [1, M, 4+n]
     const auto shape = b.shape();
     if (shape.size() != 3 || shape[0] != 1) return false;
     const int64_t N = shape[1], C = shape[2];
     if (N <= 0 || C < 5) return false;
+
+    int64_t clsEnd = C;
+    if (coeffBegin >= 0) {
+        if (coeffBegin > C) return false;
+        clsEnd = coeffBegin;
+    }
+    if (clsEnd < 5) return false;   // 没有类别通道
 
     auto at = [&](int64_t c, int64_t n) -> float {
         return readElement(b, std::size_t(n) * std::size_t(C) + std::size_t(c));
@@ -212,7 +223,7 @@ inline bool decodeDetections(const Tensor& b, float conf, float iou,
         const float cx = at(0, n), cy = at(1, n), w = at(2, n), h = at(3, n);
         float best = 0.0f;
         int bestCls = -1;
-        for (int64_t c = 4; c < C; ++c) {
+        for (int64_t c = 4; c < clsEnd; ++c) {
             const float s = at(c, n);
             if (s > best) { best = s; bestCls = int(c - 4); }
         }
@@ -221,6 +232,11 @@ inline bool decodeDetections(const Tensor& b, float conf, float iou,
         d.box = cv::Rect2f(cx - w * 0.5f, cy - h * 0.5f, w, h);
         d.score = best;
         d.cls = bestCls;
+        if (coeffBegin >= 0) {
+            d.coeff.resize(std::size_t(C - coeffBegin));
+            for (int64_t k = 0; k < C - coeffBegin; ++k)
+                d.coeff[std::size_t(k)] = at(coeffBegin + k, n);
+        }
         cands.push_back(std::move(d));
     }
 
@@ -303,9 +319,11 @@ struct ProtoView {
     }
 };
 
-// 生成单个框的掩码（sigmoid(系数·原型) > maskThr），返回 netSize 的 CV_8U（0/255）
-inline cv::Mat buildMask(const std::vector<float>& coeff, const ProtoView& pv,
-                         float maskThr, cv::Size netSize) {
+// 生成概率图：sigmoid(系数·原型)，线性放大到 netSize（未阈值化）。
+// 阈值化在放大/模糊之后进行，避免 nearest 放大二值掩码的块状边缘
+// （做法参考 Autolabel/utils/YoloSeg.py：resize → blur → 阈值）。
+inline cv::Mat buildMaskProb(const std::vector<float>& coeff, const ProtoView& pv,
+                             cv::Size netSize) {
     cv::Mat prob(int(pv.mh), int(pv.mw), CV_32F);
     for (int64_t y = 0; y < pv.mh; ++y)
         for (int64_t x = 0; x < pv.mw; ++x) {
@@ -314,10 +332,8 @@ inline cv::Mat buildMask(const std::vector<float>& coeff, const ProtoView& pv,
             for (int64_t c = 0; c < k; ++c) sum += coeff[std::size_t(c)] * pv.at(c, y, x);
             prob.at<float>(int(y), int(x)) = sigmoid(sum);
         }
-    cv::Mat bin;
-    cv::compare(prob, maskThr, bin, cv::CMP_GT);
     cv::Mat resized;
-    cv::resize(bin, resized, netSize, 0, 0, cv::INTER_NEAREST);
+    cv::resize(prob, resized, netSize, 0, 0, cv::INTER_LINEAR);
     return resized;
 }
 
@@ -403,20 +419,23 @@ inline void registerBuiltinPostProcessTasks() {
                     {QStringLiteral("原图"), DataType::Image},
                     {QStringLiteral("元信息"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.defaults = QVariantMap{{"conf", 0.25}, {"maskThr", 0.5},
+        s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45}, {"maskThr", 0.5},
                                  {"alpha", 0.45}, {"maxBoxes", 300}};
         s.params = {
             {"conf", QStringLiteral("置信度"), "float", 0.25, {}},
+            {"iou", QStringLiteral("IoU"), "float", 0.45, {}},
             {"maskThr", QStringLiteral("掩码阈值"), "float", 0.5, {}},
             {"alpha", QStringLiteral("透明度"), "float", 0.45, {}},
             {"maxBoxes", QStringLiteral("最大框数"), "int", 300, {}},
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
-            const Tensor* headIn = tensorInput(inputs, 0);
-            const Tensor* protoIn = tensorInput(inputs, 1);
+            const Tensor* headIn = tensorInput(inputs, 0);  // [1,116,8400],116 = 4+80+32
+            const Tensor* protoIn = tensorInput(inputs, 1); // [1,32,160,160]
             const cv::Mat* img = imageInputAt(inputs, 2);
+
             const Tensor* metaIn = tensorInput(inputs, 3);
+
             if (!headIn || !protoIn || !img || !metaIn)
                 return {false, QStringLiteral("需要 检测/原型/原图/元信息 四个输入"), {}};
 
@@ -440,67 +459,76 @@ inline void registerBuiltinPostProcessTasks() {
             if (!ProtoView::make(protos, pv))
                 return {false, QStringLiteral("分割原型形状无法解析"), {}};
 
+            // =========================================================================
             const float conf = p.value("conf", 0.25).toFloat();
+            const float iou = p.value("iou", 0.45).toFloat();
             const float maskThr = p.value("maskThr", 0.5).toFloat();
             const float alpha = p.value("alpha", 0.45).toFloat();
             const int maxBoxes = std::max(1, p.value("maxBoxes", 300).toInt());
 
-            // 检测头已统一为 [1, M, 4+nc+nm]
+            // 检测头已统一为 [1, M, 4+nc+nm]：类别通道 [4, coeffBegin)，掩码系数 [coeffBegin, C)
             const auto hs = head.shape();
             if (hs.size() != 3 || hs[0] != 1)
                 return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
-            const int64_t N = hs[1], C = hs[2];
+            const int64_t C = hs[2];
             if (C < 4 + pv.nm)
                 return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
+            const int64_t coeffBegin = C - pv.nm;
 
-            // 逐框读取掩码系数（channels-last 索引）
-            auto at = [&](int64_t c, int64_t n) -> float {
-                return readElement(head, std::size_t(n) * std::size_t(C) + std::size_t(c));
-            };
-            const int64_t nc = C - 4 - pv.nm;
-
-            std::vector<Detection> cands;
-            for (int64_t n = 0; n < N; ++n) {
-                const float cx = at(0, n), cy = at(1, n), w = at(2, n), h = at(3, n);
-                float best = 0.0f;
-                int bestCls = -1;
-                for (int64_t c = 4; c < 4 + nc; ++c) {
-                    const float sc = at(c, n);
-                    if (sc > best) { best = sc; bestCls = int(c - 4); }
-                }
-                if (bestCls < 0 || best < conf) continue;
-                Detection d;
-                d.box = cv::Rect2f(cx - w * 0.5f, cy - h * 0.5f, w, h);
-                d.score = best;
-                d.cls = bestCls;
-                d.coeff.resize(std::size_t(pv.nm));
-                for (int64_t k = 0; k < pv.nm; ++k)
-                    d.coeff[std::size_t(k)] = at(4 + nc + k, n);
-                cands.push_back(std::move(d));
-            }
-            std::sort(cands.begin(), cands.end(),
-                      [](const Detection& a, const Detection& b) { return a.score > b.score; });
+            // 候选提取 + 掩码系数 + 类内 NMS，与 yolo_detect 同一路径
             std::vector<Detection> dets;
-            for (const Detection& d : cands) {
-                if (int(dets.size()) >= maxBoxes) break;
-                dets.push_back(d);
-            }
+            if (!decodeDetections(head, conf, iou, maxBoxes, dets, coeffBegin))
+                return {false, QStringLiteral("YOLO 分割输出形状无法解析"), {}};
+
+            // 网络坐标 → 原图坐标（掩码裁框与画框共用）
+            for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
 
             cv::Mat canvas = img->clone();
-            // 首版复杂度控制：仅对第一个（最高分）框生成掩码并半透明叠加；
-            // 其余框只画检测框。后续可对每个框重复此流程。
             if (!dets.empty()) {
                 const int netW = std::max(1, int(std::lround(meta.netW > 0.0f ? meta.netW : meta.origW)));
                 const int netH = std::max(1, int(std::lround(meta.netH > 0.0f ? meta.netH : meta.origH)));
-                const cv::Mat netMask = buildMask(dets[0].coeff, pv, maskThr, cv::Size(netW, netH));
-                const cv::Mat mask = maskToOriginal(netMask, meta);
-                cv::Mat overlay = canvas.clone();
-                if (mask.size() == canvas.size())
-                    overlay.setTo(classColor(dets[0].cls), mask);
-                cv::addWeighted(overlay, alpha, canvas, 1.0 - alpha, 0.0, canvas);
+                // 模糊核按「原图 / 原型」上采样倍率导出，平滑放大后的概率图
+                // （做法参考 Autolabel/utils/YoloSeg.py）
+                const int kw = std::max(1, int(std::lround(double(canvas.cols) / double(pv.mw))));
+                const int kh = std::max(1, int(std::lround(double(canvas.rows) / double(pv.mh))));
+                for (const Detection& d : dets) {
+                    // 概率图：sigmoid(系数·原型) → 放大到网络尺寸 → 还原到原图 → 模糊 → 阈值
+                    const cv::Mat prob = buildMaskProb(d.coeff, pv, cv::Size(netW, netH));
+                    cv::Mat m = probToOriginal(prob, meta);
+                    cv::blur(m, m, cv::Size(kw, kh));
+                    cv::Mat bin;
+                    cv::compare(m, maskThr, bin, cv::CMP_GT);
+                    // 掩码裁到该框（原图坐标），避免溢出到物体之外
+                    cv::Rect roi(int(std::lround(d.box.x)), int(std::lround(d.box.y)),
+                                 int(std::lround(d.box.width)), int(std::lround(d.box.height)));
+                    roi &= cv::Rect(0, 0, bin.cols, bin.rows);
+                    if (roi.width <= 0 || roi.height <= 0) continue;
+                    cv::Mat cropped = cv::Mat::zeros(bin.size(), bin.type());
+                    bin(roi).copyTo(cropped(roi));
+                    // 只保留框内面积最大的连通掩码：滤除细碎噪点，
+                    // 避免叠加出许多不与主体连通的小块
+                    cv::Mat labels, stats, centroids;
+                    const int ncomp = cv::connectedComponentsWithStats(
+                        cropped, labels, stats, centroids, 8, CV_32S);
+                    if (ncomp > 2) {   // 多于一个前景分量才需要挑选
+                        int best = 1;
+                        double bestArea = -1.0;
+                        for (int i = 1; i < ncomp; ++i) {
+                            const double area = stats.at<int>(i, cv::CC_STAT_AREA);
+                            if (area > bestArea) { bestArea = area; best = i; }
+                        }
+                        cv::Mat largest;
+                        cv::compare(labels, best, largest, cv::CMP_EQ);
+                        cropped.setTo(0, ~largest);
+                    }
+                    // 仅在 ROI 内 alpha 混合（src 与 dst 不别名）
+                    cv::Mat orig = canvas(roi).clone();
+                    cv::Mat colored;
+                    orig.copyTo(colored);
+                    colored.setTo(classColor(d.cls), cropped(roi));
+                    cv::addWeighted(colored, alpha, orig, 1.0 - alpha, 0.0, canvas(roi));
+                }
             }
-            // 网络坐标 → 原图坐标后画框
-            for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
             drawDetections(canvas, dets, true, 2);
 
             ExecResult r;

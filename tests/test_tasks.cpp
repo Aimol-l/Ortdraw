@@ -316,6 +316,112 @@ private slots:
         QCOMPARE(captured.value("top1").toInt(), 2);
         QVERIFY(captured.contains("topk"));
     }
+
+    // 分割解码：重叠框被类内 NMS 抑制，掩码系数从 [4+nc, C) 提取并随保留框带出
+    void yoloSegmentDecodeSuppressesOverlapAndKeepsCoeffs() {
+        const int64_t C = 7;   // 4 + nc(1) + nm(2)
+        auto anchor = [&](std::vector<float>& v, int n, float cx, float cy,
+                          float score, float c0, float c1) {
+            v[n * C + 0] = cx; v[n * C + 1] = cy; v[n * C + 2] = 60; v[n * C + 3] = 60;
+            v[n * C + 4] = score;
+            v[n * C + 5] = c0;  v[n * C + 6] = c1;
+        };
+        std::vector<float> v(3 * C, 0.0f);
+        anchor(v, 0, 100, 100, 0.90f, 1.0f, 2.0f);   // 高分框
+        anchor(v, 1, 100, 100, 0.80f, 3.0f, 4.0f);   // 与 0 完全重叠 → 抑制
+        anchor(v, 2, 300, 300, 0.70f, 5.0f, 6.0f);   // 独立框 → 保留
+        Tensor head(v, std::vector<int64_t>{1, 3, C});   // channels-last
+
+        std::vector<postprocess_detail::Detection> dets;
+        QVERIFY(postprocess_detail::decodeDetections(head, 0.25f, 0.45f, 300, dets, 5));
+        QCOMPARE(dets.size(), std::size_t(2));       // 重叠对只剩一个
+        const postprocess_detail::Detection* top = nullptr;
+        for (const auto& d : dets)
+            if (!top || d.score > top->score) top = &d;
+        QVERIFY(top);
+        QCOMPARE(top->score, 0.90f);                 // 保留高分框
+        QCOMPARE(int(top->coeff.size()), 2);         // nm 个系数
+        QCOMPARE(top->coeff[0], 1.0f);               // 来自系数通道而非类别通道
+        QCOMPARE(top->coeff[1], 2.0f);
+        // 低分框被抑制，其系数（3,4）不应出现
+        for (const auto& d : dets)
+            QVERIFY(!(d.coeff[0] == 3.0f && d.coeff[1] == 4.0f));
+    }
+
+    // 分割任务：整图概率掩码须裁到该框 bbox，框外不着色
+    void yoloSegmentMaskCroppedToBox() {
+        const int64_t C = 6;   // 4 + nc(1) + nm(1)
+        std::vector<float> hv(C, 0.0f);
+        hv[0] = 50; hv[1] = 25; hv[2] = 100; hv[3] = 50;  // cx,cy,w,h → 上半幅
+        hv[4] = 0.9f;                                     // 类别 0 分数
+        hv[5] = 8.0f;                                     // 掩码系数：sigmoid(8)≈1
+        Tensor head(hv, std::vector<int64_t>{1, 1, C});
+        std::vector<float> pv{1, 1, 1, 1};                // 原型 2x2 全 1
+        Tensor protos(pv, std::vector<int64_t>{1, 1, 2, 2});
+        cv::Mat original(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        std::vector<float> mv{0, 100, 100, 100, 100, 1, 0, 0};   // mode=0 恒等
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_segment"},
+            {"params", QVariantMap{{"conf", 0.25}, {"iou", 0.45}, {"maskThr", 0.5},
+                                   {"alpha", 1.0}}}},
+            QVector<NodeData>{ head, protos, original, meta });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.cols, 100);
+        QCOMPARE(out.rows, 100);
+        // 框内（上半幅）着色为类别 0 的颜色；框外保持原图黑色
+        QCOMPARE(out.at<cv::Vec3b>(25, 50), cv::Vec3b(255, 56, 56));
+        QCOMPARE(out.at<cv::Vec3b>(80, 50), cv::Vec3b(0, 0, 0));
+    }
+
+    // 分割任务：缺输入报错（端口契约）
+    void yoloSegmentMissingInputs() {
+        std::vector<float> hv(6, 0.0f);
+        hv[4] = 0.9f;
+        Tensor head(hv, std::vector<int64_t>{1, 1, 6});
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_segment"},
+            {"params", QVariantMap{{"conf", 0.25}}}},
+            QVector<NodeData>{ head });
+        QVERIFY(!r.ok);
+    }
+
+    // 分割任务：框内只保留面积最大的连通掩码，细碎噪点被滤除
+    void yoloSegmentKeepsLargestConnectedMask() {
+        // 原型 24x24：主体（上 12 行）+ 右下角 8x8 碎块，其余为低值
+        const int S = 24;
+        std::vector<float> pv(std::size_t(S * S), -8.0f);
+        for (int y = 0; y < 12; ++y)
+            for (int x = 0; x < S; ++x)
+                pv[std::size_t(y * S + x)] = 10.0f;
+        for (int y = 16; y < S; ++y)
+            for (int x = 16; x < S; ++x)
+                pv[std::size_t(y * S + x)] = 10.0f;
+        Tensor protos(pv, std::vector<int64_t>{1, 1, S, S});
+
+        const int64_t C = 6;   // 4 + nc(1) + nm(1)
+        std::vector<float> hv(C, 0.0f);
+        hv[0] = 50; hv[1] = 50; hv[2] = 100; hv[3] = 100;  // 整图一个框
+        hv[4] = 0.9f;
+        hv[5] = 1.0f;                                       // 系数：sigmoid(±10/±8) 二值化清晰
+        Tensor head(hv, std::vector<int64_t>{1, 1, C});
+        cv::Mat original(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        std::vector<float> mv{0, 100, 100, 100, 100, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_segment"},
+            {"params", QVariantMap{{"conf", 0.25}, {"maskThr", 0.5}, {"alpha", 1.0}}}},
+            QVector<NodeData>{ head, protos, original, meta });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        // 主体区域着色
+        QCOMPARE(out.at<cv::Vec3b>(20, 50), cv::Vec3b(255, 56, 56));
+        // 碎块被滤除，保持原图黑色
+        QCOMPARE(out.at<cv::Vec3b>(90, 90), cv::Vec3b(0, 0, 0));
+    }
 };
 
 QTEST_MAIN(TestTasks)
