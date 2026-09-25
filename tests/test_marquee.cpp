@@ -171,6 +171,78 @@ private slots:
         QCOMPARE(nm->nodeCount(), 3);
     }
 
+    // 多选整体拖拽（模拟 QML：被拖节点直接赋值 + nodeMoveEvent 传 delta）：
+    // 其余选中节点整体跟随（含端口），一次 undo 整组还原
+    void groupMoveViaDragEvents() {
+        nm->beginMarquee(-10, -10, false);
+        nm->updateMarquee(500, 200);   // 选中 load + resize（不含 blur）
+        QVERIFY(load->selected());
+        QVERIFY(resize->selected());
+
+        Port* resizeOut = resize->getOutPorts().first();
+        const QPointF rp0 = resizeOut->position();
+
+        // 第一段位移：QML 设被拖节点位置，nodeMoveEvent 同步
+        load->setX(50);
+        load->setY(30);
+        nm->nodeMoveEvent(load->uuid(), 50, 30);
+        // 第二段位移（增量）
+        load->setX(70);
+        load->setY(40);
+        nm->nodeMoveEvent(load->uuid(), 20, 10);
+
+        QCOMPARE(load->x(), 70.0);
+        QCOMPARE(load->y(), 40.0);
+        QCOMPARE(resize->x(), 470.0);      // 400 + 50 + 20 整体跟随
+        QCOMPARE(resize->y(), 40.0);       // 0 + 30 + 10
+        QCOMPARE(blur->x(), 0.0);          // 未选中不动
+        QCOMPARE(blur->y(), 400.0);
+        // 其他节点的端口也跟随
+        QCOMPARE(resizeOut->position().x() - rp0.x(), 70.0);
+        QCOMPARE(resizeOut->position().y() - rp0.y(), 40.0);
+
+        // 提交：一条组命令，一次 undo 整组还原
+        nm->commitNodeMove(load->uuid(), 0, 0);
+        QVERIFY(nm->undo());
+        QCOMPARE(load->x(), 0.0);
+        QCOMPARE(load->y(), 0.0);
+        QCOMPARE(resize->x(), 400.0);
+        QCOMPARE(resize->y(), 0.0);
+        QCOMPARE(resizeOut->position().x(), rp0.x());
+        QCOMPARE(resizeOut->position().y(), rp0.y());
+    }
+
+    // 拖未选中节点：只移动该节点，不影响选择集；单节点命令可撤销
+    void moveUnselectedViaDragEvents() {
+        nm->beginMarquee(-10, -10, false);
+        nm->updateMarquee(500, 200);   // load + resize 选中
+        blur->setX(10);
+        blur->setY(410);
+        nm->nodeMoveEvent(blur->uuid(), 10, 10);
+        QCOMPARE(load->x(), 0.0);
+        QCOMPARE(resize->x(), 400.0);
+        QCOMPARE(blur->x(), 10.0);
+
+        nm->commitNodeMove(blur->uuid(), 0, 400);
+        QVERIFY(nm->undo());
+        QCOMPARE(blur->x(), 0.0);
+        QCOMPARE(blur->y(), 400.0);
+    }
+
+    // 无多选时单节点拖拽：行为与之前一致（单条 MoveNodeCMD）
+    void singleNodeMoveViaDragEvents() {
+        nm->beginMarquee(-10, -10, false);
+        nm->updateMarquee(250, 130);   // 只选中 load
+        load->setX(5);
+        load->setY(5);
+        nm->nodeMoveEvent(load->uuid(), 5, 5);
+        QCOMPARE(resize->x(), 400.0);
+        nm->commitNodeMove(load->uuid(), 0, 0);
+        QVERIFY(nm->undo());
+        QCOMPARE(load->x(), 0.0);
+        QCOMPARE(load->y(), 0.0);
+    }
+
 private:
     std::unique_ptr<QTemporaryFile> m_settings;
 };

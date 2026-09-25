@@ -23,6 +23,7 @@
 #include "command/RemoveEdge.hpp"
 #include "command/RemoveNode.hpp"
 #include "command/MoveNodeCMD.hpp"
+#include "command/MoveNodesCMD.hpp"
 #include "command/ResizeNodeCMD.hpp"
 #include "command/ChangeParamsCMD.hpp"
 #include "command/CmdManager.hpp"
@@ -591,15 +592,29 @@ public:
     }
 
     // 移动/缩放/参数编辑在 QML 中先实时改值，交互结束后在此提交为一条可撤销命令
+    // 松手提交为可撤销命令：多选整体移动 = 一条组命令（±delta 整组还原）；
+    // 组内各节点拖拽中都移动了相同 delta，undo 用 newPos - delta 即回到原位
     Q_INVOKABLE void commitNodeMove(QUuid uid, qreal oldX, qreal oldY){
         if(!m_paint_board) return;
         for(BaseNode* node : m_paint_board->m_graph.getAllNodes()){
             if(node->uuid() != uid) continue;
             const QPointF old_pos(oldX, oldY);
             if(node->position() == old_pos) return;
-            auto cmd = std::make_unique<MoveNodeCMD>(node, old_pos, node->position(), m_paint_board);
-            if(m_cmd_manager.executeCommand(std::move(cmd)))
-                Log::info(QStringLiteral("移动节点：%1").arg(node->typeName()));
+            const auto selected = m_paint_board->m_graph.getSelectedNodes();
+            if(node->selected() && selected.size() > 1){
+                QVector<MoveNodesCMD::Item> items;
+                items.reserve(selected.size());
+                for(BaseNode* n : selected)
+                    items.push_back({n, n->position()});
+                auto cmd = std::make_unique<MoveNodesCMD>(
+                    std::move(items), node->position() - old_pos, m_paint_board);
+                if(m_cmd_manager.executeCommand(std::move(cmd)))
+                    Log::info(QStringLiteral("移动节点：%1 个（整组）").arg(selected.size()));
+            } else {
+                auto cmd = std::make_unique<MoveNodeCMD>(node, old_pos, node->position(), m_paint_board);
+                if(m_cmd_manager.executeCommand(std::move(cmd)))
+                    Log::info(QStringLiteral("移动节点：%1").arg(node->typeName()));
+            }
             refresh();
             return;
         }
@@ -751,14 +766,28 @@ public:
         if(board) m_executor.setGraph(&board->m_graph);
     }
 
+    // 拖拽中移动（Figma/ComfyUI 多选整体移动）：被拖节点位置由 QML 直接赋值
+    // （原绝对坐标路径不变），此处同步其端口；若被拖节点已选中，其余选中
+    // 节点按相同 delta 整体跟随。
     Q_INVOKABLE void nodeMoveEvent(QUuid node_uid, qreal dx, qreal dy){
         if(!m_paint_board) return;
         QPointF d_pos(dx, dy);
+        BaseNode* dragged = nullptr;
         for(auto* node : m_paint_board->m_graph.getAllNodes()){
             if(node->uuid() == node_uid){
+                dragged = node;
                 for(auto* port : node->getPorts())
                     port->movedeltaPos(d_pos);
                 break;
+            }
+        }
+        if(dragged && dragged->selected()){
+            for(auto* node : m_paint_board->m_graph.getSelectedNodes()){
+                if(node == dragged) continue;
+                node->setX(node->x() + dx);
+                node->setY(node->y() + dy);
+                for(auto* port : node->getPorts())
+                    port->movedeltaPos(d_pos);
             }
         }
         refresh();
