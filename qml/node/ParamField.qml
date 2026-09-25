@@ -256,6 +256,9 @@ Item {
                     selectByMouse: true
                     renderType: field.textRenderType
                     text: cellBox.cellText
+                    // 用户编辑会打断 text 绑定，而 joinCells() 读的是 cellBox.cellText，
+                    // 不同步回去就会把旧值提交给节点（改了不生效）
+                    onTextEdited: cellBox.cellText = text
                     onActiveFocusChanged: {
                         if (activeFocus && !field.claimClick(cellIn,
                                            Qt.point(cellIn.width / 2, cellIn.height / 2)))
@@ -267,9 +270,10 @@ Item {
                 Connections {
                     target: field
                     function onRevisionChanged() {
-                        if (!cellIn.activeFocus)
-                            cellIn.text = floatsRow.cells[cellBox.index] !== undefined
-                                          ? ("" + floatsRow.cells[cellBox.index]).trim() : ""
+                        const v = floatsRow.cells[cellBox.index] !== undefined
+                                  ? ("" + floatsRow.cells[cellBox.index]).trim() : ""
+                        if (!cellIn.activeFocus) cellIn.text = v
+                        cellBox.cellText = v
                     }
                 }
             }
