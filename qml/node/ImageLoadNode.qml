@@ -13,7 +13,10 @@ ImageLoadNode {
         anchors.fill: parent
         node: root
         coordItem: root.parent
-        previewSource: "qrc:/preview_placeholder.png"
+        // 选中文件后立即预览该文件（执行后由 ImageStore 的真实结果接管）
+        previewSource: root.path === "" || !root.pathValid
+            ? "qrc:/preview_placeholder.png"
+            : "file://" + encodeURI(root.path)
 
         Column {
             width: parent ? parent.width : implicitWidth

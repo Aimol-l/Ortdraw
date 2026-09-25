@@ -13,6 +13,7 @@ class ImageLoadNode : public BaseNode {
     Q_OBJECT
     Q_PROPERTY(QString path READ path WRITE setPath NOTIFY pathChanged)
     Q_PROPERTY(QString infoText READ infoText NOTIFY infoChanged)
+    Q_PROPERTY(bool pathValid READ pathValid NOTIFY infoChanged)
 public:
     QString typeName() const override { return "ImageLoad"; }
     QString category() const override { return "input"; }
@@ -24,6 +25,13 @@ public:
         m_infoText = computeInfo(p);
         emit pathChanged();
         emit infoChanged();
+    }
+
+    // 路径是否为可读取的文件（选中后立即预览用）
+    bool pathValid() const {
+        if(m_path.isEmpty()) return false;
+        const QFileInfo fi(m_path);
+        return fi.exists() && fi.isFile();
     }
 
     // 图片信息：分辨率 · 格式 · 文件大小
