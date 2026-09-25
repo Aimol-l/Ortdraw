@@ -447,6 +447,7 @@ public:
             nm["y"]      = n->y();
             nm["w"]      = n->width();
             nm["h"]      = n->height();
+            nm["pinned"] = n->sizePinned();
             nm["name"]   = n->name();
             nm["params"] = n->params();
             nodes.append(nm);
@@ -611,8 +612,11 @@ public:
             const QSizeF new_size(node->width(), node->height());
             if(old_size == new_size) return;
             auto cmd = std::make_unique<ResizeNodeCMD>(node, old_size, new_size, m_paint_board);
-            if(m_cmd_manager.executeCommand(std::move(cmd)))
+            if(m_cmd_manager.executeCommand(std::move(cmd))){
                 Log::info(QStringLiteral("缩放节点：%1").arg(node->typeName()));
+                // 手动缩放 = 用户意图固定尺寸：保存/加载时恢复宽高
+                node->setSizePinned(true);
+            }
             refresh();
             return;
         }
@@ -638,6 +642,17 @@ public:
             refresh();
             return;
         }
+    }
+
+    // 加载时恢复节点尺寸：宽总是恢复；高仅在手动缩放过（pinned）或关闭
+    // 「自适应内容」时恢复——autoHeight 开启时赋值会打断节点 height 的
+    // 自适应绑定，之后新增/隐藏参数行时节点不再长高
+    Q_INVOKABLE void applySavedSize(BaseNode* node, qreal w, qreal h, bool pinned) {
+        if (!node) return;
+        node->setSizePinned(pinned);   // 往返保持：加载后再保存不丢标记
+        if (w > 0) node->setWidth(w);
+        if (h > 0 && (pinned || !Settings::settings()->autoHeight()))
+            node->setHeight(h);
     }
 
     Q_INVOKABLE void bringToFront(QUuid uid){

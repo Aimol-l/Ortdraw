@@ -38,6 +38,8 @@ protected:
     QString m_description;
     QColor m_bg_color;  //背景颜色
     bool is_selected;
+    // 被用户手动缩放过：保存/加载时恢复尺寸（否则交给 autoHeight 自适应）
+    bool m_size_pinned = false;
     QPointF m_start_pos;
     qreal min_width = 220;
     qreal min_height = 120;
@@ -99,6 +101,7 @@ public:
     }
     // Getters
     bool selected()const {return is_selected;}
+    bool sizePinned() const { return m_size_pinned; }
     QString name() const { return m_name; }
     QUuid uuid()const{return m_id;}
     QString description() const { return m_description; }
@@ -129,6 +132,7 @@ public:
     void setColor(const QColor &bgColor) {
         m_bg_color = bgColor;
     }
+    void setSizePinned(bool v) { m_size_pinned = v; }
     // 重建输入/输出端口（动态节点用）；调用方需先断开将失效端口的连线
     void rebuildPorts(const QVector<PortSpec>& ins, const QVector<PortSpec>& outs) {
         qDeleteAll(m_input_ports);  m_input_ports.clear();

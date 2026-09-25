@@ -151,6 +151,67 @@ private slots:
         QVERIFY(nm);
         QVERIFY(nm->readGraph("/nonexistent/ortdraw-does-not-exist.ortdraw").isEmpty());
     }
+
+    // 节点尺寸导出/恢复：手动缩放过的节点（pinned）保存尺寸并在加载时恢复，
+    // 未手动缩放的节点在 autoHeight 下保持高度自适应
+    void nodeSizeSaveRestore() {
+        PaintBoard board;
+        auto* nm = qobject_cast<NodeManager*>(NodeManager::instance());
+        QVERIFY(nm);
+        nm->setPaintBoard(&board);
+        auto* st = Settings::settings();
+        const bool keepAuto = st->autoHeight();
+        st->setAutoHeight(true);
+
+        auto* node = new ResizeNode();
+        node->setWidth(220);
+        node->setHeight(120);
+        QVERIFY(nm->createNode(node));
+        QVERIFY(!node->sizePinned());
+
+        // 手动缩放（NodeCard 右下角拖拽 → commitNodeResize）→ 标记 pinned
+        node->setWidth(333);
+        node->setHeight(444);
+        nm->commitNodeResize(node->uuid(), 220, 120);
+        QVERIFY(node->sizePinned());
+
+        // 保存：w/h/pinned 一并导出
+        const QVariantList nodes = nm->graphToMap().value("nodes").toList();
+        QCOMPARE(nodes.size(), 1);
+        const QVariantMap m = nodes.first().toMap();
+        QCOMPARE(m.value("w").toDouble(), 333.0);
+        QCOMPARE(m.value("h").toDouble(), 444.0);
+        QCOMPARE(m.value("pinned").toBool(), true);
+
+        // 加载恢复策略（autoHeight 开启）：
+        auto* a = new ResizeNode();
+        a->setHeight(120);
+        nm->applySavedSize(a, 333, 444, true);
+        QCOMPARE(a->width(), 333.0);
+        QCOMPARE(a->height(), 444.0);   // pinned → 高度恢复
+
+        auto* b = new ResizeNode();
+        b->setHeight(120);
+        nm->applySavedSize(b, 222, 500, false);
+        QCOMPARE(b->width(), 222.0);
+        QCOMPARE(b->height(), 120.0);   // 未 pinned + autoHeight → 高度不覆盖
+
+        // 关闭「自适应内容」→ 高度总是恢复
+        st->setAutoHeight(false);
+        auto* c = new ResizeNode();
+        c->setHeight(120);
+        nm->applySavedSize(c, 222, 500, false);
+        QCOMPARE(c->width(), 222.0);
+        QCOMPARE(c->height(), 500.0);
+        st->setAutoHeight(keepAuto);
+
+        delete a;
+        delete b;
+        delete c;
+        nm->clearGraph();
+        nm->setPaintBoard(nullptr);
+        delete node;
+    }
 };
 
 QTEST_MAIN(TestGraphJson)

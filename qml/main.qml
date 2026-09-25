@@ -135,10 +135,10 @@ Controls.ApplicationWindow {
             if (d.uuid) obj.setUuid(d.uuid)
             obj.x = d.x
             obj.y = d.y
-            if (d.w) obj.width = d.w
-            // 高度只在关闭“自适应内容”时恢复：否则赋值会打断节点 height 的绑定，
-            // 之后新增/隐藏参数行时节点不再长高，内容会溢出卡片（看起来像错位）
-            if (d.h && !Settings.autoHeight) obj.height = d.h
+            // 尺寸恢复策略在 C++ 端：宽总是恢复；高仅手动缩放过（pinned）
+            // 或关闭「自适应内容」时恢复（避免打断 autoHeight 绑定）
+            NodeManager.applySavedSize(obj, d.w ? d.w : 0, d.h ? d.h : 0,
+                                       d.pinned === true)
             if (d.name) obj.name = d.name
             if (d.params) obj.setParams(d.params)
             NodeManager.createNode(obj)
