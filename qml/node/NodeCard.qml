@@ -159,475 +159,6 @@ Item {
         color: Theme.bgElev
         border.width: 0          // 描边改由最上层 outline 绘制，避免被表头渐变覆盖
 
-        Rectangle {
-            id: head
-            width: parent.width
-            height: card.headHeight
-            color: "transparent"
-            topLeftRadius: Math.max(0, Settings.cornerRadius - 1)
-            topRightRadius: Math.max(0, Settings.cornerRadius - 1)
-            gradient: Gradient {
-                GradientStop {
-                    position: 0.0
-                    color: Theme.dark ? Qt.rgba(1, 1, 1, 0.045)
-                                      : Qt.rgba(20 / 255, 30 / 255, 70 / 255, 0.035)
-                }
-                GradientStop { position: 1.0; color: "transparent" }
-            }
-
-            Rectangle {
-                anchors.centerIn: accentDot
-                width: 16
-                height: 16
-                radius: 8
-                color: card.accent
-                opacity: 0.25
-            }
-
-            Rectangle {
-                id: accentDot
-                width: 8
-                height: 8
-                radius: 3
-                color: card.accent
-                anchors.left: parent.left
-                anchors.leftMargin: 11
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                anchors.left: parent.left
-                anchors.leftMargin: 30
-                anchors.right: kindText.left
-                anchors.rightMargin: 6
-                anchors.verticalCenter: parent.verticalCenter
-                text: card.node ? card.node.name : ""
-                color: Theme.fgBright
-                font.pixelSize: 14
-                font.bold: true
-                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                elide: Text.ElideRight
-            }
-
-            Text {
-                id: kindText
-                anchors.right: parent.right
-                anchors.rightMargin: 12
-                anchors.verticalCenter: parent.verticalCenter
-                text: card.node ? card.node.typeName : ""
-                color: Theme.fgDim
-                font.family: "monospace"
-                font.pixelSize: 11
-                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-            }
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                width: parent.width
-                height: 1
-                color: Theme.borderSoft
-            }
-
-            MouseArea {
-                id: headArea
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                preventStealing: true
-                cursorShape: headArea.dragging ? Qt.ClosedHandCursor
-                             : (headArea.containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
-                property point lastPos: Qt.point(0, 0)
-                property real startNodeX: 0
-                property real startNodeY: 0
-                property bool dragging: false
-
-                onPressed: (mouse) => {
-                    headArea.dragging = (mouse.button === Qt.LeftButton)
-                    if (headArea.dragging && card.coordItem) {
-                        lastPos = mapToItem(card.coordItem, mouse.x, mouse.y)
-                        startNodeX = card.node.x
-                        startNodeY = card.node.y
-                    }
-                }
-                onReleased: {
-                    if (headArea.dragging && card.node)
-                        NodeManager.commitNodeMove(card.node.uuid, headArea.startNodeX, headArea.startNodeY)
-                    headArea.dragging = false
-                }
-                onPositionChanged: (mouse) => {
-                    if (!headArea.dragging || !card.node || !card.coordItem)
-                        return
-                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                    var nx = startNodeX + (p.x - lastPos.x)
-                    var ny = startNodeY + (p.y - lastPos.y)
-                    if (UiBus.snapEnabled) {
-                        nx = Math.round(nx / 8) * 8
-                        ny = Math.round(ny / 8) * 8
-                    }
-                    var adx = nx - card.node.x
-                    var ady = ny - card.node.y
-                    if (adx !== 0 || ady !== 0) {
-                        card.node.x = nx
-                        card.node.y = ny
-                        NodeManager.nodeMoveEvent(card.node.uuid, adx, ady)
-                    }
-                }
-                onClicked: (mouse) => {
-                    if (!card.node)
-                        return
-                    if (mouse.button === Qt.RightButton) {
-                        NodeManager.clickNodeEvent(card.node.uuid, false)
-                        if (Settings.contextMenu) {
-                            var g = card.mapToItem(null, mouse.x, mouse.y)
-                            UiBus.contextMenuRequested(g.x, g.y, "node", { uid: card.node.uuid })
-                        }
-                        return
-                    }
-                    NodeManager.clickNodeEvent(card.node.uuid,
-                        (mouse.modifiers & Qt.ControlModifier) !== 0)
-                }
-            }
-
-            // 执行错误标记：右上角红点，悬停显示错误文本
-            Rectangle {
-                id: errorBadge
-                visible: card.nodeErrorText !== ""
-                width: 10
-                height: 10
-                radius: 5
-                color: Theme.red
-                border.width: 1
-                border.color: Theme.bgElev
-                anchors.right: parent.right
-                anchors.rightMargin: 5
-                anchors.top: parent.top
-                anchors.topMargin: 5
-                z: 6
-
-                HoverHandler { id: badgeHover }
-            }
-
-            Controls.ToolTip {
-                id: errorTip
-                text: card.nodeErrorText
-                visible: errorBadge.visible && badgeHover.hovered
-                delay: 300
-                padding: 0
-                width: errorTipText.implicitWidth + 16
-                height: errorTipText.implicitHeight + 8
-                x: Math.round((head.width - width) / 2)
-                y: head.height + 4
-                background: Rectangle {
-                    color: Theme.bgElev
-                    border.width: 1
-                    border.color: Theme.red
-                    radius: 5
-                }
-                contentItem: Text {
-                    id: errorTipText
-                    text: errorTip.text
-                    color: Theme.fg
-                    font.pixelSize: 11
-                    renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-        }
-
-        Column {
-            id: rows
-            anchors.top: head.bottom
-            anchors.topMargin: card.bodyPadding
-            anchors.left: parent.left
-            anchors.right: parent.right
-
-            Repeater {
-                id: portRepeater
-                model: card.node ? Math.max(card.node.inputPorts.length, card.node.outputPorts.length) : 0
-
-                delegate: Item {
-                    id: rowItem
-                    required property int index
-                    width: rows.width
-                    height: card.rowHeight
-                    readonly property var inPort: (card.node && index < card.node.inputPorts.length)
-                                                  ? card.node.inputPorts[index] : null
-                    readonly property var outPort: (card.node && index < card.node.outputPorts.length)
-                                                   ? card.node.outputPorts[index] : null
-
-                    function syncPorts() {
-                        if (rowItem.inPort && card.coordItem) {
-                            var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
-                            card.node.setInputPortPosition(rowItem.index, p.x, p.y)
-                        }
-                        if (rowItem.outPort && card.coordItem) {
-                            var q = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
-                            card.node.setOutputPortPosition(rowItem.index, q.x, q.y)
-                        }
-                    }
-
-                    // ---- 输入（左） ----
-                    Rectangle {
-                        id: inDot
-                        visible: rowItem.inPort !== null
-                        x: -7
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 12
-                        height: 12
-                        radius: 6
-                        color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
-                        border.width: 2
-                        border.color: Theme.bgElev
-                        scale: (rowItem.inPort && rowItem.inPort.highlighted) ? 1.5
-                               : (inArea.containsMouse ? 1.22 : 1.0)
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: parent.width + 8
-                            height: parent.height + 8
-                            radius: width / 2
-                            color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
-                            opacity: (rowItem.inPort && rowItem.inPort.highlighted) ? 0.35
-                                     : (inArea.containsMouse ? 0.16 : 0.0)
-                            z: -1
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
-                        }
-
-                        MouseArea {
-                            id: inArea
-                            anchors.fill: parent
-                            anchors.margins: -6
-                            hoverEnabled: true
-                            cursorShape: Qt.CrossCursor
-                            preventStealing: true
-                            onPressed: (mouse) => {
-                                if (Settings.connectMode === "drag" && rowItem.inPort && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.beginLink(rowItem.inPort.self, p.x, p.y)
-                                }
-                            }
-                            onPositionChanged: (mouse) => {
-                                if (pressed && Settings.connectMode === "drag" && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.updateLink(p.x, p.y)
-                                }
-                            }
-                            onReleased: (mouse) => {
-                                if (Settings.connectMode === "drag" && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.endLink(p.x, p.y)
-                                }
-                            }
-                            onCanceled: {
-                                if (Settings.connectMode === "drag")
-                                    NodeManager.cancelLink()
-                            }
-                            onClicked: {
-                                if (Settings.connectMode === "drag")
-                                    return
-                                if (rowItem.inPort && card.coordItem) {
-                                    var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
-                                    NodeManager.setInputPort(rowItem.inPort.self, p.x, p.y)
-                                }
-                            }
-                        }
-
-                    }
-
-                    Row {
-                        visible: rowItem.inPort !== null
-                        anchors.left: parent.left
-                        anchors.leftMargin: 20
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 6
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: rowItem.inPort ? rowItem.inPort.name : ""
-                            color: Theme.fg
-                            font.pixelSize: 11
-                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        }
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: Settings.showPortTypeTags
-                            height: 16
-                            width: inTag.implicitWidth + 10
-                            color: Theme.bg
-                            border.width: 1
-                            border.color: Theme.borderSoft
-                            radius: 4
-
-                            Text {
-                                id: inTag
-                                anchors.centerIn: parent
-                                text: rowItem.inPort ? rowItem.inPort.dataTypeName : ""
-                                color: Theme.fgDim
-                                font.family: "monospace"
-                                font.pixelSize: 9
-                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                            }
-                        }
-                    }
-
-                    // ---- 输出（右，与输入同一行） ----
-                    Row {
-                        visible: rowItem.outPort !== null
-                        anchors.right: parent.right
-                        anchors.rightMargin: 20
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: 6
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: Settings.showPortTypeTags
-                            height: 16
-                            width: outTag.implicitWidth + 10
-                            color: Theme.bg
-                            border.width: 1
-                            border.color: Theme.borderSoft
-                            radius: 4
-
-                            Text {
-                                id: outTag
-                                anchors.centerIn: parent
-                                text: rowItem.outPort ? rowItem.outPort.dataTypeName : ""
-                                color: Theme.fgDim
-                                font.family: "monospace"
-                                font.pixelSize: 9
-                                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                            }
-                        }
-
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: rowItem.outPort ? rowItem.outPort.name : ""
-                            color: Theme.fg
-                            font.pixelSize: 11
-                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
-                        }
-                    }
-
-                    Rectangle {
-                        id: outDot
-                        visible: rowItem.outPort !== null
-                        x: rowItem.width - 5
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 12
-                        height: 12
-                        radius: 6
-                        color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
-                        border.width: 2
-                        border.color: Theme.bgElev
-                        scale: (rowItem.outPort && rowItem.outPort.highlighted) ? 1.5
-                               : (outArea.containsMouse ? 1.22 : 1.0)
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: parent.width + 8
-                            height: parent.height + 8
-                            radius: width / 2
-                            color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
-                            opacity: (rowItem.outPort && rowItem.outPort.highlighted) ? 0.35
-                                     : (outArea.containsMouse ? 0.16 : 0.0)
-                            z: -1
-                            Behavior on opacity { NumberAnimation { duration: 120 } }
-                        }
-
-                        MouseArea {
-                            id: outArea
-                            anchors.fill: parent
-                            anchors.margins: -6
-                            hoverEnabled: true
-                            cursorShape: Qt.CrossCursor
-                            preventStealing: true
-                            onPressed: (mouse) => {
-                                if (Settings.connectMode === "drag" && rowItem.outPort && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.beginLink(rowItem.outPort.self, p.x, p.y)
-                                }
-                            }
-                            onPositionChanged: (mouse) => {
-                                if (pressed && Settings.connectMode === "drag" && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.updateLink(p.x, p.y)
-                                }
-                            }
-                            onReleased: (mouse) => {
-                                if (Settings.connectMode === "drag" && card.coordItem) {
-                                    var p = mapToItem(card.coordItem, mouse.x, mouse.y)
-                                    NodeManager.endLink(p.x, p.y)
-                                }
-                            }
-                            onCanceled: {
-                                if (Settings.connectMode === "drag")
-                                    NodeManager.cancelLink()
-                            }
-                            onClicked: {
-                                if (Settings.connectMode === "drag")
-                                    return
-                                if (rowItem.outPort && card.coordItem) {
-                                    var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
-                                    NodeManager.setOutputPort(rowItem.outPort.self, p.x, p.y)
-                                }
-                            }
-                        }
-
-                    }
-                }
-            }
-        }
-
-        // 参数控件槽（在端口行下方，缩略图之上）
-        Item {
-            id: extraHost
-            anchors.top: rows.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.topMargin: 8
-            height: childrenRect.height
-        }
-
-        // 输出预览缩略图（暂时用占位图）；点击放大查看
-        Rectangle {
-            id: previewBox
-            visible: card.effectivePreview !== "" && Settings.showPreview
-            anchors.top: extraHost.bottom
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            anchors.topMargin: 8
-            anchors.bottomMargin: 10
-            radius: Math.max(0, Settings.cornerRadius - 4)
-            color: Theme.bg
-            border.width: 1
-            border.color: Theme.borderSoft
-            clip: true
-
-            Image {
-                anchors.fill: parent
-                anchors.margins: 1
-                source: card.effectivePreview
-                fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: UiBus.previewRequested(card.effectivePreview,
-                    "" + (card.node ? card.node.uuid : ""))
-            }
-        }
-
         MouseArea {
             id: resizeArea
             width: 20
@@ -669,4 +200,475 @@ Item {
             }
         }
     }
+    Rectangle {
+        id: head
+        width: parent.width
+        height: card.headHeight
+        color: "transparent"
+        topLeftRadius: Math.max(0, Settings.cornerRadius - 1)
+        topRightRadius: Math.max(0, Settings.cornerRadius - 1)
+        gradient: Gradient {
+            GradientStop {
+                position: 0.0
+                color: Theme.dark ? Qt.rgba(1, 1, 1, 0.045)
+                                  : Qt.rgba(20 / 255, 30 / 255, 70 / 255, 0.035)
+            }
+            GradientStop { position: 1.0; color: "transparent" }
+        }
+
+        Rectangle {
+            anchors.centerIn: accentDot
+            width: 16
+            height: 16
+            radius: 8
+            color: card.accent
+            opacity: 0.25
+        }
+
+        Rectangle {
+            id: accentDot
+            width: 8
+            height: 8
+            radius: 3
+            color: card.accent
+            anchors.left: parent.left
+            anchors.leftMargin: 11
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 30
+            anchors.right: kindText.left
+            anchors.rightMargin: 6
+            anchors.verticalCenter: parent.verticalCenter
+            text: card.node ? card.node.name : ""
+            color: Theme.fgBright
+            font.pixelSize: 14
+            font.bold: true
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+            elide: Text.ElideRight
+        }
+
+        Text {
+            id: kindText
+            anchors.right: parent.right
+            anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: card.node ? card.node.typeName : ""
+            color: Theme.fgDim
+            font.family: "monospace"
+            font.pixelSize: 11
+            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+        }
+
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: 1
+            color: Theme.borderSoft
+        }
+
+        MouseArea {
+            id: headArea
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            preventStealing: true
+            cursorShape: headArea.dragging ? Qt.ClosedHandCursor
+                         : (headArea.containsMouse ? Qt.OpenHandCursor : Qt.ArrowCursor)
+            property point lastPos: Qt.point(0, 0)
+            property real startNodeX: 0
+            property real startNodeY: 0
+            property bool dragging: false
+
+            onPressed: (mouse) => {
+                headArea.dragging = (mouse.button === Qt.LeftButton)
+                if (headArea.dragging && card.coordItem) {
+                    lastPos = mapToItem(card.coordItem, mouse.x, mouse.y)
+                    startNodeX = card.node.x
+                    startNodeY = card.node.y
+                }
+            }
+            onReleased: {
+                if (headArea.dragging && card.node)
+                    NodeManager.commitNodeMove(card.node.uuid, headArea.startNodeX, headArea.startNodeY)
+                headArea.dragging = false
+            }
+            onPositionChanged: (mouse) => {
+                if (!headArea.dragging || !card.node || !card.coordItem)
+                    return
+                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                var nx = startNodeX + (p.x - lastPos.x)
+                var ny = startNodeY + (p.y - lastPos.y)
+                if (UiBus.snapEnabled) {
+                    nx = Math.round(nx / 8) * 8
+                    ny = Math.round(ny / 8) * 8
+                }
+                var adx = nx - card.node.x
+                var ady = ny - card.node.y
+                if (adx !== 0 || ady !== 0) {
+                    card.node.x = nx
+                    card.node.y = ny
+                    NodeManager.nodeMoveEvent(card.node.uuid, adx, ady)
+                }
+            }
+            onClicked: (mouse) => {
+                if (!card.node)
+                    return
+                if (mouse.button === Qt.RightButton) {
+                    NodeManager.clickNodeEvent(card.node.uuid, false)
+                    if (Settings.contextMenu) {
+                        var g = card.mapToItem(null, mouse.x, mouse.y)
+                        UiBus.contextMenuRequested(g.x, g.y, "node", { uid: card.node.uuid })
+                    }
+                    return
+                }
+                NodeManager.clickNodeEvent(card.node.uuid,
+                    (mouse.modifiers & Qt.ControlModifier) !== 0)
+            }
+        }
+
+        // 执行错误标记：右上角红点，悬停显示错误文本
+        Rectangle {
+            id: errorBadge
+            visible: card.nodeErrorText !== ""
+            width: 10
+            height: 10
+            radius: 5
+            color: Theme.red
+            border.width: 1
+            border.color: Theme.bgElev
+            anchors.right: parent.right
+            anchors.rightMargin: 5
+            anchors.top: parent.top
+            anchors.topMargin: 5
+            z: 6
+
+            HoverHandler { id: badgeHover }
+        }
+
+        Controls.ToolTip {
+            id: errorTip
+            text: card.nodeErrorText
+            visible: errorBadge.visible && badgeHover.hovered
+            delay: 300
+            padding: 0
+            width: errorTipText.implicitWidth + 16
+            height: errorTipText.implicitHeight + 8
+            x: Math.round((head.width - width) / 2)
+            y: head.height + 4
+            background: Rectangle {
+                color: Theme.bgElev
+                border.width: 1
+                border.color: Theme.red
+                radius: 5
+            }
+            contentItem: Text {
+                id: errorTipText
+                text: errorTip.text
+                color: Theme.fg
+                font.pixelSize: 11
+                renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+    }
+
+    // 端口行：提为根级子项并置于选中描边（outline z:100）之上，
+    // 避免端口圆点被卡片边框裁切（锚定链 head→rows→extraHost→previewBox
+    // 保持兄弟关系）。圆点/端口交互与 C++ 端口位置同步逻辑不变。
+    Column {
+        id: rows
+        z: 101
+        anchors.top: head.bottom
+        anchors.topMargin: card.bodyPadding
+        anchors.left: parent.left
+        anchors.right: parent.right
+
+        Repeater {
+            id: portRepeater
+            model: card.node ? Math.max(card.node.inputPorts.length, card.node.outputPorts.length) : 0
+
+            delegate: Item {
+                id: rowItem
+                required property int index
+                width: rows.width
+                height: card.rowHeight
+                readonly property var inPort: (card.node && index < card.node.inputPorts.length)
+                                              ? card.node.inputPorts[index] : null
+                readonly property var outPort: (card.node && index < card.node.outputPorts.length)
+                                               ? card.node.outputPorts[index] : null
+
+                function syncPorts() {
+                    if (rowItem.inPort && card.coordItem) {
+                        var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
+                        card.node.setInputPortPosition(rowItem.index, p.x, p.y)
+                    }
+                    if (rowItem.outPort && card.coordItem) {
+                        var q = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
+                        card.node.setOutputPortPosition(rowItem.index, q.x, q.y)
+                    }
+                }
+
+                // ---- 输入（左） ----
+                Rectangle {
+                    id: inDot
+                    visible: rowItem.inPort !== null
+                    x: -7
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
+                    border.width: 2
+                    border.color: Theme.bgElev
+                    scale: (rowItem.inPort && rowItem.inPort.highlighted) ? 1.5
+                           : (inArea.containsMouse ? 1.22 : 1.0)
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width + 8
+                        height: parent.height + 8
+                        radius: width / 2
+                        color: (rowItem.inPort && rowItem.inPort.highlighted) ? Theme.blue : Theme.portIn
+                        opacity: (rowItem.inPort && rowItem.inPort.highlighted) ? 0.35
+                                 : (inArea.containsMouse ? 0.16 : 0.0)
+                        z: -1
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+
+                    MouseArea {
+                        id: inArea
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.CrossCursor
+                        preventStealing: true
+                        onPressed: (mouse) => {
+                            if (Settings.connectMode === "drag" && rowItem.inPort && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.beginLink(rowItem.inPort.self, p.x, p.y)
+                            }
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (pressed && Settings.connectMode === "drag" && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.updateLink(p.x, p.y)
+                            }
+                        }
+                        onReleased: (mouse) => {
+                            if (Settings.connectMode === "drag" && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.endLink(p.x, p.y)
+                            }
+                        }
+                        onCanceled: {
+                            if (Settings.connectMode === "drag")
+                                NodeManager.cancelLink()
+                        }
+                        onClicked: {
+                            if (Settings.connectMode === "drag")
+                                return
+                            if (rowItem.inPort && card.coordItem) {
+                                var p = inDot.mapToItem(card.coordItem, inDot.width / 2, inDot.height / 2)
+                                NodeManager.setInputPort(rowItem.inPort.self, p.x, p.y)
+                            }
+                        }
+                    }
+
+                }
+
+                Row {
+                    visible: rowItem.inPort !== null
+                    anchors.left: parent.left
+                    anchors.leftMargin: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: rowItem.inPort ? rowItem.inPort.name : ""
+                        color: Theme.fg
+                        font.pixelSize: 11
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Settings.showPortTypeTags
+                        height: 16
+                        width: inTag.implicitWidth + 10
+                        color: Theme.bg
+                        border.width: 1
+                        border.color: Theme.borderSoft
+                        radius: 4
+
+                        Text {
+                            id: inTag
+                            anchors.centerIn: parent
+                            text: rowItem.inPort ? rowItem.inPort.dataTypeName : ""
+                            color: Theme.fgDim
+                            font.family: "monospace"
+                            font.pixelSize: 9
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                        }
+                    }
+                }
+
+                // ---- 输出（右，与输入同一行） ----
+                Row {
+                    visible: rowItem.outPort !== null
+                    anchors.right: parent.right
+                    anchors.rightMargin: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 6
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: Settings.showPortTypeTags
+                        height: 16
+                        width: outTag.implicitWidth + 10
+                        color: Theme.bg
+                        border.width: 1
+                        border.color: Theme.borderSoft
+                        radius: 4
+
+                        Text {
+                            id: outTag
+                            anchors.centerIn: parent
+                            text: rowItem.outPort ? rowItem.outPort.dataTypeName : ""
+                            color: Theme.fgDim
+                            font.family: "monospace"
+                            font.pixelSize: 9
+                            renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                        }
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: rowItem.outPort ? rowItem.outPort.name : ""
+                        color: Theme.fg
+                        font.pixelSize: 11
+                        renderType: Settings.textRender === "native" ? Text.NativeRendering : Text.CurveRendering
+                    }
+                }
+
+                Rectangle {
+                    id: outDot
+                    visible: rowItem.outPort !== null
+                    x: rowItem.width - 5
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
+                    border.width: 2
+                    border.color: Theme.bgElev
+                    scale: (rowItem.outPort && rowItem.outPort.highlighted) ? 1.5
+                           : (outArea.containsMouse ? 1.22 : 1.0)
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width + 8
+                        height: parent.height + 8
+                        radius: width / 2
+                        color: (rowItem.outPort && rowItem.outPort.highlighted) ? Theme.blue : Theme.portOut
+                        opacity: (rowItem.outPort && rowItem.outPort.highlighted) ? 0.35
+                                 : (outArea.containsMouse ? 0.16 : 0.0)
+                        z: -1
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+
+                    MouseArea {
+                        id: outArea
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.CrossCursor
+                        preventStealing: true
+                        onPressed: (mouse) => {
+                            if (Settings.connectMode === "drag" && rowItem.outPort && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.beginLink(rowItem.outPort.self, p.x, p.y)
+                            }
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (pressed && Settings.connectMode === "drag" && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.updateLink(p.x, p.y)
+                            }
+                        }
+                        onReleased: (mouse) => {
+                            if (Settings.connectMode === "drag" && card.coordItem) {
+                                var p = mapToItem(card.coordItem, mouse.x, mouse.y)
+                                NodeManager.endLink(p.x, p.y)
+                            }
+                        }
+                        onCanceled: {
+                            if (Settings.connectMode === "drag")
+                                NodeManager.cancelLink()
+                        }
+                        onClicked: {
+                            if (Settings.connectMode === "drag")
+                                return
+                            if (rowItem.outPort && card.coordItem) {
+                                var p = outDot.mapToItem(card.coordItem, outDot.width / 2, outDot.height / 2)
+                                NodeManager.setOutputPort(rowItem.outPort.self, p.x, p.y)
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+    }
+
+    Item {
+        id: extraHost
+        anchors.top: rows.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 12
+        anchors.rightMargin: 12
+        anchors.topMargin: 8
+        height: childrenRect.height
+    }
+
+    Rectangle {
+        id: previewBox
+        visible: card.effectivePreview !== "" && Settings.showPreview
+        anchors.top: extraHost.bottom
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        anchors.topMargin: 8
+        anchors.bottomMargin: 10
+        radius: Math.max(0, Settings.cornerRadius - 4)
+        color: Theme.bg
+        border.width: 1
+        border.color: Theme.borderSoft
+        clip: true
+
+        Image {
+            anchors.fill: parent
+            anchors.margins: 1
+            source: card.effectivePreview
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: UiBus.previewRequested(card.effectivePreview,
+                "" + (card.node ? card.node.uuid : ""))
+        }
+    }
+
 }
