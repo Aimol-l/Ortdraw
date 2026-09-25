@@ -140,7 +140,10 @@ Item {
             }
             var p = card.coordItem ? mapToItem(card.coordItem, mouse.x, mouse.y)
                                    : Qt.point(0, 0)
-            NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
+            // 右键落在已选中节点上时保留多选，供「删除节点」一次删除多个
+            var keepMulti = mouse.button === Qt.RightButton && card.selected
+            if (!keepMulti)
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
             if (mouse.button === Qt.RightButton && Settings.contextMenu) {
                 var g = mapToItem(null, mouse.x, mouse.y)
                 UiBus.contextMenuRequested(g.x, g.y, "node",

@@ -86,6 +86,15 @@ public:
         update();
     }
 
+    // 拉选选框（世界坐标）：由 NodeManager 在框选期间驱动绘制
+    void setMarquee(const QRectF& r, bool visible) {
+        m_marquee = r;
+        m_marquee_visible = visible;
+        update();
+    }
+    const QRectF& marquee() const { return m_marquee; }
+    bool marqueeVisible() const { return m_marquee_visible; }
+
     void paint(QPainter* painter) override {
         Theme* theme = Theme::theme();
         auto* st = Settings::settings();
@@ -119,6 +128,16 @@ public:
             m_drawing_edge.drawCurve(painter, theme->wire(), theme->blue(),
                                      mode, st->linkWidth());
         }
+        // 拉选选框：世界坐标矩形；cosmetic 1px 边框不随缩放变粗
+        if(m_marquee_visible && !m_marquee.isNull()){
+            QColor fill = theme->blue();
+            fill.setAlphaF(0.10);
+            QColor line = theme->blue();
+            line.setAlphaF(0.9);
+            painter->setPen(QPen(line, 0));
+            painter->setBrush(fill);
+            painter->drawRect(m_marquee);
+        }
         painter->restore();
     }
 signals:
@@ -126,6 +145,8 @@ signals:
 private:
     std::unique_ptr<Port> m_tmp_port;
     int m_hovered = -1;
+    QRectF m_marquee;               // 拉选选框（世界坐标）
+    bool m_marquee_visible = false;
     qreal m_zoom = 1.0;
     qreal m_pan_x = 0.0;
     qreal m_pan_y = 0.0;

@@ -8,6 +8,7 @@
 #include <QLineF>
 #include <QPair>
 #include <QFile>
+#include <QRectF>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -65,6 +66,10 @@ private:
     QTimer m_auto_run_timer;
     // 自动重算期间又来变更：取消当前求值，其结束后以最新图重启
     bool m_auto_run_pending = false;
+    // 拉选（框选）：选框世界矩形与进行状态；additive 为 Ctrl 追加模式
+    QRectF m_marquee;
+    bool m_marquee_active = false;
+    bool m_marquee_additive = false;
     NodeManager(QObject *parent = nullptr) : QObject(parent), m_auto_run_timer(this) {
         m_auto_run_timer.setSingleShot(true);
         m_auto_run_timer.setInterval(300);
@@ -824,6 +829,48 @@ public:
         setSelectedNode(hit_node);
         refresh();
     }
+    // ---- 拉选（框选）----
+    // 空白处按下并拖动超过阈值时开始；additive 为 true 时保留现有选择（Ctrl 追加，
+    // 受 ctrlMultiSelect 设置门控），否则先清空再逐帧重建。
+    Q_INVOKABLE void beginMarquee(qreal wx, qreal wy, bool additive = false) {
+        if (!m_paint_board) return;
+        m_marquee_additive = additive && Settings::settings()->ctrlMultiSelect();
+        if (!m_marquee_additive) {
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+                n->setSelected(false);
+            setSelectedNode(nullptr);
+        }
+        m_marquee = QRectF(wx, wy, 0, 0);
+        m_marquee_active = true;
+        m_paint_board->setMarquee(m_marquee, true);
+        refresh();
+    }
+    // 拖动中：以 begin 起点与当前点构成选框，相交命中实时更新选择
+    Q_INVOKABLE void updateMarquee(qreal wx, qreal wy) {
+        if (!m_paint_board || !m_marquee_active) return;
+        m_marquee = QRectF(QPointF(m_marquee.left(), m_marquee.top()),
+                           QPointF(wx, wy)).normalized();
+        int hits = 0;
+        BaseNode* last = nullptr;
+        for (BaseNode* n : m_paint_board->m_graph.getAllNodes()) {
+            const bool hit = m_marquee.intersects(
+                QRectF(n->x(), n->y(), n->width(), n->height()));
+            if (hit) { ++hits; last = n; }
+            // additive 只加不踢：命中的置选中，未命中的保持原状
+            if (hit || !m_marquee_additive) n->setSelected(hit);
+        }
+        setSelectedNode(hits == 1 ? last : nullptr);
+        m_paint_board->setMarquee(m_marquee, true);
+        refresh();
+    }
+    Q_INVOKABLE void endMarquee() {
+        if (!m_marquee_active) return;
+        m_marquee_active = false;
+        m_marquee_additive = false;
+        if (m_paint_board) m_paint_board->setMarquee(QRectF(), false);
+        refresh();
+    }
+
     Q_INVOKABLE void setOutputPort(Port* port, qreal x, qreal y){
         if(!m_paint_board || !port) return;
         port->setPosition(QPointF(x, y));

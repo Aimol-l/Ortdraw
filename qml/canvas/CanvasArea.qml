@@ -103,18 +103,34 @@ Item {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         hoverEnabled: true
-        cursorShape: input.panMode ? (input.panning ? Qt.ClosedHandCursor : Qt.OpenHandCursor) : Qt.ArrowCursor
+        cursorShape: input.marqueeing ? Qt.CrossCursor
+                     : input.panMode ? (input.panning ? Qt.ClosedHandCursor : Qt.OpenHandCursor)
+                     : Qt.ArrowCursor
 
         property bool panMode: UiBus.spaceHeld || !Settings.spaceToPan
         property bool panning: false
         property real lastX: 0
         property real lastY: 0
 
+        // 拉选：空白处左键拖动超过阈值开始框选；平移模式下需按住 Shift。
+        // Ctrl + 框选 = 追加选择（受 ctrlMultiSelect 设置门控）。
+        property bool marqueeing: false
+        property bool marqueeArmed: false
+        property bool marqueeAdditive: false
+        property real pressX: 0
+        property real pressY: 0
+        property real pressWX: 0
+        property real pressWY: 0
+        readonly property real marqueeThreshold: 5
+
         onPressed: (mouse) => {
             area.forceActiveFocus()
             var p = area.toWorld(mouse.x, mouse.y)
-            NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
+            // Shift 优先框选（平移模式下也能拉选）；否则平移模式左键 = 平移
+            var wantPan = input.panMode && !(mouse.modifiers & Qt.ShiftModifier)
+            var additive = (mouse.modifiers & Qt.ControlModifier) && Settings.ctrlMultiSelect
             if (mouse.button === Qt.RightButton) {
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
                 if (Settings.contextMenu) {
                     var kind = "canvas"
                     if (NodeManager.selectedNode)
@@ -126,11 +142,32 @@ Item {
                 }
                 return
             }
-            if (mouse.button === Qt.LeftButton && input.panMode) {
+            if (mouse.button !== Qt.LeftButton)
+                return
+            if (wantPan) {
+                // 平移模式下保持原有「按下即按点击处理」语义
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
                 panning = true
                 lastX = mouse.x
                 lastY = mouse.y
+                return
             }
+            if (NodeManager.topNodeUuidAt(p.x, p.y) !== "") {
+                // 落在节点上：只按点击处理（选中/反选），不进入框选，
+                // 节点拖拽由卡片自己的输入层负责
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), additive)
+                return
+            }
+            // additive 时按下不清选择（留给松手时若无拖动再取消），
+            // 否则维持「点击空白即取消选择」
+            if (!additive)
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
+            input.marqueeArmed = true
+            input.marqueeAdditive = additive
+            input.pressX = mouse.x
+            input.pressY = mouse.y
+            input.pressWX = p.x
+            input.pressWY = p.y
         }
 
         onPositionChanged: (mouse) => {
@@ -141,10 +178,32 @@ Item {
                 lastY = mouse.y
             }
             var p = area.toWorld(mouse.x, mouse.y)
+            if (input.marqueeArmed && !input.marqueeing) {
+                var dx = mouse.x - input.pressX
+                var dy = mouse.y - input.pressY
+                if (dx * dx + dy * dy > input.marqueeThreshold * input.marqueeThreshold) {
+                    input.marqueeing = true
+                    NodeManager.beginMarquee(input.pressWX, input.pressWY, input.marqueeAdditive)
+                }
+            }
+            if (input.marqueeing)
+                NodeManager.updateMarquee(p.x, p.y)
             NodeManager.mouseMoveEvent(p.x, p.y)
         }
 
-        onReleased: panning = false
+        onReleased: (mouse) => {
+            if (input.marqueeing) {
+                NodeManager.endMarquee()
+                input.marqueeing = false
+            } else if (mouse.button === Qt.LeftButton && input.marqueeArmed && input.marqueeAdditive) {
+                // additive 按下时未改选；轻点空白仍保持「取消选择」行为
+                var p = area.toWorld(mouse.x, mouse.y)
+                NodeManager.mousePressEvent(Qt.point(p.x, p.y), false)
+            }
+            input.marqueeArmed = false
+            input.marqueeAdditive = false
+            panning = false
+        }
 
         onWheel: (wheel) => {
             if (UiBus.overlayOpen) { wheel.accepted = true; return }
