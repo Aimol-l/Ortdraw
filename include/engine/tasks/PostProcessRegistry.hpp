@@ -11,6 +11,7 @@
 #include <QVariantList>
 #include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
+#include <tensorvia/core/ops.h>
 #include "engine/NodeData.hpp"
 #include "engine/onnx/OnnxTensorConvert.hpp"
 #include "engine/tasks/TaskSpec.hpp"
@@ -319,22 +320,18 @@ struct ProtoView {
     }
 };
 
-// 生成概率图：sigmoid(系数·原型)，线性放大到 netSize（未阈值化）。
-// 阈值化在放大/模糊之后进行，避免 nearest 放大二值掩码的块状边缘
-// （做法参考 Autolabel/utils/YoloSeg.py：resize → blur → 阈值）。
-inline cv::Mat buildMaskProb(const std::vector<float>& coeff, const ProtoView& pv,
-                             cv::Size netSize) {
-    cv::Mat prob(int(pv.mh), int(pv.mw), CV_32F);
-    for (int64_t y = 0; y < pv.mh; ++y)
-        for (int64_t x = 0; x < pv.mw; ++x) {
-            float sum = 0.0f;
-            const int64_t k = std::min<int64_t>(pv.nm, int64_t(coeff.size()));
-            for (int64_t c = 0; c < k; ++c) sum += coeff[std::size_t(c)] * pv.at(c, y, x);
-            prob.at<float>(int(y), int(x)) = sigmoid(sum);
-        }
-    cv::Mat resized;
-    cv::resize(prob, resized, netSize, 0, 0, cv::INTER_LINEAR);
-    return resized;
+// 原型整理为 [nm, mh*mw] 的 fp32 连续张量（ops::Mul 的右操作数）。
+// 常规导出布局（[1,nm,mh,mw] 或 [nm,mh,mw]、fp32、channels-first）走 view
+// 零拷贝；channels-last 先转置，非 fp32 先转换。
+inline Tensor protoRows(const Tensor& protos, const ProtoView& pv) {
+    Tensor t = protos;
+    if (t.dtype() != via::DataType::FLOAT32)
+        t = t.to_type(via::DataType::FLOAT32);   // 非就地：返回新张量
+    if (!pv.chFirst)                              // [1,mh,mw,nm] → [1,nm,mh,mw]
+        t = t.permute({0, 3, 1, 2}).contiguous();
+    else if (!t.is_contiguous())
+        t = t.contiguous();
+    return t.view({pv.nm, pv.mh * pv.mw});
 }
 
 } // namespace postprocess_detail
@@ -491,9 +488,39 @@ inline void registerBuiltinPostProcessTasks() {
                 // （做法参考 Autolabel/utils/YoloSeg.py）
                 const int kw = std::max(1, int(std::lround(double(canvas.cols) / double(pv.mw))));
                 const int kh = std::max(1, int(std::lround(double(canvas.rows) / double(pv.mh))));
-                for (const Detection& d : dets) {
-                    // 概率图：sigmoid(系数·原型) → 放大到网络尺寸 → 还原到原图 → 模糊 → 阈值
-                    const cv::Mat prob = buildMaskProb(d.coeff, pv, cv::Size(netW, netH));
+
+                // 批量概率：所有框系数一次矩阵乘 [N,nm] @ [nm, mh*mw]（tensorvia
+                // ops::Mul，亚毫秒级；cv::gemm 在大 N 下有 77ms 级病态表现），
+                // 再整体 sigmoid
+                const Tensor protoMat = protoRows(protos, pv);
+                const int n = int(dets.size());
+                const int nm = int(pv.nm);
+                Tensor coeffs(std::vector<int64_t>{n, nm}, via::DataType::FLOAT32);
+                {
+                    float* dst = static_cast<float*>(coeffs.data());
+                    for (int i = 0; i < n; ++i) {
+                        const std::vector<float>& c = dets[std::size_t(i)].coeff;
+                        for (int k = 0; k < nm; ++k)
+                            *dst++ = (std::size_t(k) < c.size()) ? c[std::size_t(k)] : 0.0f;
+                    }
+                }
+                Tensor probsT = ops::Sigmoid(ops::Mul(coeffs, protoMat));
+                if (!probsT.is_contiguous())
+                    probsT = probsT.contiguous();
+                // 零拷贝包装为 cv::Mat（[N, mh*mw] 行主序），后续走 OpenCV 管线
+                const cv::Mat probs(n, int(pv.mh * pv.mw), CV_32F, probsT.data());
+
+                for (int i = 0; i < n; ++i) {
+                    const Detection& d = dets[std::size_t(i)];
+                    // 原型分辨率概率图（gemm 行即 [mh*mw] 行主序，reshape 零拷贝）
+                    const cv::Mat probSmall = probs.row(i).reshape(1, int(pv.mh));
+                    // 提前退出：全图概率都不超过阈值 → 无掩码（检测框仍会画）
+                    double pmin = 0.0, pmax = 0.0;
+                    cv::minMaxLoc(probSmall, &pmin, &pmax);
+                    if (float(pmax) <= maskThr) continue;
+                    // 放大到网络输入尺寸 → letterbox 还原 → 模糊 → 阈值
+                    cv::Mat prob;
+                    cv::resize(probSmall, prob, cv::Size(netW, netH), 0, 0, cv::INTER_LINEAR);
                     cv::Mat m = probToOriginal(prob, meta);
                     cv::blur(m, m, cv::Size(kw, kh));
                     cv::Mat bin;
@@ -503,19 +530,18 @@ inline void registerBuiltinPostProcessTasks() {
                                  int(std::lround(d.box.width)), int(std::lround(d.box.height)));
                     roi &= cv::Rect(0, 0, bin.cols, bin.rows);
                     if (roi.width <= 0 || roi.height <= 0) continue;
-                    cv::Mat cropped = cv::Mat::zeros(bin.size(), bin.type());
-                    bin(roi).copyTo(cropped(roi));
-                    // 只保留框内面积最大的连通掩码：滤除细碎噪点，
-                    // 避免叠加出许多不与主体连通的小块
+                    // 连通域只在框内 ROI 上跑（不必扫全图），保留面积最大的分量：
+                    // 滤除细碎噪点，避免叠加出许多不与主体连通的小块
+                    cv::Mat cropped = bin(roi).clone();
                     cv::Mat labels, stats, centroids;
                     const int ncomp = cv::connectedComponentsWithStats(
-                        cropped, labels, stats, centroids, 8, CV_32S);
+                        cropped, labels, stats, centroids, 4, CV_32S);
                     if (ncomp > 2) {   // 多于一个前景分量才需要挑选
                         int best = 1;
                         double bestArea = -1.0;
-                        for (int i = 1; i < ncomp; ++i) {
-                            const double area = stats.at<int>(i, cv::CC_STAT_AREA);
-                            if (area > bestArea) { bestArea = area; best = i; }
+                        for (int c = 1; c < ncomp; ++c) {
+                            const double area = stats.at<int>(c, cv::CC_STAT_AREA);
+                            if (area > bestArea) { bestArea = area; best = c; }
                         }
                         cv::Mat largest;
                         cv::compare(labels, best, largest, cv::CMP_EQ);
@@ -525,7 +551,7 @@ inline void registerBuiltinPostProcessTasks() {
                     cv::Mat orig = canvas(roi).clone();
                     cv::Mat colored;
                     orig.copyTo(colored);
-                    colored.setTo(classColor(d.cls), cropped(roi));
+                    colored.setTo(classColor(d.cls), cropped);
                     cv::addWeighted(colored, alpha, orig, 1.0 - alpha, 0.0, canvas(roi));
                 }
             }

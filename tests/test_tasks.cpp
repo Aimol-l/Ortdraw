@@ -376,6 +376,64 @@ private slots:
         QCOMPARE(out.at<cv::Vec3b>(80, 50), cv::Vec3b(0, 0, 0));
     }
 
+    // 分割任务：多框各自独立生成掩码（批量系数路径）；全概率低于阈值的框无掩码
+    void yoloSegmentMultiBoxMasks() {
+        // nc=1, nm=1, C=6；两个不重叠的框（左/右半幅）
+        const int64_t C = 6;
+        std::vector<float> v(2 * C, 0.0f);
+        auto anchor = [&](int n, float cx, float score, float coeff) {
+            v[n * C + 0] = cx; v[n * C + 1] = 50; v[n * C + 2] = 50; v[n * C + 3] = 100;
+            v[n * C + 4] = score;
+            v[n * C + 5] = coeff;
+        };
+        anchor(0, 25, 0.90f, 8.0f);    // 左半幅：sigmoid(8)≈1 → 满掩码
+        anchor(1, 75, 0.80f, -8.0f);   // 右半幅：sigmoid(-8)≈0 → 无掩码
+        Tensor head(v, std::vector<int64_t>{1, 2, C});
+        std::vector<float> pv{1, 1, 1, 1};          // 原型 2x2 全 1
+        Tensor protos(pv, std::vector<int64_t>{1, 1, 2, 2});
+        cv::Mat original(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        std::vector<float> mv{0, 100, 100, 100, 100, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_segment"},
+            {"params", QVariantMap{{"conf", 0.25}, {"maskThr", 0.5}, {"alpha", 1.0}}}},
+            QVector<NodeData>{ head, protos, original, meta });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.at<cv::Vec3b>(50, 25), cv::Vec3b(255, 56, 56));  // 左：有着色
+        QCOMPARE(out.at<cv::Vec3b>(50, 75), cv::Vec3b(0, 0, 0));      // 右：无掩码
+    }
+
+    // 分割任务：channels-last 原型排布（[1,mh,mw,nm]）经转置后系数通道正确
+    void yoloSegmentChannelsLastProto() {
+        const int64_t C = 7;   // 4 + nc(1) + nm(2)
+        std::vector<float> v(2 * C, 0.0f);
+        auto anchor = [&](int n, float cx, float score, float c0, float c1) {
+            v[n * C + 0] = cx; v[n * C + 1] = 50; v[n * C + 2] = 50; v[n * C + 3] = 100;
+            v[n * C + 4] = score;
+            v[n * C + 5] = c0;  v[n * C + 6] = c1;
+        };
+        anchor(0, 25, 0.90f, 1.0f, 0.0f);   // 左：通道0（值全 10）→ 满掩码
+        anchor(1, 75, 0.80f, 0.0f, 1.0f);   // 右：通道1（值全 -10）→ 无掩码
+        Tensor head(v, std::vector<int64_t>{1, 2, C});
+        // channels-last 原型 [1,2,2,2]：交错排列 k0=10, k1=-10
+        std::vector<float> pv{10, -10, 10, -10, 10, -10, 10, -10};
+        Tensor protos(pv, std::vector<int64_t>{1, 2, 2, 2});
+        cv::Mat original(100, 100, CV_8UC3, cv::Scalar(0, 0, 0));
+        std::vector<float> mv{0, 100, 100, 100, 100, 1, 0, 0};
+        Tensor meta(mv, std::vector<int64_t>{1, 8});
+
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute({}, QVariantMap{{"task", "yolo_segment"},
+            {"params", QVariantMap{{"conf", 0.25}, {"maskThr", 0.5}, {"alpha", 1.0}}}},
+            QVector<NodeData>{ head, protos, original, meta });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
+        QCOMPARE(out.at<cv::Vec3b>(50, 25), cv::Vec3b(255, 56, 56));  // 左：有着色
+        QCOMPARE(out.at<cv::Vec3b>(50, 75), cv::Vec3b(0, 0, 0));      // 右：无掩码
+    }
+
     // 分割任务：缺输入报错（端口契约）
     void yoloSegmentMissingInputs() {
         std::vector<float> hv(6, 0.0f);
