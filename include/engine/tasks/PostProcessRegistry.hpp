@@ -5,6 +5,8 @@
 #include <iterator>
 #include <limits>
 #include <opencv2/core/mat.hpp>
+#include <opencv5/opencv2/core/types.hpp>
+#include <opencv5/opencv2/imgproc.hpp>
 #include <print>
 #include <utility>
 #include <vector>
@@ -122,7 +124,10 @@ inline cv::Rect2f mapBoxToOriginal(const cv::Rect2f& box, const GeometryMeta& m)
     return cv::Rect2f(x0, y0, std::max(0.0f, x1 - x0), std::max(0.0f, y1 - y0));
 }
 
-// 概率图还原到原图：letterbox 先裁掉填充区，再线性缩放到原图尺寸（保持 float）
+// 概率图还原到原图：letterbox 先裁掉填充区，再线性缩放到原图尺寸（保持 float）。
+// 放大后用模糊平滑过渡带，再阈值化——nearest 放大二值图会有明显锯齿，
+// 因此不采用「先二值化再放大」路线（代价是 0.5 附近的软过渡带会被算入，
+// 轮廓略微偏大，换取边缘平滑）。
 inline cv::Mat probToOriginal(const cv::Mat& prob, const GeometryMeta& m) {
     const int ow = std::max(1, int(std::lround(m.origW)));
     const int oh = std::max(1, int(std::lround(m.origH)));
@@ -265,21 +270,34 @@ inline bool decodeDetections(const Tensor& b, float conf, float iou,
     return true;
 }
 
-// 在画布上画框 + "<cls> <score两位小数>"
+// 在画布上画框 + "<cls>:<score>" 标签：标签带实心底色条（贴合框上缘，
+// 空间不足时改画在框内顶部），白字着色（样式参考 YoloSeg.py）
 inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,bool drawScore, int lineWidth) {
     const int lw = lineWidth > 0 ? lineWidth : 1;
     for (const Detection& d : dets) {
         const cv::Scalar& col = classColor(d.cls);
-        cv::rectangle(canvas,
-                      cv::Point(int(std::lround(d.box.x)), int(std::lround(d.box.y))),
-                      cv::Point(int(std::lround(d.box.x + d.box.width)),
-                                int(std::lround(d.box.y + d.box.height))),
-                      col, lw);
-        std::string text = std::format("{}:{:.2f}",d.cls,d.score);
-        if(lw>0)
+        const cv::Point tl(int(std::lround(d.box.x)), int(std::lround(d.box.y)));
+        const cv::Point br(int(std::lround(d.box.x + d.box.width)),
+                           int(std::lround(d.box.y + d.box.height)));
+        cv::rectangle(canvas, tl, br, col, lw);
+        if(lw>0){
+            const std::string text = std::format("{}:{:.2f}",d.cls,d.score);
+            int baseline = 0;
+            const cv::Size ts = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX,
+                                                0.5, 1, &baseline);
+            const int pad = 3;
+            const int stripH = ts.height + baseline + pad * 2;
+            int y1 = tl.y - stripH;
+            if (y1 < 0) y1 = tl.y;   // 顶部空间不足：底色条改画在框内顶部
+            const int y2 = y1 + stripH;
+            const int x2 = std::min(canvas.cols, br.x);   // 与框右缘对齐
+            const cv::Rect bg(tl.x, y1, std::max(1, x2 - tl.x), stripH);
+            cv::rectangle(canvas, bg, col, cv::FILLED);
             cv::putText(canvas, text,
-                    cv::Point(int(std::lround(d.box.x)), std::max(12, int(std::lround(d.box.y)) - 4)),
-                    cv::FONT_HERSHEY_SIMPLEX, 1, col, 1, cv::LINE_AA);
+                        cv::Point(tl.x + pad, y2 - pad - baseline),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.5,
+                        cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
+        }
     }
 }
 
@@ -518,7 +536,7 @@ inline void registerBuiltinPostProcessTasks() {
                     double pmin = 0.0, pmax = 0.0;
                     cv::minMaxLoc(probSmall, &pmin, &pmax);
                     if (float(pmax) <= maskThr) continue;
-                    // 放大到网络输入尺寸 → letterbox 还原 → 模糊 → 阈值
+                    // 概率图：放大到网络输入尺寸 → letterbox 还原 → 模糊 → 阈值
                     cv::Mat prob;
                     cv::resize(probSmall, prob, cv::Size(netW, netH), 0, 0, cv::INTER_LINEAR);
                     cv::Mat m = probToOriginal(prob, meta);
