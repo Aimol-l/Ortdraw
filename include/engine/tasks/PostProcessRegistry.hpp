@@ -605,23 +605,34 @@ inline void registerBuiltinPostProcessTasks() {
             const std::size_t n = buf.numel();
             if (n == 0) return {false, QStringLiteral("输入张量为空"), {}};
 
-            std::vector<float> logits(n);
-            float mx = -std::numeric_limits<float>::infinity();
-            for (std::size_t i = 0; i < n; ++i) {
-                logits[i] = readElement(buf, i);
-                mx = std::max(mx, logits[i]);
-            }
-            double sum = 0.0;
-            for (std::size_t i = 0; i < n; ++i) {
-                logits[i] = std::exp(logits[i] - mx);
-                sum += logits[i];
-            }
-            if (sum <= 0.0) return {false, QStringLiteral("分类 softmax 失败"), {}};
-            for (float& v : logits) v = float(v / sum);
+            // 取 host 原始值（fp32 连续）
+            if (buf.dtype() != via::DataType::FLOAT32)
+                buf = buf.to_type(via::DataType::FLOAT32);
+            const Tensor flat = buf.is_contiguous()
+                ? buf.view({std::int64_t(n)}) : buf.contiguous().view({std::int64_t(n)});
+            const auto* raw = static_cast<const float*>(flat.data());
+            if (!raw) return {false, QStringLiteral("输入张量为空"), {}};
 
+            // 部分导出图（如 Ultralytics classify）的输出已含 softmax——值非负、
+            // 不超过 1 且和≈1。此时必须直接当概率用：再次 softmax 会把分布压平
+            // （1000 类时全部≈0.001）。其余情况按 logits 做 softmax。
+            double sum = 0.0;
+            float mn = raw[0], mx = raw[0];
+            for (std::size_t i = 0; i < n; ++i) {
+                sum += raw[i];
+                mn = std::min(mn, raw[i]);
+                mx = std::max(mx, raw[i]);
+            }
+            const bool alreadyProb = (mn >= 0.0f) && (mx <= 1.0f)
+                                     && std::abs(sum - 1.0) < 0.05;
+            const Tensor probs = alreadyProb ? flat : ops::Softmax(flat, 0);
+            const auto* pv = static_cast<const float*>(probs.data());
+            if (!pv) return {false, QStringLiteral("分类 softmax 失败"), {}};
+
+            // argmax（softmax 单调，argmax 即 Top-1）
             std::size_t argmax = 0;
             for (std::size_t i = 1; i < n; ++i)
-                if (logits[i] > logits[argmax]) argmax = i;
+                if (pv[i] > pv[argmax]) argmax = i;
 
             // Top-K（按分数降序，仅显示用）
             const int topk = std::max(1, p.value("topk", 5).toInt());
@@ -629,15 +640,15 @@ inline void registerBuiltinPostProcessTasks() {
             for (std::size_t i = 0; i < n; ++i) order[i] = i;
             const int kk = std::min<int>(topk, int(n));
             std::partial_sort(order.begin(), order.begin() + kk, order.end(),
-                              [&](std::size_t a, std::size_t b) { return logits[a] > logits[b]; });
+                              [pv](std::size_t a, std::size_t b) { return pv[a] > pv[b]; });
 
             if (ctx.display) {
                 QVariantList topkList;
                 for (int i = 0; i < kk; ++i)
                     topkList.append(QVariantMap{{"id", int(order[std::size_t(i)])},
-                                                {"score", double(logits[order[std::size_t(i)]])}});
+                                                {"score", double(pv[order[std::size_t(i)]])}});
                 ctx.display(QVariantMap{{"top1", int(argmax)},
-                                        {"top1Score", double(logits[argmax])},
+                                        {"top1Score", double(pv[argmax])},
                                         {"topk", topkList}});
             }
 

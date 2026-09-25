@@ -315,6 +315,20 @@ private slots:
         QCOMPARE(std::get<double>(r.outputs[0]), 2.0);
         QCOMPARE(captured.value("top1").toInt(), 2);
         QVERIFY(captured.contains("topk"));
+        // softmax 数值校验（ops::Softmax 与手写实现一致）
+        const auto e = [](double x) { return std::exp(x); };
+        const double expected = e(0.7) / (e(0.1) + e(0.2) + e(0.7) + 2 * e(0.05));
+        QVERIFY(std::abs(captured.value("top1Score").toDouble() - expected) < 1e-3);
+        // Top-K 按分数降序
+        const QVariantList topk = captured.value("topk").toList();
+        QCOMPARE(topk.size(), 3);
+        double prev = 2.0;
+        for (const QVariant& e2 : topk) {
+            const double sc = e2.toMap().value("score").toDouble();
+            QVERIFY(sc <= prev + 1e-9);
+            prev = sc;
+        }
+        QCOMPARE(topk.first().toMap().value("id").toInt(), 2);
     }
 
     // 分割解码：重叠框被类内 NMS 抑制，掩码系数从 [4+nc, C) 提取并随保留框带出
@@ -403,6 +417,22 @@ private slots:
         const cv::Mat& out = std::get<cv::Mat>(r.outputs[0]);
         QCOMPARE(out.at<cv::Vec3b>(50, 25), cv::Vec3b(255, 56, 56));  // 左：有着色
         QCOMPARE(out.at<cv::Vec3b>(50, 75), cv::Vec3b(0, 0, 0));      // 右：无掩码
+    }
+
+    // 分类任务：导出图输出已含 softmax 时（非负、和≈1）不得二次 softmax
+    void classifyAlreadySoftmaxedInput() {
+        std::vector<float> v{0.70f, 0.20f, 0.10f};   // 已是概率分布
+        Tensor t(v, std::vector<int64_t>{1, 3});
+        QVariantMap captured;
+        ExecuteContext ctx; ctx.display = [&](const QVariantMap& d) { captured = d; };
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute(ctx, QVariantMap{{"task", "classify"},
+            {"params", QVariantMap{{"topk", 3}}}}, QVector<NodeData>{ t });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(std::get<double>(r.outputs[0]), 0.0);          // argmax = 0
+        QCOMPARE(captured.value("top1").toInt(), 0);
+        // 原样使用：0.70（若二次 softmax 会被压到 ≈0.51）
+        QVERIFY(std::abs(captured.value("top1Score").toDouble() - 0.70) < 1e-4);
     }
 
     // 分割任务：channels-last 原型排布（[1,mh,mw,nm]）经转置后系数通道正确
