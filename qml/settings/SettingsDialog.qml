@@ -70,7 +70,8 @@ Item {
             showMinimap: Settings.showMinimap,
             minimapFps: Settings.minimapFps,
             antialias: Settings.antialias,
-            asyncImage: Settings.asyncImage
+            asyncImage: Settings.asyncImage,
+            autoRun: Settings.autoRun
         }
     }
 
@@ -112,6 +113,7 @@ Item {
         Settings.minimapFps = s.minimapFps
         Settings.antialias = s.antialias
         Settings.asyncImage = s.asyncImage
+        Settings.autoRun = s.autoRun
     }
 
     // ---- 搜索 / 分类过滤 ----
@@ -766,6 +768,18 @@ Item {
                                 id: secPerf
                                 property string category: "perf"
                                 width: parent.width
+
+                                GroupTitle { text: "执行" }
+
+                                SettingRow {
+                                    title: "自动重算"
+                                    desc: "开启后，修改参数 / 连线 / 增删节点约 0.3 秒自动重新求值；手动「运行」仍然可用"
+                                    keywords: "自动 重算 运行 auto run 执行 求值"
+                                    SwitchControl {
+                                        checked: Settings.autoRun
+                                        onToggled: (v) => Settings.autoRun = v
+                                    }
+                                }
 
                                 GroupTitle { text: "渲染" }
 

@@ -11,6 +11,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QTimer>
 #include "PaintBoard.h"
 #include "Settings.h"
 #include "Log.hpp"
@@ -60,7 +61,14 @@ private:
     QHash<QString, QString> m_node_errors;
     // 每个节点最近一次提交后的参数与名称快照，用于 diff 出参数/名称变更命令
     QHash<BaseNode*, QPair<QVariantMap, QString>> m_last_state;
-    NodeManager(QObject *parent = nullptr) : QObject(parent) {
+    // 自动重算：结构/参数变更后防抖一段时间再求值（设置开启时有效）
+    QTimer m_auto_run_timer;
+    // 自动重算期间又来变更：取消当前求值，其结束后以最新图重启
+    bool m_auto_run_pending = false;
+    NodeManager(QObject *parent = nullptr) : QObject(parent), m_auto_run_timer(this) {
+        m_auto_run_timer.setSingleShot(true);
+        m_auto_run_timer.setInterval(300);
+        connect(&m_auto_run_timer, &QTimer::timeout, this, &NodeManager::doAutoRun);
         m_queue_proxy.setSourceModel(&m_exec_queue);
         // 「全部组」按组连续排列（组内保持执行顺序），便于组间分隔
         m_queue_proxy.setSortRole(ExecQueueModel::GroupRole);
@@ -122,6 +130,10 @@ private:
                 rebuildGroupSummary();
                 emit selectedGroupChanged();
                 emit queueChanged();
+            } else if (m_auto_run_pending) {
+                // 自动重算：被取消的求值已结束，用最新图状态重启，保证结果最新
+                m_auto_run_pending = false;
+                if (startRun()) emit autoRunTriggered();
             }
             emit engineChanged();
         });
@@ -147,6 +159,38 @@ private:
         emit queueChanged();
     }
     void refresh(){ if(m_paint_board) m_paint_board->update(); emit graphChanged(); }
+    // 启动一次整图求值（手动运行与自动重算共用）：清错误与显示数据后交给引擎。
+    // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
+    // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
+    bool startRun() {
+        if (engineRunning()) return false;
+        Log::info(QStringLiteral("运行图求值：节点 %1 个，边 %2 条")
+                      .arg(nodeCount()).arg(edgeCount()));
+        clearNodeErrors();
+        // 清空各节点上一轮的显示数据（非端口通道），避免残留过期结果
+        if (m_paint_board)
+            for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
+                QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
+                                          Q_ARG(QVariantMap, QVariantMap{}));
+        return m_executor.run();
+    }
+    // 结构/参数变更后请求一次自动重算：设置关闭时忽略；
+    // 每次变更重启 300ms 计时器，把连续变更合并为一次求值。
+    void requestAutoRun() {
+        if (!Settings::settings()->autoRun()) return;
+        m_auto_run_timer.start();
+    }
+    void doAutoRun() {
+        if (!Settings::settings()->autoRun()) return;
+        if (nodeCount() == 0) return;   // 空图无需求值
+        if (engineRunning()) {
+            // 取消当前求值；其结束（runningChanged）后用最新图重启
+            m_executor.cancel();
+            m_auto_run_pending = true;
+            return;
+        }
+        if (startRun()) emit autoRunTriggered();
+    }
     QString nameOf(const QString& uuid) const {
         if (!m_paint_board) return uuid;
         for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
@@ -307,17 +351,7 @@ public:
     }
     Q_INVOKABLE bool run() {
         if (engineRunning()) return false;
-        Log::info(QStringLiteral("运行图求值：节点 %1 个，边 %2 条")
-                      .arg(nodeCount()).arg(edgeCount()));
-        clearNodeErrors();
-        // 清空各节点上一轮的显示数据（非端口通道），避免残留过期结果
-        if (m_paint_board)
-            for (BaseNode* n : m_paint_board->m_graph.getAllNodes())
-                QMetaObject::invokeMethod(n, "setDisplayData", Qt::DirectConnection,
-                                          Q_ARG(QVariantMap, QVariantMap{}));
-        // 有意保留 ImageStore 中的旧图像：新结果到达时逐节点覆盖，
-        // 失败节点则维持上一次成功结果，避免运行中预览闪烁消失。
-        return m_executor.run();
+        return startRun();
     }
     Q_INVOKABLE void cancelRun() {
         Log::info(QStringLiteral("取消图求值"));
@@ -486,6 +520,7 @@ public:
         if(toPort < 0 || toPort >= ins.size()) return false;
         auto command = std::make_unique<AddEdgeCMD>(outs[fromPort], ins[toPort], m_paint_board);
         bool ok = m_cmd_manager.executeCommand(std::move(command));
+        if (ok) requestAutoRun();
         refresh();
         return ok;
     }
@@ -499,6 +534,7 @@ public:
             m_last_state[node] = { node->params(), node->name() };
             Log::info(QStringLiteral("创建节点：%1 (%2)")
                           .arg(node->typeName(), node->uuid().toString()));
+            requestAutoRun();
         }
         refresh();
         return ok;
@@ -513,6 +549,7 @@ public:
             any = m_cmd_manager.executeCommand(std::move(command)) || any;
         }
         if(any) Log::info(QStringLiteral("删除节点：%1 个").arg(nodes.size()));
+        if (any) requestAutoRun();
         refresh();
         return any;
     }
@@ -526,6 +563,7 @@ public:
             any = m_cmd_manager.executeCommand(std::move(command)) || any;
         }
         if(any) Log::info(QStringLiteral("删除边：%1 条").arg(edges.size()));
+        if (any) requestAutoRun();
         refresh();
         return any;
     }
@@ -533,6 +571,7 @@ public:
         bool ok = m_cmd_manager.undo();
         Log::info(QStringLiteral("撤销%1").arg(ok ? QString() : QStringLiteral("（无可撤销）")));
         syncLastState();
+        if (ok) requestAutoRun();
         refresh();
         return ok;
     }
@@ -540,6 +579,7 @@ public:
         bool ok = m_cmd_manager.redo();
         Log::info(QStringLiteral("重做%1").arg(ok ? QString() : QStringLiteral("（无可重做）")));
         syncLastState();
+        if (ok) requestAutoRun();
         refresh();
         return ok;
     }
@@ -588,6 +628,7 @@ public:
             if(m_cmd_manager.executeCommand(std::move(cmd))){
                 m_last_state[node] = { cur, cur_name };
                 Log::info(QStringLiteral("修改参数：%1").arg(node->typeName()));
+                requestAutoRun();
             }
             refresh();
             return;
@@ -611,6 +652,7 @@ public:
             auto cmd = std::make_unique<RemoveEdgeCMD>(e.start_port, e.stop_port, m_paint_board);
             m_cmd_manager.executeCommand(std::move(cmd));
         }
+        if (!incident.isEmpty()) requestAutoRun();
         refresh();
     }
     // 该节点当前是否有任意连线（用于 setParams 判断能否安全重建端口）
@@ -642,6 +684,7 @@ public:
         // 3) 旧边已删除，重建端口不再有悬垂引用
         node->rebuildPorts(ins, outs);
         syncLastState();
+        requestAutoRun();
         refresh();
     }
     Q_INVOKABLE void clearGraph(){
@@ -814,9 +857,11 @@ public:
         }
         port->setPosition(QPointF(x, y));
         auto command = std::make_unique<AddEdgeCMD>(src, port, m_paint_board);
-        if(m_cmd_manager.executeCommand(std::move(command)))
+        if(m_cmd_manager.executeCommand(std::move(command))){
             Log::info(QStringLiteral("连接：%1 → %2")
                           .arg(src->father()->typeName(), port->father()->typeName()));
+            requestAutoRun();
+        }
         m_paint_board->finishDrawing();
         refresh();
     }
@@ -858,9 +903,11 @@ public:
         }
         if(src && dst){
             auto command = std::make_unique<AddEdgeCMD>(src, dst, m_paint_board);
-            if(m_cmd_manager.executeCommand(std::move(command)))
+            if(m_cmd_manager.executeCommand(std::move(command))){
                 Log::info(QStringLiteral("连接：%1 → %2")
                               .arg(src->father()->typeName(), dst->father()->typeName()));
+                requestAutoRun();
+            }
         } else {
             Log::warn(QStringLiteral("连接失败：未找到兼容的目标端口"));
         }
@@ -888,6 +935,8 @@ signals:
     void selectedGroupChanged();
     void focusQueueNode(const QString& uuid);
     void nodeFocusRequested(qreal wx, qreal wy);
+    // 自动重算实际启动了一次求值（设置开启时由结构/参数变更触发）
+    void autoRunTriggered();
 
 public:
     NodeManager(const NodeManager&) = delete;

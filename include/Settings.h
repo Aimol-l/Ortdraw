@@ -46,6 +46,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool asyncImage READ asyncImage WRITE setAsyncImage NOTIFY asyncImageChanged)
     Q_PROPERTY(bool propsOpen READ propsOpen WRITE setPropsOpen NOTIFY propsOpenChanged)
     Q_PROPERTY(bool showMinimap READ showMinimap WRITE setShowMinimap NOTIFY showMinimapChanged)
+    Q_PROPERTY(bool autoRun READ autoRun WRITE setAutoRun NOTIFY autoRunChanged)
 public:
     explicit Settings(QObject* parent = nullptr)
         : QObject(parent) {
@@ -114,6 +115,7 @@ public:
     bool asyncImage() const { return m_asyncImage; }
     bool propsOpen() const { return m_propsOpen; }
     bool showMinimap() const { return m_showMinimap; }
+    bool autoRun() const { return m_autoRun; }
 
     void setTheme(const QString& v) {
         const QString n = oneOf(v, {"light", "dark"}, "light");
@@ -279,6 +281,11 @@ public:
         if (m_propsOpen == v) return;
         m_propsOpen = v; m_store->setValue("ui/propsOpen", v); emit propsOpenChanged();
     }
+    // 参数 / 连线 / 节点变更后自动重新求值（默认关闭，手动「运行」仍可用）
+    void setAutoRun(bool v) {
+        if (m_autoRun == v) return;
+        m_autoRun = v; m_store->setValue("perf/autoRun", v); emit autoRunChanged();
+    }
 
     Q_INVOKABLE void resetDefaults() {
         Log::info(QStringLiteral("恢复默认设置"));
@@ -318,6 +325,7 @@ public:
         m_asyncImage = true; m_store->setValue("perf/asyncImage", m_asyncImage);
         m_propsOpen = false; m_store->setValue("ui/propsOpen", m_propsOpen);
         m_showMinimap = true; m_store->setValue("canvas/showMinimap", m_showMinimap);
+        m_autoRun = false; m_store->setValue("perf/autoRun", m_autoRun);
 
         emit themeChanged();
         emit accentColorChanged();
@@ -352,6 +360,7 @@ public:
         emit asyncImageChanged();
         emit propsOpenChanged();
         emit showMinimapChanged();
+        emit autoRunChanged();
     }
 
     Q_INVOKABLE void sync() { m_store->sync(); }
@@ -400,6 +409,7 @@ signals:
     void asyncImageChanged();
     void propsOpenChanged();
     void showMinimapChanged();
+    void autoRunChanged();
 
 private:
     static QString oneOf(const QString& v, const QStringList& allowed, const QString& def) {
@@ -451,6 +461,7 @@ private:
         m_asyncImage = m_store->value("perf/asyncImage", true).toBool();
         m_propsOpen = m_store->value("ui/propsOpen", false).toBool();
         m_showMinimap = m_store->value("canvas/showMinimap", true).toBool();
+        m_autoRun = m_store->value("perf/autoRun", false).toBool();
     }
 
     std::unique_ptr<QSettings> m_store;
@@ -490,4 +501,5 @@ private:
     bool m_asyncImage = true;
     bool m_propsOpen = false;
     bool m_showMinimap = true;
+    bool m_autoRun = false;
 };
