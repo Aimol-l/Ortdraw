@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Theme
 import Settings
 import NodeManager
+import FileDialogs
 
 // 单个任务参数控件（紧凑版）：标签内联到控件内部左侧（灰字，10px），
 // 高度统一 20；宽度由父级（任务行/网格列）给定。
@@ -364,11 +365,88 @@ Item {
         }
     }
 
+    // ---- file：标签 + 路径显示 + 「浏览…」按钮（如类别文件）----
+    Row {
+        id: fileRow
+        visible: field.kind === "file"
+        width: field.width
+        height: field.height
+        spacing: 4
+
+        // 依赖 revision：参数变化（选择文件）后重新求值
+        readonly property string filePath: (field.revision, "" + field.val(field.key))
+
+        Text {
+            id: fileLabel
+            height: fileRow.height
+            verticalAlignment: Text.AlignVCenter
+            text: field.labelText
+            color: Theme.fgDim
+            font.pixelSize: 10
+            renderType: field.textRenderType
+        }
+        Rectangle {
+            height: field.height
+            width: Math.max(30, fileRow.width - fileLabel.implicitWidth
+                           - browseBtn.width - fileRow.spacing * 2)
+            radius: 5
+            color: Theme.bg
+            border.width: 1
+            border.color: Theme.border
+
+            Text {
+                id: filePathText
+                anchors.fill: parent
+                anchors.leftMargin: 6
+                anchors.rightMargin: 4
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideMiddle
+                color: fileRow.filePath === "" ? Theme.fgDim : Theme.fg
+                font.pixelSize: 10
+                text: fileRow.filePath === "" ? "未选择" : fileRow.filePath.split("/").pop()
+                renderType: field.textRenderType
+            }
+        }
+        Rectangle {
+            id: browseBtn
+            width: browseLabel.implicitWidth + 14
+            height: field.height
+            radius: 5
+            color: browseHover.hovered ? Theme.bgHover : Theme.bgElev
+            border.width: 1
+            border.color: browseHover.hovered ? Theme.blue : Theme.border
+
+            HoverHandler { id: browseHover }
+
+            Text {
+                id: browseLabel
+                anchors.centerIn: parent
+                text: "浏览…"
+                color: Theme.fg
+                font.pixelSize: 10
+                renderType: field.textRenderType
+            }
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: {
+                    if (!field.claimClick(browseBtn,
+                            Qt.point(browseBtn.width / 2, browseBtn.height / 2)))
+                        return
+                    var p = FileDialogs.openClassFile("" + field.val(field.key))
+                    if (p !== "")
+                        field.commit(p)
+                }
+            }
+        }
+    }
+
     // ---- int / float / text：内联标签 + 右对齐值 ----
     Rectangle {
         id: scalarBox
         visible: field.kind !== "bool" && field.kind !== "select"
                  && field.kind !== "floats" && field.kind !== "size2"
+                 && field.kind !== "file"
         width: field.width
         height: field.height
         radius: 5

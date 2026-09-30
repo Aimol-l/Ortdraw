@@ -85,16 +85,18 @@ PostProcessNode {
 
                             Text {
                                 height: barRow.height
-                                width: 46
+                                width: 64
                                 verticalAlignment: Text.AlignVCenter
-                                text: "类 " + barRow.modelData.id
+                                // 有类别文件时显示名称，否则回退 "类 <id>"
+                                text: barRow.modelData.name !== undefined
+                                    ? ("" + barRow.modelData.name) : "类 " + barRow.modelData.id
                                 color: Theme.fg
                                 font.pixelSize: 10
                                 elide: Text.ElideRight
                                 renderType: root.textRenderType
                             }
                             Item {
-                                width: Math.max(0, barRow.width - 46 - 34 - barRow.spacing * 2)
+                                width: Math.max(0, barRow.width - 64 - 34 - barRow.spacing * 2)
                                 height: barRow.height
 
                                 Rectangle {

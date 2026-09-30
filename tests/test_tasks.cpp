@@ -464,6 +464,61 @@ private slots:
         QCOMPARE(out.at<cv::Vec3b>(50, 75), cv::Vec3b(0, 0, 0));      // 右：无掩码
     }
 
+    // 类别文件：UTF-8、每行一个、trim、跳过空行；不存在 → 空表
+    void classFileLoading() {
+        QTemporaryFile f;
+        QVERIFY(f.open());
+        f.write("person\n\n  car  \nbicycle\n\n");
+        f.close();
+        const auto names = postprocess_detail::loadClassNames(f.fileName());
+        QCOMPARE(int(names.size()), 3);
+        QCOMPARE(names[0], QStringLiteral("person"));
+        QCOMPARE(names[1], QStringLiteral("car"));       // 首尾空白被 trim
+        QCOMPARE(names[2], QStringLiteral("bicycle"));
+        // 不存在的文件 → 空表（静默回退到 id 显示）
+        QCOMPARE(int(postprocess_detail::loadClassNames(QStringLiteral("/no/such/file.txt")).size()), 0);
+        // 空路径 → 空表
+        QCOMPARE(int(postprocess_detail::loadClassNames(QString()).size()), 0);
+    }
+
+    // 标签格式：有名称 → "name score"；无名称/id 越界 → "id:score"
+    void classLabelFormat() {
+        const std::vector<QString> names{QStringLiteral("person"), QStringLiteral("car")};
+        postprocess_detail::Detection d;
+        d.box = cv::Rect2f(0, 0, 10, 10);
+        d.score = 0.912f;
+        d.cls = 0;
+        QCOMPARE(postprocess_detail::classLabel(d, names), QStringLiteral("person 0.91"));
+        d.cls = 1;
+        QCOMPARE(postprocess_detail::classLabel(d, names), QStringLiteral("car 0.91"));
+        d.cls = 5;   // 越界 → 回退 id 格式
+        QCOMPARE(postprocess_detail::classLabel(d, names), QStringLiteral("5:0.91"));
+        d.cls = 1;
+        QCOMPARE(postprocess_detail::classLabel(d, std::vector<QString>{}), QStringLiteral("1:0.91"));
+    }
+
+    // classify 任务：加载类别文件后 display 带名称（端口输出仍是 id）
+    void classifyWithClassFile() {
+        QTemporaryFile f;
+        QVERIFY(f.open());
+        f.write("tench\ngoldfish\ngreat white shark\n");
+        f.close();
+        std::vector<float> v{0.1f, 0.2f, 0.7f};   // argmax = 2
+        Tensor t(v, std::vector<int64_t>{1, 3});
+        QVariantMap captured;
+        ExecuteContext ctx; ctx.display = [&](const QVariantMap& d) { captured = d; };
+        PostProcessExecutor ex;
+        const ExecResult r = ex.execute(ctx, QVariantMap{{"task", "classify"},
+            {"params", QVariantMap{{"topk", 2}, {"classFile", f.fileName()}}}},
+            QVector<NodeData>{ t });
+        QVERIFY2(r.ok, qPrintable(r.error));
+        QCOMPARE(captured.value("top1").toInt(), 2);
+        QCOMPARE(captured.value("top1Name").toString(), QStringLiteral("great white shark"));
+        const QVariantList topk = captured.value("topk").toList();
+        QCOMPARE(topk.first().toMap().value("name").toString(), QStringLiteral("great white shark"));
+        QCOMPARE(std::get<double>(r.outputs[0]), 2.0);
+    }
+
     // 分割任务：缺输入报错（端口契约）
     void yoloSegmentMissingInputs() {
         std::vector<float> hv(6, 0.0f);

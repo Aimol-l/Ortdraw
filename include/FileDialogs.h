@@ -35,6 +35,11 @@ public:
         return QFileDialog::getOpenFileName(nullptr, tr("选择 ONNX 模型"), start,
             QStringLiteral("ONNX 模型 (*.onnx);;所有文件 (*)"));
     }
+    Q_INVOKABLE QString openClassFile(const QString& startPath = QString()) {
+        const QString start = startPath.isEmpty() ? QDir::homePath() : startPath;
+        return QFileDialog::getOpenFileName(nullptr, tr("选择类别文件"), start,
+            QStringLiteral("类别文件 (*.txt);;所有文件 (*)"));
+    }
     Q_INVOKABLE QString saveImage(const QString& startPath = QString()) {
         QString f = QFileDialog::getSaveFileName(nullptr, tr("保存图片"),
             startPath.isEmpty() ? QStringLiteral("output.png") : startPath,

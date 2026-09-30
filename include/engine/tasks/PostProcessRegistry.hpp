@@ -11,6 +11,9 @@
 #include <utility>
 #include <vector>
 #include <QVariantList>
+#include <QFile>
+#include <QString>
+#include <QStringList>
 #include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
 #include <tensorvia/core/ops.h>
@@ -52,6 +55,30 @@ inline const cv::Scalar& classColor(int cls) {
     };
     const int n = int(sizeof(kColors) / sizeof(kColors[0]));
     return kColors[((cls % n) + n) % n];
+}
+
+// 加载类别文件：UTF-8、每行一个类别名（行号即类别 id）、trim、跳过空行。
+// 文件不存在/不可读/空路径 → 空表（调用方静默回退到 id 显示）。
+inline std::vector<QString> loadClassNames(const QString& path) {
+    if (path.isEmpty()) return {};
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+    const QString text = QString::fromUtf8(f.readAll());
+    f.close();
+    std::vector<QString> names;
+    const QStringList lines = text.split('\n');
+    names.reserve(lines.size());
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (!line.isEmpty()) names.push_back(line);
+    }
+    return names;
+}
+
+// 类别名查询：id 有效且有名 → 名称；否则空（调用方回退 id 格式）
+inline const QString* classNameAt(const std::vector<QString>& names, int cls) {
+    if (cls < 0 || std::size_t(cls) >= names.size()) return nullptr;
+    return names[std::size_t(cls)].isEmpty() ? nullptr : &names[std::size_t(cls)];
 }
 
 // 取第 idx 个输入为 Tensor（不做拷贝）；失败返回 nullptr
@@ -156,6 +183,14 @@ struct Detection {
     int cls = 0;
     std::vector<float> coeff;   // 分割掩码系数（yolo_detect 为空）
 };
+
+// 检测标签文本：有类别名 → "name 0.91"；无名称/id 越界 → "id:0.91"（原格式）
+inline QString classLabel(const Detection& d, const std::vector<QString>& names) {
+    const QString score = QString::number(double(d.score), 'f', 2);
+    if (const QString* name = classNameAt(names, d.cls))
+        return *name + ' ' + score;
+    return QString::number(d.cls) + ':' + score;
+}
 
 // YOLO 检测头形状解析：支持 [1, 4+nc, N]（channels-first）与 [1, N, 4+nc]。
 // 计划给出的判据是 shape[1] < shape[2] 时为 channels-first；但 N 可能小于 4+nc
@@ -270,9 +305,11 @@ inline bool decodeDetections(const Tensor& b, float conf, float iou,
     return true;
 }
 
-// 在画布上画框 + "<cls>:<score>" 标签：标签带实心底色条（贴合框上缘，
-// 空间不足时改画在框内顶部），白字着色（样式参考 YoloSeg.py）
-inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,bool drawScore, int lineWidth) {
+// 在画布上画框 + 标签：标签带实心底色条（宽度与检测框一致，顶部空间不足
+// 时改画在框内顶部），白字着色；有类别文件时标签为 "名称 分数"，
+// 否则为 "id:分数"（样式参考 YoloSeg.py）
+inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets, bool drawScore,
+                           int lineWidth, const std::vector<QString>& names = {}) {
     const int lw = lineWidth > 0 ? lineWidth : 1;
     for (const Detection& d : dets) {
         const cv::Scalar& col = classColor(d.cls);
@@ -281,7 +318,7 @@ inline void drawDetections(cv::Mat& canvas, const std::vector<Detection>& dets,b
                            int(std::lround(d.box.y + d.box.height)));
         cv::rectangle(canvas, tl, br, col, lw);
         if(lw>0){
-            const std::string text = std::format("{}:{:.2f}",d.cls,d.score);
+            const std::string text = classLabel(d, names).toStdString();
             int baseline = 0;
             const cv::Size ts = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX,
                                                 0.5, 1, &baseline);
@@ -370,13 +407,15 @@ inline void registerBuiltinPostProcessTasks() {
                     {QStringLiteral("元信息"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("图像"), DataType::Image}};
         s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45},
-                                 {"maxBoxes", 300}, {"drawScore", true}, {"lineWidth", 2}};
+                                 {"maxBoxes", 300}, {"drawScore", true}, {"lineWidth", 2},
+                                 {"classFile", ""}};
         s.params = {
             {"conf", QStringLiteral("置信度"), "float", 0.25, {}},
             {"iou", QStringLiteral("IoU"), "float", 0.45, {}},
             {"maxBoxes", QStringLiteral("最大框数"), "int", 300, {}},
             {"drawScore", QStringLiteral("画分数"), "bool", true, {}},
             {"lineWidth", QStringLiteral("线宽"), "int", 2, {}},
+            {"classFile", QStringLiteral("类别文件"), "file", "", {}},
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
@@ -406,6 +445,7 @@ inline void registerBuiltinPostProcessTasks() {
             const float conf     = p.value("conf", 0.25).toFloat();
             const bool drawScore = p.value("drawScore", true).toBool();
             const int maxBoxes   = std::max(1, p.value("maxBoxes", 300).toInt());
+            const std::vector<QString> names = loadClassNames(p.value("classFile").toString());
 
             std::vector<Detection> dets;
             if (!decodeDetections(headHost, conf, iou, maxBoxes, dets)){
@@ -415,7 +455,7 @@ inline void registerBuiltinPostProcessTasks() {
             for (Detection& d : dets) d.box = mapBoxToOriginal(d.box, meta);
 
             cv::Mat canvas = img->clone();
-            drawDetections(canvas, dets, drawScore, lineWidth);
+            drawDetections(canvas, dets, drawScore, lineWidth, names);
 
             ExecResult r;
             r.outputs.push_back(canvas);
@@ -435,13 +475,14 @@ inline void registerBuiltinPostProcessTasks() {
                     {QStringLiteral("元信息"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("图像"), DataType::Image}};
         s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45}, {"maskThr", 0.5},
-                                 {"alpha", 0.45}, {"maxBoxes", 300}};
+                                 {"alpha", 0.45}, {"maxBoxes", 300}, {"classFile", ""}};
         s.params = {
             {"conf", QStringLiteral("置信度"), "float", 0.25, {}},
             {"iou", QStringLiteral("IoU"), "float", 0.45, {}},
             {"maskThr", QStringLiteral("掩码阈值"), "float", 0.5, {}},
             {"alpha", QStringLiteral("透明度"), "float", 0.45, {}},
             {"maxBoxes", QStringLiteral("最大框数"), "int", 300, {}},
+            {"classFile", QStringLiteral("类别文件"), "file", "", {}},
         };
         s.compute = [](const ExecuteContext&, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
@@ -480,6 +521,7 @@ inline void registerBuiltinPostProcessTasks() {
             const float maskThr = p.value("maskThr", 0.5).toFloat();
             const float alpha = p.value("alpha", 0.45).toFloat();
             const int maxBoxes = std::max(1, p.value("maxBoxes", 300).toInt());
+            const std::vector<QString> names = loadClassNames(p.value("classFile").toString());
 
             // 检测头已统一为 [1, M, 4+nc+nm]：类别通道 [4, coeffBegin)，掩码系数 [coeffBegin, C)
             const auto hs = head.shape();
@@ -573,7 +615,7 @@ inline void registerBuiltinPostProcessTasks() {
                     cv::addWeighted(colored, alpha, orig, 1.0 - alpha, 0.0, canvas(roi));
                 }
             }
-            drawDetections(canvas, dets, true, 2);
+            drawDetections(canvas, dets, true, 2, names);
 
             ExecResult r;
             r.outputs.push_back(canvas);
@@ -589,9 +631,10 @@ inline void registerBuiltinPostProcessTasks() {
         s.name = QStringLiteral("分类");
         s.inputs = {{QStringLiteral("input0"), DataType::Tensor}};
         s.outputs = {{QStringLiteral("类别 id"), DataType::Number}};
-        s.defaults = QVariantMap{{"topk", 5}};
+        s.defaults = QVariantMap{{"topk", 5}, {"classFile", ""}};
         s.params = {
             {"topk", QStringLiteral("Top-K"), "int", 5, {}},
+            {"classFile", QStringLiteral("类别文件"), "file", "", {}},
         };
         s.compute = [](const ExecuteContext& ctx, const QVariantMap& p,
                        const QVector<NodeData>& inputs) -> ExecResult {
@@ -643,13 +686,22 @@ inline void registerBuiltinPostProcessTasks() {
                               [pv](std::size_t a, std::size_t b) { return pv[a] > pv[b]; });
 
             if (ctx.display) {
+                // 类别文件（有则附带名称，端口输出与 id 字段不受影响）
+                const std::vector<QString> names = loadClassNames(p.value("classFile").toString());
                 QVariantList topkList;
-                for (int i = 0; i < kk; ++i)
-                    topkList.append(QVariantMap{{"id", int(order[std::size_t(i)])},
-                                                {"score", double(pv[order[std::size_t(i)]])}});
-                ctx.display(QVariantMap{{"top1", int(argmax)},
-                                        {"top1Score", double(pv[argmax])},
-                                        {"topk", topkList}});
+                for (int i = 0; i < kk; ++i) {
+                    const int id = int(order[std::size_t(i)]);
+                    QVariantMap item{{"id", id}, {"score", double(pv[order[std::size_t(i)]])}};
+                    if (const QString* name = classNameAt(names, id))
+                        item["name"] = *name;
+                    topkList.append(item);
+                }
+                QVariantMap display{{"top1", int(argmax)},
+                                    {"top1Score", double(pv[argmax])},
+                                    {"topk", topkList}};
+                if (const QString* name = classNameAt(names, int(argmax)))
+                    display["top1Name"] = *name;
+                ctx.display(display);
             }
 
             ExecResult r;

@@ -55,6 +55,7 @@ Column {
             return lw + n * 40 + (n - 1) * 4
         }
         if (d.kind === "size2") return lw + 38 + 3 + 7 + 3 + 38   // 两格 38 + “×” + 间距
+        if (d.kind === "file") return lw + 90 + 6 + 48             // 路径框 + 浏览按钮 → 跨列
         if (d.kind === "select") {
             // 用最长选项（而非当前值）估算，保证切换选项时布局稳定
             var maxOpt = 0
