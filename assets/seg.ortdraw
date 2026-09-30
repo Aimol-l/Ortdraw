@@ -1,0 +1,128 @@
+{
+    "edges": [
+        {
+            "fromNode": "{2731359f-9a42-43fe-888c-d9dffa5d1361}",
+            "fromPort": 0,
+            "toNode": "{57fc0d40-1e54-49f7-aded-d550b326bcef}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{57fc0d40-1e54-49f7-aded-d550b326bcef}",
+            "fromPort": 0,
+            "toNode": "{df0703ea-b0e2-4e40-83fa-8766bacefb31}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{2731359f-9a42-43fe-888c-d9dffa5d1361}",
+            "fromPort": 0,
+            "toNode": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "toPort": 2
+        },
+        {
+            "fromNode": "{57fc0d40-1e54-49f7-aded-d550b326bcef}",
+            "fromPort": 1,
+            "toNode": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "toPort": 3
+        },
+        {
+            "fromNode": "{df0703ea-b0e2-4e40-83fa-8766bacefb31}",
+            "fromPort": 0,
+            "toNode": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{df0703ea-b0e2-4e40-83fa-8766bacefb31}",
+            "fromPort": 1,
+            "toNode": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "toPort": 1
+        },
+        {
+            "fromNode": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "fromPort": 0,
+            "toNode": "{9f96e566-84a6-47c0-80a4-d0d7d744a7ef}",
+            "toPort": 0
+        }
+    ],
+    "nodes": [
+        {
+            "h": 234,
+            "name": "ONNX 推理",
+            "params": {
+                "device": "auto",
+                "modelPath": "/home/aimol/Documents/C++/Workspace/Ortdraw/models/yolo11m-seg.onnx",
+                "threads": 0
+            },
+            "pinned": false,
+            "type": "OnnxInfer",
+            "uuid": "{df0703ea-b0e2-4e40-83fa-8766bacefb31}",
+            "w": 240,
+            "x": 46.77415246708665,
+            "y": 256.2115298497879
+        },
+        {
+            "h": 1007.9715630988936,
+            "name": "图片显示",
+            "params": {
+            },
+            "pinned": true,
+            "type": "ImageShow",
+            "uuid": "{9f96e566-84a6-47c0-80a4-d0d7d744a7ef}",
+            "w": 1087.1516725613728,
+            "x": 330.76528096282914,
+            "y": 253.1145720059758
+        },
+        {
+            "h": 242,
+            "name": "加载图片",
+            "params": {
+                "path": "/home/aimol/Pictures/000000000063.jpg"
+            },
+            "pinned": false,
+            "type": "ImageLoad",
+            "uuid": "{2731359f-9a42-43fe-888c-d9dffa5d1361}",
+            "w": 330.43478489823525,
+            "x": -319.89569939797593,
+            "y": 253.8907504536628
+        },
+        {
+            "h": 382,
+            "name": "后处理",
+            "params": {
+                "params": {
+                    "alpha": 0.45,
+                    "classFile": "/home/aimol/Documents/C++/Workspace/Ortdraw/models/coco.txt",
+                    "conf": 0.25,
+                    "iou": 0.45,
+                    "maskThr": 0.5,
+                    "maxBoxes": 300
+                },
+                "task": "yolo_segment"
+            },
+            "pinned": false,
+            "type": "PostProcess",
+            "uuid": "{d22aec44-507e-435b-af1f-5d8d027281a4}",
+            "w": 280,
+            "x": 30.77415246708665,
+            "y": 496.2115298497878
+        },
+        {
+            "h": 178,
+            "name": "预处理",
+            "params": {
+                "params": {
+                    "dtype": "fp32",
+                    "pad": 114,
+                    "size": 640
+                },
+                "task": "yolo_letterbox"
+            },
+            "pinned": false,
+            "type": "PreProcess",
+            "uuid": "{57fc0d40-1e54-49f7-aded-d550b326bcef}",
+            "w": 333.2173922417969,
+            "x": -321.22584753291335,
+            "y": 512.2115298497878
+        }
+    ],
+    "version": 1
+}
