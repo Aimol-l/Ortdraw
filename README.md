@@ -140,11 +140,11 @@ docs/               设计与实施文档
 ## 依赖
 
 - CMake ≥ 3.30
-- 支持 C++23 的编译器（GCC 13+ / Clang 16+ / MSVC 19.35+）
+- 支持 C++23 的编译器（GCC 13+ / Clang 16+）
 - Qt 6.8+（Core、Gui、Quick、Widgets、Test）
 - OpenCV 4/5
 - **Tensorvia**（张量库；CMake 目标 `Tensorvia::tensorvia`，头文件 `<tensorvia/core/tensor.h>`）
-- **ONNX Runtime**（Linux 默认查找 `/usr`，可用 `-DONNXRUNTIME_ROOT` 指定；Windows 用 `-DONNX_DIR`）
+- **ONNX Runtime**（默认查找 `/usr`，可用 `-DONNXRUNTIME_ROOT=<prefix>` 指定安装前缀）
 
 ## 开发辅助
 
@@ -192,7 +192,6 @@ ctest --test-dir build --output-on-failure
   - ONNX 任务链：PreProcess（预处理）→ OnnxInfer（推理）→ PostProcess（后处理）
 - 默认为手动运行；开启「自动重算」后变更约 0.3 秒自动重新求值（详见「执行引擎 → 当前限制」）。
 - 删除的节点对象会保留在内存中直到画布销毁（撤销所需，编辑器规模下可忽略）。
-- Windows 构建配置未验证。
 
 ## 后续路线
 

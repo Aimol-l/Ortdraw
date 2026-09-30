@@ -18,23 +18,12 @@ get_filename_component(PROJECT_DIR ${CMAKE_CURRENT_LIST_FILE} DIRECTORY)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_DIR}/bin)
 set(CMAKE_BUILD_PARALLEL_LEVEL 4)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    message(STATUS "current platform: Linux")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    message(STATUS "current platform: Windows")
-    set(OpenCV_DIR "D:/OpenCV/build/x64/vc16/lib")
-    set(ONNX_DIR "D:/OnnxRuntime")
-    set(TBB_DIR "D:/Tbb/lib/cmake/tbb")
-    include_directories(${ONNX_DIR}/include)
-    link_directories(${ONNX_DIR}/lib)
-    add_compile_options(/W4 /Zc:__cplusplus /std:c++latest)
-endif()
+message(STATUS "current platform: ${CMAKE_SYSTEM_NAME}")
 
 find_package(OpenCV REQUIRED)
 find_package(Tensorvia REQUIRED)
 find_package(Qt6 COMPONENTS Core Gui Quick Widgets Test REQUIRED)
 qt_standard_project_setup(REQUIRES 6.8)
-link_directories(${PROJECT_DIR}/lib)
 include_directories(${PROJECT_DIR}/include/)
 
 file(GLOB SRC_FILES
@@ -52,7 +41,6 @@ file(GLOB SRC_FILES
 )
 
 qt_add_executable(${CMAKE_PROJECT_NAME}
-    WIN32
     ./assets.qrc
     ${SRC_FILES}
 )
