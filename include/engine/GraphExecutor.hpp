@@ -60,8 +60,10 @@ public:
         if (m_thread.joinable()) m_thread.join();
         if (!m_graph) return false;
 
-        // 本次运行将重建全分辨率结果缓存，先清空上一轮
-        clearFullImages();
+        // 注意：不在这里清空全分辨率结果缓存。QML 预览按 hasFullImage() 在
+        // 「全分辨率 / 缩略图」URL 之间选择，运行开始即清空会让每个节点的预览
+        // 在本轮结果到达前退化成缩略图、到达又跳回（连续运行时会一直闪烁）。
+        // 陈旧条目改为在运行结束时按“本轮是否再写”清理（见 worker 末尾）。
 
         QVector<NodeSnapshot> nodes;
         QHash<BaseNode*, QVector<Incoming>> incoming;
@@ -233,6 +235,7 @@ private:
             }, Qt::QueuedConnection);
         };
 
+        QSet<QString> written;   // 本轮写出全分辨率结果的节点（用于清理陈旧条目）
         for (BaseNode* n : order) {
             if (runId != m_run_id.load()) return;
             if (m_cancel.load()) { aborted = true; break; }
@@ -310,6 +313,7 @@ private:
                         m_full.insert(uuid, m);
                         m_full_cache.remove(uuid);
                     }
+                    written.insert(uuid);
                     const QImage img = makeThumbnail(m);
                     if (img.isNull()) continue;
                     QMetaObject::invokeMethod(this, [this, runId, uuid, img] {
@@ -328,6 +332,18 @@ private:
                 failed.insert(s.node);
                 allOk = false;
                 reportNode(s.uuid, int(NodeStatus::Failed), QStringLiteral("图中存在环"), 0);
+            }
+        }
+
+        // 清理上一轮遗留、本轮没有再写全分辨率结果的节点：失败/跳过的节点保留上一轮
+        // 图像（与缩略图行为一致，避免预览消失），但已不出图的陈旧条目必须清掉。
+        {
+            QMutexLocker l(&m_full_mutex);
+            for (auto it = m_full.begin(); it != m_full.end();) {
+                if (written.contains(it.key())) ++it; else it = m_full.erase(it);
+            }
+            for (auto it = m_full_cache.begin(); it != m_full_cache.end();) {
+                if (written.contains(it.key())) ++it; else it = m_full_cache.erase(it);
             }
         }
 
