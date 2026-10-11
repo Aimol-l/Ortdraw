@@ -8,6 +8,7 @@
 #include "engine/executors/FlipRotateExecutor.hpp"
 #include "engine/executors/GrayExecutor.hpp"
 #include "engine/executors/ImageLoadExecutor.hpp"
+#include "engine/executors/VideoInputExecutor.hpp"
 #include "engine/executors/ImageSaveExecutor.hpp"
 #include "engine/executors/ImageShowExecutor.hpp"
 #include "engine/executors/MedianExecutor.hpp"
@@ -30,6 +31,7 @@ inline void registerBuiltinExecutors() {
     r.registerExecutor("PostProcess", std::make_shared<PostProcessExecutor>());
     r.registerExecutor("OnnxInfer", std::make_shared<OnnxInferExecutor>());
     r.registerExecutor("ImageLoad", std::make_shared<ImageLoadExecutor>());
+    r.registerExecutor("VideoInput", std::make_shared<VideoInputExecutor>());
     r.registerExecutor("ImageSave", std::make_shared<ImageSaveExecutor>());
     r.registerExecutor("ImageShow", std::make_shared<ImageShowExecutor>());
     r.registerExecutor("Resize",    std::make_shared<ResizeExecutor>());

@@ -2,6 +2,7 @@
     <qresource prefix="/">
         <file alias="main.qml">qml/main.qml</file>
         <file alias="ImageLoadNode.qml">qml/node/ImageLoadNode.qml</file>
+        <file alias="VideoInputNode.qml">qml/node/VideoInputNode.qml</file>
         <file alias="ImageShowNode.qml">qml/node/ImageShowNode.qml</file>
         <file alias="ImageSaveNode.qml">qml/node/ImageSaveNode.qml</file>
         <file alias="ResizeNode.qml">qml/node/ResizeNode.qml</file>

@@ -30,6 +30,13 @@ public:
         return QFileDialog::getOpenFileName(nullptr, tr("选择图片"), imageStartDir(startDir),
             QStringLiteral("图片 (*.png *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;所有文件 (*)"));
     }
+    Q_INVOKABLE QString openVideo(const QString& startDir = QString()) {
+        QString vids = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+        if (vids.isEmpty() || !QDir(vids).exists()) vids = QDir::homePath();
+        const QString start = startDir.isEmpty() ? vids : startDir;
+        return QFileDialog::getOpenFileName(nullptr, tr("选择视频"), start,
+            QStringLiteral("视频 (*.mp4 *.mov *.avi *.mkv *.webm *.flv *.ts *.m4v);;所有文件 (*)"));
+    }
     Q_INVOKABLE QString openModel(const QString& startPath = QString()) {
         const QString start = startPath.isEmpty() ? QDir::homePath() : startPath;
         return QFileDialog::getOpenFileName(nullptr, tr("选择 ONNX 模型"), start,

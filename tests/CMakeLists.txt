@@ -5,6 +5,7 @@ set(TEST_HEADERS
     ${PROJECT_SOURCE_DIR}/include/PaintBoard.h
     ${PROJECT_SOURCE_DIR}/include/Log.hpp
     ${PROJECT_SOURCE_DIR}/include/node/BaseNode.hpp
+    ${PROJECT_SOURCE_DIR}/include/node/VideoInput.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageLoad.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageShow.hpp
     ${PROJECT_SOURCE_DIR}/include/node/ImageSave.hpp
@@ -64,6 +65,7 @@ foreach(src ${TEST_SOURCES})
     target_compile_definitions(${name} PRIVATE
         ORTDRAW_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
         ORTDRAW_MODELS_DIR="${PROJECT_SOURCE_DIR}/models"
+        ORTDRAW_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
     )
     target_link_libraries(${name} PRIVATE
         Qt6::Core Qt6::Gui Qt6::Quick Qt6::Test
