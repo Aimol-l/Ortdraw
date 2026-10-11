@@ -13,6 +13,9 @@ Item {
     property var coordItem
     // 无执行结果时使用的占位图（空则隐藏预览）
     property url previewSource: ""
+    // 预览是否按比例完整显示（PreserveAspectFit）；默认裁切填满（PreserveAspectCrop）。
+    // 图片显示等需要看全幅的节点置 true。
+    property bool previewAspectFit: false
     // 有执行结果时优先显示 ImageStore 中的真实图像；imageRevision 变化触发重算
     readonly property string effectivePreview: {
         var r = NodeManager.imageRevision
@@ -659,7 +662,8 @@ Item {
             anchors.fill: parent
             anchors.margins: 1
             source: card.effectivePreview
-            fillMode: Image.PreserveAspectCrop
+            fillMode: card.previewAspectFit ? Image.PreserveAspectFit
+                                            : Image.PreserveAspectCrop
             asynchronous: true
         }
 

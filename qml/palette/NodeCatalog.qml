@@ -4,6 +4,7 @@ import QtQuick
 QtObject {
     readonly property var items: [
         { type:"ImageLoad", title:"加载图片", desc:"从磁盘读取图像",     cat:"input",   icon:"image"   },
+        { type:"VideoInput", title:"视频输入", desc:"读取视频文件的一帧（视频 / 摄像头 / 帧）", cat:"input", icon:"video" },
         { type:"ImageSave", title:"保存图片", desc:"将图像写入文件",     cat:"output",  icon:"save"    },
         { type:"ImageShow", title:"图片显示", desc:"预览处理结果",       cat:"output",  icon:"monitor" },
         { type:"Resize",    title:"缩放",     desc:"双线性插值调整尺寸", cat:"process", icon:"resize"  },
@@ -30,6 +31,7 @@ QtObject {
 
     function componentUrl(type) {
         if (type === "ImageLoad") return "qrc:/ImageLoadNode.qml"
+        if (type === "VideoInput") return "qrc:/VideoInputNode.qml"
         if (type === "ImageSave") return "qrc:/ImageSaveNode.qml"
         if (type === "ImageShow") return "qrc:/ImageShowNode.qml"
         if (type === "Resize")    return "qrc:/ResizeNode.qml"

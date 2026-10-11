@@ -5,6 +5,7 @@
 #include "FileDialogs.h"
 #include "Log.hpp"
 #include "node/ImageLoad.hpp"
+#include "node/VideoInput.hpp"
 #include "node/ImageSave.hpp"
 #include "node/ImageShow.hpp"
 #include "node/Resize.hpp"
@@ -55,6 +56,7 @@ int main(int argc, char *argv[]){
         Qt::QueuedConnection);
     qmlRegisterType<PaintBoard>("PaintBoard", 1, 0, "PaintBoard");
     qmlRegisterType<ImageLoadNode>("ImageLoadNode", 1, 0, "ImageLoadNode");
+    qmlRegisterType<VideoInputNode>("VideoInputNode", 1, 0, "VideoInputNode");
     qmlRegisterType<ImageShowNode>("ImageShowNode", 1, 0, "ImageShowNode");
     qmlRegisterType<ImageSaveNode>("ImageSaveNode", 1, 0, "ImageSaveNode");
     qmlRegisterType<ResizeNode>("ResizeNode", 1, 0, "ResizeNode");

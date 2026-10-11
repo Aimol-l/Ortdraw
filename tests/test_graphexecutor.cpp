@@ -269,6 +269,84 @@ private slots:
         QTRY_COMPARE(finished.count(), 1);
         QCOMPARE(finished.at(0).at(1).toInt(), int(NodeStatus::Cancelled));
     }
+
+    // 复现「连续播放时图片显示一直闪烁」：
+    // run() 曾在开始处清空全分辨率缓存，而 QML 预览按 hasFullImage() 在
+    // 「全分辨率 URL / 缩略图 URL」之间选择——本轮结果到达前该值为 false，
+    // 于是每个节点都从全分辨率图跳成缩略图、结果到达又跳回。
+    void fullImageSurvivesRunStart() {
+        DAGraph g;
+        ImageLoadNode load;
+        ImageShowNode show;
+        QVERIFY(g.addNode(&load));
+        QVERIFY(g.addNode(&show));
+        QVERIFY(g.addEdge(load.getOutPorts()[0], show.getInPorts()[0]));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("img.png");
+        const cv::Mat src(10, 20, CV_8UC3, cv::Scalar(10, 20, 30));
+        QVERIFY(cv::imwrite(path.toStdString(), src));
+        load.setPath(path);
+
+        GraphExecutor ex;
+        ex.setGraph(&g);
+        QSignalSpy done(&ex, &GraphExecutor::runFinished);
+
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QVERIFY(done.takeFirst().at(0).toBool());
+        QVERIFY(ex.hasFullImage(load.uuid().toString()));
+        QVERIFY(ex.hasFullImage(show.uuid().toString()));
+
+        // 第二次运行：run() 返回后（工作线程还没回写本轮结果）旧的全分辨率图必须仍在，
+        // 否则预览会在全分辨率/缩略图之间跳变
+        QVERIFY(ex.run());
+        QVERIFY2(ex.hasFullImage(load.uuid().toString()),
+                 "run() 开始即清空全分辨率缓存 → 连续运行时会闪烁");
+        QVERIFY2(ex.hasFullImage(show.uuid().toString()),
+                 "run() 开始即清空全分辨率缓存 → 连续运行时会闪烁");
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QVERIFY(done.takeFirst().at(0).toBool());
+        QVERIFY(ex.hasFullImage(load.uuid().toString()));
+        QVERIFY(ex.hasFullImage(show.uuid().toString()));
+    }
+
+    // 不再「开始即清空」后，必须改为在运行结束时清理本轮没写的陈旧条目，
+    // 否则改图/换任务后旧节点的全分辨率结果会一直驻留内存。
+    void staleFullImagePrunedAfterRun() {
+        DAGraph g;
+        ImageLoadNode load;
+        ImageShowNode show;
+        QVERIFY(g.addNode(&load));
+        QVERIFY(g.addNode(&show));
+        QVERIFY(g.addEdge(load.getOutPorts()[0], show.getInPorts()[0]));
+
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString path = dir.filePath("img.png");
+        const cv::Mat src(10, 20, CV_8UC3, cv::Scalar(10, 20, 30));
+        QVERIFY(cv::imwrite(path.toStdString(), src));
+        load.setPath(path);
+
+        GraphExecutor ex;
+        ex.setGraph(&g);
+        QSignalSpy done(&ex, &GraphExecutor::runFinished);
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QVERIFY(done.takeFirst().at(0).toBool());
+        QVERIFY(ex.hasFullImage(load.uuid().toString()));
+
+        // 让上游失败 → 本轮没有任何节点产出图像 → 陈旧条目应被清掉
+        load.setPath(dir.filePath("gone.png"));
+        QVERIFY(ex.run());
+        QTRY_VERIFY_WITH_TIMEOUT(done.count() > 0, 10000);
+        QVERIFY(!done.takeFirst().at(0).toBool());
+        QVERIFY2(!ex.hasFullImage(load.uuid().toString()),
+                 "本轮未产出图像的陈旧全分辨率结果未被清理");
+        QVERIFY2(!ex.hasFullImage(show.uuid().toString()),
+                 "本轮未产出图像的陈旧全分辨率结果未被清理");
+    }
 };
 
 QTEST_MAIN(TestGraphExecutor)

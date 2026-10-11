@@ -1,0 +1,125 @@
+{
+    "edges": [
+        {
+            "fromNode": "{970aaf96-4818-4a74-b532-2576bb8e42dc}",
+            "fromPort": 0,
+            "toNode": "{668ffdf1-fc5e-4960-b742-eee999204a12}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{668ffdf1-fc5e-4960-b742-eee999204a12}",
+            "fromPort": 0,
+            "toNode": "{73353110-6c16-4ae6-ab39-cb80a1c1cf61}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{73353110-6c16-4ae6-ab39-cb80a1c1cf61}",
+            "fromPort": 0,
+            "toNode": "{21580703-4474-47be-97ce-36016bc0d30c}",
+            "toPort": 0
+        },
+        {
+            "fromNode": "{970aaf96-4818-4a74-b532-2576bb8e42dc}",
+            "fromPort": 0,
+            "toNode": "{21580703-4474-47be-97ce-36016bc0d30c}",
+            "toPort": 1
+        },
+        {
+            "fromNode": "{668ffdf1-fc5e-4960-b742-eee999204a12}",
+            "fromPort": 1,
+            "toNode": "{21580703-4474-47be-97ce-36016bc0d30c}",
+            "toPort": 2
+        },
+        {
+            "fromNode": "{21580703-4474-47be-97ce-36016bc0d30c}",
+            "fromPort": 0,
+            "toNode": "{cdd3e241-32fd-473d-956d-0dad0118f812}",
+            "toPort": 0
+        }
+    ],
+    "nodes": [
+        {
+            "h": 191.93599985598757,
+            "name": "ONNX 推理",
+            "params": {
+                "device": "auto",
+                "modelPath": "/home/aimol/Documents/C++/Workspace/Ortdraw/models/yolo11m.onnx",
+                "threads": 0
+            },
+            "pinned": true,
+            "type": "OnnxInfer",
+            "uuid": "{73353110-6c16-4ae6-ab39-cb80a1c1cf61}",
+            "w": 275.8159973357696,
+            "x": 262.46959776524756,
+            "y": 154.68319053388566
+        },
+        {
+            "h": 352,
+            "name": "后处理",
+            "params": {
+                "params": {
+                    "classFile": "",
+                    "conf": 0.25,
+                    "drawScore": true,
+                    "iou": 0.45,
+                    "lineWidth": 2,
+                    "maxBoxes": 300
+                },
+                "task": "yolo_detect"
+            },
+            "pinned": false,
+            "type": "PostProcess",
+            "uuid": "{21580703-4474-47be-97ce-36016bc0d30c}",
+            "w": 288,
+            "x": 270.78397926220856,
+            "y": 354.5279786861587
+        },
+        {
+            "h": 866.2409947980177,
+            "name": "图片显示",
+            "params": {
+            },
+            "pinned": true,
+            "type": "ImageShow",
+            "uuid": "{cdd3e241-32fd-473d-956d-0dad0118f812}",
+            "w": 1251.060308207671,
+            "x": 562.0121919842309,
+            "y": -34.283119384634716
+        },
+        {
+            "h": 428.7176026677474,
+            "name": "视频输入",
+            "params": {
+                "fps": 25,
+                "frame": 1614,
+                "loop": false,
+                "path": "/home/aimol/Documents/C++/Workspace/Ortdraw/assets/test.mkv"
+            },
+            "pinned": true,
+            "type": "VideoInput",
+            "uuid": "{970aaf96-4818-4a74-b532-2576bb8e42dc}",
+            "w": 379.1312044885909,
+            "x": -159.1455927166259,
+            "y": -28.986398179156495
+        },
+        {
+            "h": 178,
+            "name": "预处理",
+            "params": {
+                "params": {
+                    "dtype": "fp32",
+                    "pad": 114,
+                    "size": 640
+                },
+                "task": "yolo_letterbox"
+            },
+            "pinned": false,
+            "type": "PreProcess",
+            "uuid": "{668ffdf1-fc5e-4960-b742-eee999204a12}",
+            "w": 288,
+            "x": 262.1247861954653,
+            "y": -33.46239839088241
+        }
+    ],
+    "version": 1
+}

@@ -14,3 +14,6 @@ build/
 bin/
 .superpowers/
 models/
+
+# 视频测试素材（大文件，不入库）
+assets/test.mkv
