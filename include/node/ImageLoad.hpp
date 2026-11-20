@@ -60,7 +60,7 @@ public:
         m_name = "加载图片";
 
         m_description = "从磁盘读取图片，输出图像，并显示分辨率/格式/大小。";
-        m_output_ports.push_back(new Port("输出", PortType::Output, DataType::Image, QPointF(0,0), this));
+        m_output_ports.push_back(new Port("输出", PortType::Output, PortDataType::Image, QPointF(0,0), this));
     }
     ~ImageLoadNode(){
 

@@ -7,7 +7,7 @@ class TestPaintBoard : public QObject {
 private slots:
     void startDrawingCreatesTempPort() {
         PaintBoard board;
-        Port start("out", PortType::Output, DataType::Image, QPointF(10, 20), nullptr);
+        Port start("out", PortType::Output, PortDataType::Image, QPointF(10, 20), nullptr);
         board.startDrawing(&start, QPointF(10, 20));
         QVERIFY(board.m_drawing_line);
         QCOMPARE(board.m_drawing_edge.start_port, &start);
@@ -15,14 +15,14 @@ private slots:
     }
     void moveDrawingUpdatesStopPort() {
         PaintBoard board;
-        Port start("out", PortType::Output, DataType::Image, QPointF(0, 0), nullptr);
+        Port start("out", PortType::Output, PortDataType::Image, QPointF(0, 0), nullptr);
         board.startDrawing(&start, QPointF(0, 0));
         board.moveDrawing(QPointF(77, 88));
         QCOMPARE(board.m_drawing_edge.stop_port->position(), QPointF(77, 88));
     }
     void cancelDrawingClearsState() {
         PaintBoard board;
-        Port start("out", PortType::Output, DataType::Image, QPointF(0, 0), nullptr);
+        Port start("out", PortType::Output, PortDataType::Image, QPointF(0, 0), nullptr);
         board.startDrawing(&start, QPointF(0, 0));
         board.cancelDrawing();
         QVERIFY(!board.m_drawing_line);
@@ -31,7 +31,7 @@ private slots:
     }
     void finishDrawingIsCancel() {
         PaintBoard board;
-        Port start("out", PortType::Output, DataType::Image, QPointF(0, 0), nullptr);
+        Port start("out", PortType::Output, PortDataType::Image, QPointF(0, 0), nullptr);
         board.startDrawing(&start, QPointF(0, 0));
         board.finishDrawing();
         QVERIFY(!board.m_drawing_line);

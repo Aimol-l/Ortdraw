@@ -17,8 +17,8 @@ public:
 
         onnx_engine::SessionOptions o;
         const QString dev = params.value("device", "auto").toString();
-        o.device = dev == "cpu" ? onnx_engine::Device::CPU
-                 : dev == "cuda" ? onnx_engine::Device::CUDA : onnx_engine::Device::Auto;
+        o.device = dev == "cpu" ? onnx_engine::DeviceKind::CPU
+                 : dev == "cuda" ? onnx_engine::DeviceKind::CUDA : onnx_engine::DeviceKind::Auto;
         o.intraThreads = params.value("threads", 0).toInt();
 
         std::string err;

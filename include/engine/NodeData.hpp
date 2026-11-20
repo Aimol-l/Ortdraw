@@ -2,7 +2,7 @@
 #include <QString>
 #include <variant>
 #include <opencv2/core.hpp>
-#include <tensorvia/core/tensor.h>
+#include <tensorvia.hpp>
 
 using Tensor = ::Tensor;
 using NodeData = std::variant<std::monostate, cv::Mat, Tensor, double, bool>;

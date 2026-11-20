@@ -32,7 +32,7 @@ onnx_engine/
   include/onnx_engine/*.hpp # 公开头（不含 Ort/Qt/OpenCV）
   src/*.cpp                 # pimpl 实现，含 Ort::* 细节
 ```
-- 产出 `SHARED` 目标 `onnx_engine`（`libonnx_engine.so`），并 `find_package(Tensorvia REQUIRED)` 链接 `Tensorvia::tensorvia`（张量载体；公开头允许包含 `tensorvia/core/tensor.h`）。
+- 产出 `SHARED` 目标 `onnx_engine`（`libonnx_engine.so`），并 `find_package(Tensorvia REQUIRED)` 链接 `Tensorvia::tensorvia`（张量载体；公开头允许包含 `tensorvia.hpp`）。
 - 主工程 `add_subdirectory(onnx_engine)` 并链接。
 - 依赖探测：
   - Linux：`find_library(onnxruntime)` + 头 `/usr/include/onnxruntime`（可 `ONNXRUNTIME_ROOT` 覆盖）；
@@ -47,7 +47,7 @@ namespace onnx_engine {
 
 enum class ElementType { Float32, Float64, Float16, Int32, Int64, Int8, Int16, UInt8, UInt16, UInt32, UInt64, Bool, Unknown };
 // 覆盖 ONNX TensorProto 常用元素类型；库内部与 Ort::Value 一一对应。
-enum class Device { Auto, CPU, CUDA };
+enum class DeviceKind { Auto, CPU, CUDA };
 
 // 单个模型 IO
 struct TensorInfo {
@@ -67,7 +67,7 @@ struct ModelInfo {
 using Tensor = ::Tensor;
 
 struct SessionOptions {
-    Device device = Device::Auto;   // Auto：有 CUDA 则用 CUDA，否则 CPU
+    DeviceKind device = DeviceKind::Auto;   // Auto：有 CUDA 则用 CUDA，否则 CPU
     int intraThreads = 0;           // 0 = onnxruntime 默认
 };
 
@@ -127,22 +127,22 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 - **失效/重载**：缓存条目记录 `(mtime, size)`；`session()/modelInfo()` 发现文件已变则重建并替换旧条目；模型被删除则返回加载错误。因此「换文件」对上层透明，节点上的「重载」按钮只是显式触发。
 - **淘汰/重建时机**：会话在**首次使用时惰性创建**；`clearCache()` 立即释放无引用条目。
 - **并发**：缓存读写与淘汰由库内互斥保护；`Ort::Session::Run` 线程安全，可并发；`run()` 期间不持有缓存锁，仅持有该会话的 `shared_ptr`。
-- **设备**：`Device::Auto` → `cudaAvailable()` 为真时注册 CUDA provider，否则 CPU；provider 初始化失败时回退 CPU 并给出日志/错误。
+- **设备**：`DeviceKind::Auto` → `cudaAvailable()` 为真时注册 CUDA provider，否则 CPU；provider 初始化失败时回退 CPU 并给出日志/错误。
 - **失败路径**：模型加载失败、provider 不可用、IO 个数/类型/形状不匹配等，统一通过 `error` 文本返回。
 
 ## 4. 应用侧适配层
 
 `include/engine/onnx/` 下（依赖库 + OpenCV + Tensorvia，供「预处理」节点与「ONNX 推理」 executor 使用）：
 - `OnnxTensorConvert.hpp`（SDK 已直接用 Tensorvia，故这里不再做张量与缓冲之间的搬运）：
-  - `cv::Mat → via::Tensor`：按目标 dtype/shape、通道序（BGR→RGB）、归一化、resize（插值）、布局（NCHW/NHWC 自适应）；
-  - `via::Tensor → NodeData`：张量 → `Tensorvia::Tensor`；bool 标量 → `bool`；整型/浮点单值 → `double`。
-- 与库之间只传 `via::Tensor` / `ModelInfo`。
+  - `cv::Mat → Tensor`：按目标 dtype/shape、通道序（BGR→RGB）、归一化、resize（插值）、布局（NCHW/NHWC 自适应）；
+  - `Tensor → NodeData`：张量 → `Tensor`；bool 标量 → `bool`；整型/浮点单值 → `double`。
+- 与库之间只传 `Tensor` / `ModelInfo`。
 
 ### 4.1 ONNX ElementType ↔ Tensorvia DataType 映射
 
-`Tensorvia::via::DataType` 提供 `INT8/INT16/INT32/INT64/BFLOAT16/FLOAT16/FLOAT32/FLOAT64`，**不含 `UINT8` 与 `BOOL`**，故按下列规则映射（其余不支持类型报错）：
+`DataType` 提供 `INT8/INT16/INT32/INT64/BFLOAT16/FLOAT16/FLOAT32/FLOAT64`，**不含 `UINT8` 与 `BOOL`**，故按下列规则映射（其余不支持类型报错）：
 
-| ONNX `ElementType` | `via::DataType` | 说明 |
+| ONNX `ElementType` | `DataType` | 说明 |
 |---|---|---|
 | Float32 / Float64 / Float16 | FLOAT32 / FLOAT64 / FLOAT16 | 直接对应 |
 | Int8 / Int16 / Int32 / Int64 | 同名 | 直接对应 |
@@ -150,7 +150,7 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
 | **Bool** | **INT8** | 0/1 承载 |
 | UInt8/UInt16/UInt32/UInt64/String/Complex | — | **报错**「不支持的张量类型」（模型输入/输出都不会是这些类型） |
 
-- 反向（`via::DataType` → ONNX dtype，用于把张量喂给模型）：同上表反向；`INT16` 不自动视为 `UInt8`（需显式要求），以免歧义。
+- 反向（`DataType` → ONNX dtype，用于把张量喂给模型）：同上表反向；`INT16` 不自动视为 `UInt8`（需显式要求），以免歧义。
 - 该映射在 **`onnx_engine`（`types.hpp` 声明、`runtime.cpp` 实现：`toViaDataType`/`fromViaDataType`）** 内实现，并有单元测试覆盖。
 - **UInt8 不受支持**：模型输入/输出都不会是 UInt8，遇到时按「不支持的张量类型」明确报错。
 - **Bool 输出**：ONNX `Bool` 与 `Int8` 都映射为 `INT8`，单看张量无法区分；应用侧 `tensorToNodeData(t, declType)` 依据**模型声明的输出 `ElementType`**（`session->info().outputs[i].type`）判定：`Bool` → `bool`，其余标量 → `double`。
@@ -176,8 +176,8 @@ int elementTypeSize(ElementType);   // Bool=1，其余按实际大小
   - 端口集合在模型载入完成后固定，运行期不再增删（除非重载/换模型）。
 - 执行（worker 线程）：
   1. `session(modelPath, {device,threads})`；失败 → 节点错误。
-  2. 按 `info().inputs` 顺序取 `inputs[i]`，要求为 `Tensorvia::Tensor`（否则报「输入类型不符」）；做**最小适配**：dtype 转换到模型 dtype、校验形状（**仅比较已知维**，`-1` 跳过；秩必须一致）。
-  3. `session->run(...)` → `TensorBuffer` 列表 → 转 `Tensorvia::Tensor` 的 `NodeData`（**所有输出端口都是 `Tensor`**）。
+  2. 按 `info().inputs` 顺序取 `inputs[i]`，要求为 `Tensor`（否则报「输入类型不符」）；做**最小适配**：dtype 转换到模型 dtype、校验形状（**仅比较已知维**，`-1` 跳过；秩必须一致）。
+  3. `session->run(...)` → `TensorBuffer` 列表 → 转 `Tensor` 的 `NodeData`（**所有输出端口都是 `Tensor`**）。
 - UI（`OnnxInferNode.qml`）：模型路径选择/重载、设备下拉、线程输入、输入/输出端口名与 shape/dtype 概览、错误徽标沿用现有机制。
 
 ### 5.2 「预处理」`PreProcessNode` + 任务框架（与后处理对称）
@@ -209,7 +209,7 @@ struct TaskSpec {
   - **图像分类**：输入 `1×Tensor` → **输出仅 `1×Number`（Top-1 类别 id）**；Top-K（id + 分数）只通过**节点显示通道**（§5.6）回传供面板展示，**不占端口**。
 - 预览：检测/分割输出图像并在节点内**显示图像预览**；分类**无图像预览**，面板直接显示类别 id 与 Top-K 列表。
 - **不假定类别 id 对应的文本**：不要求类别名文件，绘制只用 id 与置信度。
-- 预处理/后处理均在**应用侧**实现（使用 `Tensorvia::Tensor` / `cv::Mat`），SDK 不参与。
+- 预处理/后处理均在**应用侧**实现（使用 `Tensor` / `cv::Mat`），SDK 不参与。
 
 ### 5.4 任务框架与扩展方式
 
@@ -247,7 +247,7 @@ struct TaskSpec {
   - `run` 两输入相加结果正确；
   - 缺文件 / dtype 不符 / 输入个数不符 → 返回错误；
   - `cudaAvailable()` 不崩溃（返回值不作断言）。
-- 执行器单测（并入 `test_executors` 或新套件）：构造 `OnnxInferExecutor` 的 params（含路径与每输入设置），喂两个 `Tensorvia::Tensor`，校验输出；
+- 执行器单测（并入 `test_executors` 或新套件）：构造 `OnnxInferExecutor` 的 params（含路径与每输入设置），喂两个 `Tensor`，校验输出；
 - 预处理单测：`图像→张量`（断言 NCHW/NHWC 形状、RGB/BGR、`/255` 与 mean/std 数值）、`YOLO letterbox`（断言缩放比、填充、输出尺寸）。
 - 后处理单测（用**合成张量**，不依赖真实 ONNX 模型）：
   - `classify`：输出端口只有 1 个 `Number`（Top-1 id）；显示数据含 Top-K 列表。

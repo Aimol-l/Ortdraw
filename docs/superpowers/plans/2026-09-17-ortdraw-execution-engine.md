@@ -4,7 +4,7 @@
 
 **Goal:** 让节点真正处理图像；提供可扩展的节点执行 SDK（数据模型 + 执行接口 + 注册表 + 结果缓存/预览），为未来 ONNX 推理节点铺路。
 
-**Architecture:** 端口类型收敛为 `Image/Tensor/Number/Bool/Any`；张量复用 **Tensorvia**（`via::Tensor`）；节点执行抽象为 `NodeExecutor` + `NodeRegistry`；`GraphExecutor` 在后台线程按拓扑序求值，结果经信号回主线程写入 `ImageStore`（`QQuickImageProvider`）；QML 预览与 ImageShow 显示真实图像。
+**Architecture:** 端口类型收敛为 `Image/Tensor/Number/Bool/Any`；张量复用 **Tensorvia**（`Tensor`）；节点执行抽象为 `NodeExecutor` + `NodeRegistry`；`GraphExecutor` 在后台线程按拓扑序求值，结果经信号回主线程写入 `ImageStore`（`QQuickImageProvider`）；QML 预览与 ImageShow 显示真实图像。
 
 **Tech Stack:** C++23、Qt 6.11（Core/Gui/Quick/Widgets/Test）、OpenCV、**Tensorvia**、CMake、Qt Test。
 
@@ -16,7 +16,7 @@
 - 工作目录：`/home/aimol/Documents/C++/Workspace/Ortdraw`
 - 构建：`cmake --build build -j4`；测试：`ctest --test-dir build --output-on-failure`；qmllint：`/usr/lib/qt6/bin/qmllint`
 - 显示可用：`DISPLAY=:0 ./bin/main [--demo]`；截图 `DISPLAY=:0 import -window <WID>`（`WID` 由 `xwininfo -root -tree | grep '"Ortdraw"'` 取）
-- Tensorvia：`find_package(Tensorvia REQUIRED)`，目标 `Tensorvia::tensorvia`，头文件 `<tensorvia/core/tensor.h>`（`via::Tensor`）。
+- Tensorvia：`find_package(Tensorvia REQUIRED)`，目标 `Tensorvia::tensorvia`，头文件 `<tensorvia.hpp>`（`Tensor`）。
 - 现有 9 个测试套件必须保持通过；不提交（除非用户要求）。
 
 ---
@@ -59,22 +59,22 @@ static bool compatible(DataType a, DataType b){
 - [ ] **Step 2: 冒烟测试 `tests/test_tensorvia.cpp`**
 ```cpp
 #include <QtTest>
-#include <tensorvia/core/tensor.h>
+#include <tensorvia.hpp>
 class TestTensorvia : public QObject {
     Q_OBJECT
 private slots:
     void createAndRead() {
-        Tensor t = Tensor::Zeros({2, 3}, via::DataType::FLOAT32);
+        Tensor t = Tensor::Zeros({2, 3}, DataType::FLOAT32);
         QCOMPARE(int(t.shape(0)), 2);
         QCOMPARE(int(t.shape(1)), 3);
         QCOMPARE(int(t.numel()), 6);
-        QCOMPARE(t.dtype(), via::DataType::FLOAT32);
+        QCOMPARE(t.dtype(), DataType::FLOAT32);
     }
 };
 QTEST_MAIN(TestTensorvia)
 #include "test_tensorvia.moc"
 ```
-（若 `via::DataType` 名称不同，以实际头文件为准调整。）
+（若 `DataType` 名称不同，以实际头文件为准调整。）
 
 - [ ] **Step 3: 构建 + 测试**：`cmake -S . -B build && cmake --build build -j4 && ctest --test-dir build -R test_tensorvia --output-on-failure` → PASS；全量 10 套件通过。
 
@@ -89,9 +89,9 @@ QTEST_MAIN(TestTensorvia)
 #pragma once
 #include <variant>
 #include <opencv2/core.hpp>
-#include <tensorvia/core/tensor.h>
+#include <tensorvia.hpp>
 
-using Tensor = via::Tensor;
+using Tensor = Tensor;
 using NodeData = std::variant<std::monostate, cv::Mat, Tensor, double, bool>;
 
 inline QString nodeDataName(const NodeData& d) {
@@ -175,7 +175,7 @@ private:
 
 inline cv::Mat tensorToMat(const Tensor& t) {
     Tensor c = t;
-    if (c.device() != via::Device::CPU) c.to_host();
+    if (c.device() != Device::CPU) c.to_host();
     c = c.contiguous();
     const auto shp = c.shape();
     if (shp.size() != 2) return {};
@@ -214,7 +214,7 @@ inline Tensor matToTensor(const cv::Mat& m) {
 
 - [ ] **Step 3: 测试 `tests/test_executors.cpp`**（无需 GUI）：构造 `cv::Mat`（如 8x8 灰度），断言：
   - Resize 输出尺寸 == 设定值；Blur 输出尺寸不变且平均值接近；Threshold 输出仅含 0/255；Conv 用恒等核（[[0,0,0],[0,1,0],[0,0,0]]）近似等于原图；ImageLoad 空路径返回 ok=false。
-  - 张量核用 `via::Tensor(std::vector<float>{...}, {3,3})` 构造。
+  - 张量核用 `Tensor(std::vector<float>{...}, {3,3})` 构造。
 - [ ] **Step 4:** `cmake --build build -j4 && ctest -R test_executors --output-on-failure` → PASS；全量通过。
 
 ---
@@ -298,4 +298,4 @@ private:
 ## 自查记录
 - **Spec 覆盖**：类型迁移→Task 1；Tensorvia→Task 2；SDK→Task 3；执行器→Task 4；引擎→Task 5；结果/预览→Task 6；ImageLoad/运行/状态→Task 7；文档→Task 8。
 - **占位符**：C++/测试给出完整代码；QML 给出接线要点（以现有组件为基准）。
-- **一致性**：`DataType{Image,Tensor,Number,Bool,Any}`、`Port::compatible`、`NodeData=variant<monostate,cv::Mat,via::Tensor,double,bool>`、`NodeExecutor/NodeRegistry/GraphExecutor/ImageStore` 命名在各任务一致。
+- **一致性**：`DataType{Image,Tensor,Number,Bool,Any}`、`Port::compatible`、`NodeData=variant<monostate,cv::Mat,Tensor,double,bool>`、`NodeExecutor/NodeRegistry/GraphExecutor/ImageStore` 命名在各任务一致。

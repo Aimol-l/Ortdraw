@@ -15,7 +15,7 @@ private slots:
         QCOMPARE(n.getOutPorts().size(), 1);
         QCOMPARE(n.getInPorts()[0]->name(), QString("A"));
         QCOMPARE(n.getOutPorts()[0]->name(), QString("C"));
-        QCOMPARE(n.getInPorts()[0]->dataType(), DataType::Tensor);
+        QCOMPARE(n.getInPorts()[0]->dataType(), PortDataType::Tensor);
     }
 
     void executorRunsAdd() {

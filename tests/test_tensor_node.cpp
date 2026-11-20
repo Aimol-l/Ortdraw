@@ -111,7 +111,7 @@ private slots:
         const Tensor& t = std::get<Tensor>(r.outputs[0]);
         QCOMPARE(int(t.shape(0)), 3);
         QCOMPARE(int(t.shape(1)), 3);
-        QCOMPARE(t.dtype(), via::DataType::FLOAT32);
+        QCOMPARE(t.dtype(), DataType::FLOAT32);
     }
 
     void tensorExecutorRejectsMismatchedData() {

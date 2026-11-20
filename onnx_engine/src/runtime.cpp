@@ -127,31 +127,31 @@ int elementTypeSize(ElementType t) {
     }
 }
 
-via::DataType toViaDataType(ElementType t) {
+DataType toViaDataType(ElementType t) {
     switch (t) {
-    case ElementType::Float32:  return via::DataType::FLOAT32;
-    case ElementType::Float64:  return via::DataType::FLOAT64;
-    case ElementType::Float16:  return via::DataType::FLOAT16;
-    case ElementType::BFloat16: return via::DataType::BFLOAT16;
-    case ElementType::Int8:     return via::DataType::INT8;
-    case ElementType::Int16:    return via::DataType::INT16;
-    case ElementType::Int32:    return via::DataType::INT32;
-    case ElementType::Int64:    return via::DataType::INT64;
-    case ElementType::Bool:     return via::DataType::INT8;    // 0/1 承载
-    default:                    return via::DataType::FLOAT32;
+    case ElementType::Float32:  return DataType::FLOAT32;
+    case ElementType::Float64:  return DataType::FLOAT64;
+    case ElementType::Float16:  return DataType::FLOAT16;
+    case ElementType::BFloat16: return DataType::BFLOAT16;
+    case ElementType::Int8:     return DataType::INT8;
+    case ElementType::Int16:    return DataType::INT16;
+    case ElementType::Int32:    return DataType::INT32;
+    case ElementType::Int64:    return DataType::INT64;
+    case ElementType::Bool:     return DataType::INT8;    // 0/1 承载
+    default:                    return DataType::FLOAT32;
     }
 }
 
-ElementType fromViaDataType(via::DataType t) {
+ElementType fromViaDataType(DataType t) {
     switch (t) {
-    case via::DataType::FLOAT32:  return ElementType::Float32;
-    case via::DataType::FLOAT64:  return ElementType::Float64;
-    case via::DataType::FLOAT16:  return ElementType::Float16;
-    case via::DataType::BFLOAT16: return ElementType::BFloat16;
-    case via::DataType::INT8:     return ElementType::Int8;
-    case via::DataType::INT16:    return ElementType::Int16;
-    case via::DataType::INT32:    return ElementType::Int32;
-    case via::DataType::INT64:    return ElementType::Int64;
+    case DataType::FLOAT32:  return ElementType::Float32;
+    case DataType::FLOAT64:  return ElementType::Float64;
+    case DataType::FLOAT16:  return ElementType::Float16;
+    case DataType::BFLOAT16: return ElementType::BFloat16;
+    case DataType::INT8:     return ElementType::Int8;
+    case DataType::INT16:    return ElementType::Int16;
+    case DataType::INT32:    return ElementType::Int32;
+    case DataType::INT64:    return ElementType::Int64;
     default:                      return ElementType::Unknown;
     }
 }
@@ -335,13 +335,13 @@ std::shared_ptr<SessionImpl> Runtime::Impl::get(const std::string& path,
     std::shared_ptr<SessionImpl> s;
     std::string buildError;
     try {
-        const bool wantCuda = (o.device == Device::CUDA)
-                           || (o.device == Device::Auto && Runtime::cudaAvailable()
+        const bool wantCuda = (o.device == DeviceKind::CUDA)
+                           || (o.device == DeviceKind::Auto && Runtime::cudaAvailable()
                                && g_cudaState.load(std::memory_order_relaxed) != 2);
         try {
             s = makeSession(env, abs, o, mtime, size, wantCuda);
         } catch (const std::exception& e) {
-            if (o.device == Device::Auto && wantCuda) {
+            if (o.device == DeviceKind::Auto && wantCuda) {
                 g_cudaState.store(2, std::memory_order_relaxed);
                 if (!g_cudaFallbackReported.exchange(true)) {
                     std::fprintf(stderr, "onnx_engine: CUDA 初始化失败，改用 CPU（原因: %s）\n",
@@ -445,14 +445,14 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
             }
             // dtype 校验：模型类型经 §4.1 映射后必须与张量 dtype 一致
             //（如 Bool 模型要求 INT8 张量）
-            const via::DataType wantVia = toViaDataType(want.type);
+            const DataType wantVia = toViaDataType(want.type);
             if (t.dtype() != wantVia) {
                 return std::unexpected(std::format(
                     "onnx_engine: 输入 {} 类型不符，期望 {}，实际 {}",
-                    want.name, via::dtype_to_string(wantVia), via::dtype_to_string(t.dtype())));
+                    want.name, dtype_to_string(wantVia), dtype_to_string(t.dtype())));
             }
             // 承载宽度必须一致才能按原始字节喂给 ORT
-            if (std::size_t(elementTypeSize(want.type)) != via::calc_dtype_size(t.dtype())) {
+            if (std::size_t(elementTypeSize(want.type)) != calc_dtype_size(t.dtype())) {
                 return std::unexpected(std::format(
                     "onnx_engine: 输入 {} 的元素承载宽度与模型不匹配（{}），暂不支持",
                     want.name, elementTypeName(want.type)));
@@ -487,7 +487,7 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
             // 零拷贝：CPU 且连续时直接引用调用方内存；否则物化一份连续 host 副本
             const void* p = nullptr;
             const std::size_t bytes = elems * std::size_t(elementTypeSize(want.type));
-            if (t.is_contiguous() && t.device() == via::Device::CPU) {
+            if (t.is_contiguous() && t.device() == ::Device::CPU) {
                 p = t.data();
             } else {
                 Tensor tmp = t.contiguous();
@@ -541,11 +541,11 @@ SessionImpl::run(const std::vector<Tensor>& inputs) {
             std::vector<int64_t> shape = ti.GetShape();
             if (shape.empty()) 
                 shape.push_back(1);   // Tensorvia 不接受空 shape；标量按 1 元素承载
-            const via::DataType dt = toViaDataType(ot);
-            Tensor out(shape, dt, via::Device::CPU);
+            const DataType dt = toViaDataType(ot);
+            Tensor out(shape, dt, ::Device::CPU);
 
             const int srcSize = elementTypeSize(ot);
-            const int dstSize = int(via::calc_dtype_size(dt));
+            const int dstSize = int(calc_dtype_size(dt));
             const std::uint8_t* src = v.GetTensorData<std::uint8_t>();
 
             if (srcSize == dstSize) {

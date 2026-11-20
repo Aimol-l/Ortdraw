@@ -77,7 +77,7 @@
 ### 端口类型
 
 端口数据类型收敛为 `Image / Tensor / Number / Bool / Any`（原 `Float` 等数值类型统一为 `Number`；
-`Any` 可与任意类型连接）。张量端口使用 **Tensorvia** 的 `via::Tensor`。
+`Any` 可与任意类型连接）。张量端口使用 **Tensorvia** 的 `Tensor`。
 
 ### 当前限制
 
@@ -143,7 +143,7 @@ docs/               设计与实施文档
 - 支持 C++23 的编译器（GCC 13+ / Clang 16+）
 - Qt 6.8+（Core、Gui、Quick、Widgets、Test）
 - OpenCV 4/5
-- **Tensorvia**（张量库；CMake 目标 `Tensorvia::tensorvia`，头文件 `<tensorvia/core/tensor.h>`）
+- **Tensorvia**（张量库；CMake 目标 `Tensorvia::tensorvia`，头文件 `<tensorvia.hpp>`）
 - **ONNX Runtime**（默认查找 `/usr`，可用 `-DONNXRUNTIME_ROOT=<prefix>` 指定安装前缀）
 
 ## 开发辅助

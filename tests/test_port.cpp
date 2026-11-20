@@ -5,19 +5,19 @@ class TestPort : public QObject {
     Q_OBJECT
 private slots:
     void testMoveDelta() {
-        Port p("p", PortType::Input, DataType::Image, QPointF(0, 0), nullptr);
+        Port p("p", PortType::Input, PortDataType::Image, QPointF(0, 0), nullptr);
         p.movedeltaPos(QPointF(10, -5));
         QCOMPARE(p.position(), QPointF(10, -5));
     }
     void testConnectedFlag() {
-        Port p("p", PortType::Input, DataType::Image, QPointF(0, 0), nullptr);
+        Port p("p", PortType::Input, PortDataType::Image, QPointF(0, 0), nullptr);
         QVERIFY(!p.isConnected());
         p.setConnected(true);
         QVERIFY(p.isConnected());
     }
     void testDataType() {
-        Port p("p", PortType::Output, DataType::Number, QPointF(1, 2), nullptr);
-        QCOMPARE(p.dataType(), DataType::Number);
+        Port p("p", PortType::Output, PortDataType::Number, QPointF(1, 2), nullptr);
+        QCOMPARE(p.dataType(), PortDataType::Number);
         QCOMPARE(p.type(), static_cast<int>(PortType::Output));
     }
 };

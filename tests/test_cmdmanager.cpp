@@ -28,8 +28,8 @@ private:
         nodeA->setParentItem(root);
         nodeB->setParentItem(root);
         nodeC->setParentItem(root);
-        outA = new Port("out", PortType::Output, DataType::Image, QPointF(0, 0), nodeA);
-        inB  = new Port("in",  PortType::Input,  DataType::Image, QPointF(0, 0), nodeB);
+        outA = new Port("out", PortType::Output, PortDataType::Image, QPointF(0, 0), nodeA);
+        inB  = new Port("in",  PortType::Input,  PortDataType::Image, QPointF(0, 0), nodeB);
         nodeA->getOutPorts().append(outA);
         nodeB->getInPorts().append(inB);
     }

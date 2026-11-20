@@ -37,8 +37,8 @@ public:
         m_name = "裁剪";
 
         m_description = "按矩形裁剪：x/y 为左上角(>=0)，w/h 为子图大小(>0；为 0 取到边界)；越界(x+w>W 或 y+h>H)时报错。";
-        m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));
-        m_output_ports.push_back(new Port("图像", PortType::Output, DataType::Image, QPointF(0,0), this));
+        m_input_ports.push_back(new Port("图像", PortType::Input, PortDataType::Image, QPointF(0,0), this));
+        m_output_ports.push_back(new Port("图像", PortType::Output, PortDataType::Image, QPointF(0,0), this));
     }
     ~CropNode(){}
 

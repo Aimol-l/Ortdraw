@@ -5,7 +5,7 @@
 
 inline cv::Mat tensorToMat(const Tensor& t) {
     Tensor c = t;
-    if (c.device() != via::Device::CPU) c.to_host();
+    if (c.device() != Device::CPU) c.to_host();
     c = c.contiguous();
     const auto shp = c.shape();
     if (shp.size() != 2) return {};

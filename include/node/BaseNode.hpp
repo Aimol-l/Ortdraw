@@ -17,7 +17,7 @@
 #include "port/Port.hpp"
 
 
-struct PortSpec { QString name; DataType type; };
+struct PortSpec { QString name; PortDataType type; };
 
 
 class BaseNode:public QQuickItem{

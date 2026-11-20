@@ -108,9 +108,9 @@ private:
         }
 
         onnx_engine::SessionOptions o;
-        o.device = m_device == QStringLiteral("cpu")  ? onnx_engine::Device::CPU
-                 : m_device == QStringLiteral("cuda") ? onnx_engine::Device::CUDA
-                                                      : onnx_engine::Device::Auto;
+        o.device = m_device == QStringLiteral("cpu")  ? onnx_engine::DeviceKind::CPU
+                 : m_device == QStringLiteral("cuda") ? onnx_engine::DeviceKind::CUDA
+                                                      : onnx_engine::DeviceKind::Auto;
         o.intraThreads = m_threads;
 
         std::string err;
@@ -127,12 +127,12 @@ private:
         QStringList lines;
         for (const auto& t : info.inputs) {
             if (!t.isTensor) continue;
-            ins.push_back({QString::fromStdString(t.name), DataType::Tensor});
+            ins.push_back({QString::fromStdString(t.name), PortDataType::Tensor});
             lines << describeTensor(t);
         }
         for (const auto& t : info.outputs) {
             if (!t.isTensor) continue;
-            outs.push_back({QString::fromStdString(t.name), DataType::Tensor});
+            outs.push_back({QString::fromStdString(t.name), PortDataType::Tensor});
             lines << describeTensor(t);
         }
         m_ioText = lines.join(QLatin1Char('\n'));

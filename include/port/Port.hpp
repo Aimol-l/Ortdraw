@@ -7,7 +7,7 @@ enum class PortType{
     Input,
     Output
 };
-enum class DataType{
+enum class PortDataType{
     Image,
     Tensor,
     Number,
@@ -35,14 +35,14 @@ private:
     QUuid m_uid;
     QString m_name;
     PortType m_type;
-    DataType m_data_type;
+    PortDataType m_data_type;
     QPointF m_position;
     BaseNode* m_father= nullptr;
     bool m_connected = false;
     bool m_highlighted = false;
 public:
     explicit Port( QObject *parent = nullptr): QObject(parent){}
-    explicit Port(QString name, PortType type, DataType data_type, QPointF position,BaseNode* father, QObject *parent = nullptr)
+    explicit Port(QString name, PortType type, PortDataType data_type, QPointF position,BaseNode* father, QObject *parent = nullptr)
             : QObject(parent),
                 m_name(name),
                 m_type(type),
@@ -59,19 +59,19 @@ public:
     Port* self() const { return const_cast<Port*>(this);}
     QString name() const { return m_name; }
     int type() const { return static_cast<int>(m_type); }
-    DataType dataType() const { return m_data_type;}
+    PortDataType dataType() const { return m_data_type;}
     QString dataTypeName() const {
         switch(m_data_type){
-        case DataType::Image: return "Image";
-        case DataType::Tensor:return "Tensor";
-        case DataType::Number:return "Number";
-        case DataType::Bool:  return "Bool";
-        case DataType::Any:   return "Any";
+        case PortDataType::Image: return "Image";
+        case PortDataType::Tensor:return "Tensor";
+        case PortDataType::Number:return "Number";
+        case PortDataType::Bool:  return "Bool";
+        case PortDataType::Any:   return "Any";
         }
         return "?";
     }
-    static bool compatible(DataType a, DataType b){
-        return a == b || a == DataType::Any || b == DataType::Any;
+    static bool compatible(PortDataType a, PortDataType b){
+        return a == b || a == PortDataType::Any || b == PortDataType::Any;
     }
     QPointF position() const { return m_position; }
     BaseNode* father() const { return m_father; }

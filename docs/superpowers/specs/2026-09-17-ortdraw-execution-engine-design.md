@@ -33,13 +33,13 @@ enum class DataType { Image, Tensor, Number, Bool, Any };
 张量**不自造**，直接复用已有的 **Tensorvia** 库（`tensorvia 0.2.0`，已通过 pacman 安装）：
 
 ```cpp
-#include <tensorvia/core/tensor.h>
-using Tensor = via::Tensor;   // 多后端张量（CPU/CUDA/SYCL/Vulkan），支持多 dtype
+#include <tensorvia.hpp>
+using Tensor = Tensor;   // 多后端张量（CPU/CUDA/SYCL/Vulkan），支持多 dtype
 
 using NodeData = std::variant<std::monostate, cv::Mat, Tensor, double, bool>;
 ```
 
-- `Tensor` ↔ `via::Tensor`：由 Tensorvia 提供（构造、`shape()/dtype()/numel()/contiguous()/to_host()`、`ops::` 运算；CMake 目标 `Tensorvia::tensorvia`）。
+- `Tensor` ↔ `Tensor`：由 Tensorvia 提供（构造、`shape()/dtype()/numel()/contiguous()/to_host()`、`ops::` 运算；CMake 目标 `Tensorvia::tensorvia`）。
 - `cv::Mat` 采用引用计数拷贝，跨线程传递安全（只读共享）。
 - `std::monostate` 表示「无数据/未连接」。
 - `Any` 端口没有独立的运行时类型，其值就是上述 variant 中的实际类型。
@@ -110,7 +110,7 @@ public:
 | Resize | Image | Image | 按 `mode`：尺寸(`outWidth/outHeight`)或百分比(`percent`)，`cv::resize` |
 | Blur | Image | Image | 核大小 `kernel`（奇数），`cv::GaussianBlur` |
 | Threshold | Image | Image | `threshold`(0–255)，`cv::threshold(..., THRESH_BINARY)` |
-| Conv | Image, Tensor | Image | 用 `via::Tensor` 作卷积核（`to_host().contiguous()` 后取 FLOAT32 数据）→ `cv::Mat` → `cv::filter2D`；无核时报「缺少卷积核」 |
+| Conv | Image, Tensor | Image | 用 `Tensor` 作卷积核（`to_host().contiguous()` 后取 FLOAT32 数据）→ `cv::Mat` → `cv::filter2D`；无核时报「缺少卷积核」 |
 
 > Conv 的核当前无来源（无 Tensor 输入时会报「缺少卷积核」）。可后续增加「核编辑器」或由上游 Tensor 节点提供。
 

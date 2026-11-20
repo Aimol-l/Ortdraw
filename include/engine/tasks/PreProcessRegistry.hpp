@@ -94,9 +94,9 @@ inline void registerBuiltinPreProcessTasks() {
         TaskSpec s;
         s.id = "standard";
         s.name = QStringLiteral("标准预处理");
-        s.inputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor},
-                     {QStringLiteral("元信息"), DataType::Tensor}};
+        s.inputs = {{QStringLiteral("图像"), PortDataType::Image}};
+        s.outputs = {{QStringLiteral("张量"), PortDataType::Tensor},
+                     {QStringLiteral("元信息"), PortDataType::Tensor}};
         s.defaults = QVariantMap{
             {"layout", "NCHW"}, {"channel", "rgb"}, {"dtype", "fp32"},
             {"norm", "unit"}, {"mean", "0.485,0.456,0.406"}, {"std", "0.229,0.224,0.225"},
@@ -186,9 +186,9 @@ inline void registerBuiltinPreProcessTasks() {
         TaskSpec s;
         s.id = "yolo_letterbox";
         s.name = QStringLiteral("YOLO 预处理");
-        s.inputs = {{QStringLiteral("图像"), DataType::Image}};
-        s.outputs = {{QStringLiteral("张量"), DataType::Tensor},
-                     {QStringLiteral("元信息"), DataType::Tensor}};
+        s.inputs = {{QStringLiteral("图像"), PortDataType::Image}};
+        s.outputs = {{QStringLiteral("张量"), PortDataType::Tensor},
+                     {QStringLiteral("元信息"), PortDataType::Tensor}};
         s.defaults = QVariantMap{{"size", 640}, {"pad", 114}, {"dtype", "fp32"}};
         s.params = {
             {"size", QStringLiteral("输出尺寸"), "int", 640, {}},

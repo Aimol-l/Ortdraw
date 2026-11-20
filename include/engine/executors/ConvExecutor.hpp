@@ -21,7 +21,7 @@ public:
         }
         if (!kernel) return {false, QStringLiteral("缺少卷积核"), {}};
 
-        if (kernel->dtype() != via::DataType::FLOAT32 || kernel->shape().size() != 2)
+        if (kernel->dtype() != DataType::FLOAT32 || kernel->shape().size() != 2)
             return {false, QStringLiteral("卷积核必须是 FLOAT32 的 2D 张量"), {}};
 
         const cv::Mat k = tensorToMat(*kernel);

@@ -15,12 +15,12 @@ private:
 
 private slots:
     void dtypeMappingRoundTrip() {
-        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Float32), via::DataType::FLOAT32);
-        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Int64),   via::DataType::INT64);
+        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Float32), DataType::FLOAT32);
+        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Int64),   DataType::INT64);
         QVERIFY(!onnx_convert::isSupported(onnx_engine::ElementType::UInt8));   // UInt8 不受支持
-        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Bool),    via::DataType::INT8);   // bool->int8
-        QCOMPARE(onnx_engine::fromViaDataType(via::DataType::FLOAT32), onnx_engine::ElementType::Float32);
-        QCOMPARE(onnx_engine::fromViaDataType(via::DataType::INT16),   onnx_engine::ElementType::Int16);
+        QCOMPARE(onnx_engine::toViaDataType(onnx_engine::ElementType::Bool),    DataType::INT8);   // bool->int8
+        QCOMPARE(onnx_engine::fromViaDataType(DataType::FLOAT32), onnx_engine::ElementType::Float32);
+        QCOMPARE(onnx_engine::fromViaDataType(DataType::INT16),   onnx_engine::ElementType::Int16);
     }
 
     void imageToTensorNchwDiv255() {
@@ -29,7 +29,7 @@ private slots:
                                                      onnx_engine::ElementType::Float32,
                                                      "div255", {}, {}, "rgb", "keep");
         QCOMPARE(shapeOf(t), (std::vector<int64_t>{1, 3, 2, 2}));
-        QCOMPARE(t.dtype(), via::DataType::FLOAT32);
+        QCOMPARE(t.dtype(), DataType::FLOAT32);
         const float* p = reinterpret_cast<const float*>(t.data());
         QCOMPARE(p[0], 1.0f);   // RGB 的 R 通道 = 255/255 = 1
     }
@@ -65,7 +65,7 @@ private slots:
         std::vector<float> v{1,2,3,4}; std::vector<int64_t> sh{2,2};
         Tensor t(v, sh);
         QCOMPARE(shapeOf(t), (std::vector<int64_t>{2,2}));
-        QCOMPARE(t.dtype(), via::DataType::FLOAT32);
+        QCOMPARE(t.dtype(), DataType::FLOAT32);
         QCOMPARE(t.numel(), std::size_t(4));
         QCOMPARE(onnx_convert::tensorElement(t, 0), 1.0f);
     }

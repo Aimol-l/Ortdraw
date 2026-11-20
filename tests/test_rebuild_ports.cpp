@@ -7,8 +7,8 @@ class DummyRebuildNode : public BaseNode {
 public:
     QString typeName() const override { return "DummyRebuild"; }
     DummyRebuildNode() {
-        m_input_ports.push_back(new Port("in0", PortType::Input, DataType::Tensor, {}, this));
-        m_output_ports.push_back(new Port("out0", PortType::Output, DataType::Tensor, {}, this));
+        m_input_ports.push_back(new Port("in0", PortType::Input, PortDataType::Tensor, {}, this));
+        m_output_ports.push_back(new Port("out0", PortType::Output, PortDataType::Tensor, {}, this));
     }
 };
 
@@ -20,12 +20,12 @@ private slots:
         QCOMPARE(n.getInPorts().size(), 1);
         QSignalSpy inSpy(&n, &BaseNode::inputPortsChanged);
         QSignalSpy outSpy(&n, &BaseNode::outputPortsChanged);
-        n.rebuildPorts({{"a", DataType::Tensor}, {"b", DataType::Image}},
-                       {{"out0", DataType::Tensor}});
+        n.rebuildPorts({{"a", PortDataType::Tensor}, {"b", PortDataType::Image}},
+                       {{"out0", PortDataType::Tensor}});
         QCOMPARE(n.getInPorts().size(), 2);
         QCOMPARE(n.getOutPorts().size(), 1);
         QCOMPARE(n.getInPorts()[1]->name(), QString("b"));
-        QCOMPARE(n.getInPorts()[1]->dataType(), DataType::Image);
+        QCOMPARE(n.getInPorts()[1]->dataType(), PortDataType::Image);
         QCOMPARE(n.getOutPorts()[0]->name(), QString("out0"));
         QCOMPARE(inSpy.count(), 1);
         QCOMPARE(outSpy.count(), 1);
@@ -47,7 +47,7 @@ private slots:
             g.removeEdge(e.start_port, e.stop_port);
         QCOMPARE(g.getAllEdges().size(), 0);
 
-        a.rebuildPorts({{"in", DataType::Tensor}}, {{"out", DataType::Tensor}});
+        a.rebuildPorts({{"in", PortDataType::Tensor}}, {{"out", PortDataType::Tensor}});
         QCOMPARE(g.getAllEdges().size(), 0);
         QVERIFY(g.addEdge(a.getOutPorts()[0], b.getInPorts()[0]));
         QCOMPARE(g.getAllEdges().size(), 1);

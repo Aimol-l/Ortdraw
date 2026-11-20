@@ -4,7 +4,7 @@
 
 **Goal:** 在 Ortdraw 中提供「ONNX 推理」「预处理」「后处理」三种节点：ONNX 节点按模型元数据动态生成张量端口；预处理/后处理用可注册任务框架（任务决定端口与参数，UI 自动生成控件）；分类结果经非端口显示通道展示。
 
-**Architecture:** 应用侧新增 `OnnxTensorConvert`（`onnx_engine` 中性张量 ↔ `cv::Mat`/`Tensorvia::Tensor`，含 dtype 映射）、`BaseNode::rebuildPorts`（动态端口 + 断线）、任务框架 `TaskSpec` + 两个注册表与两个执行器、`GraphExecutor::nodeDisplay` 显示通道；节点 QML 复用 `TaskNodeControls` 自动渲染参数。
+**Architecture:** 应用侧新增 `OnnxTensorConvert`（`onnx_engine` 中性张量 ↔ `cv::Mat`/`Tensor`，含 dtype 映射）、`BaseNode::rebuildPorts`（动态端口 + 断线）、任务框架 `TaskSpec` + 两个注册表与两个执行器、`GraphExecutor::nodeDisplay` 显示通道；节点 QML 复用 `TaskNodeControls` 自动渲染参数。
 
 **Tech Stack:** C++23 / Qt6 Quick / OpenCV / Tensorvia / onnxruntime（经 `onnx_engine`）。
 
@@ -50,12 +50,12 @@ class TestOnnxConvert : public QObject {
 private slots:
     void dtypeMappingRoundTrip() {
         using namespace onnx_convert;
-        QCOMPARE(toViaType(onnx_engine::ElementType::Float32), via::DataType::FLOAT32);
-        QCOMPARE(toViaType(onnx_engine::ElementType::Int64),   via::DataType::INT64);
-        QCOMPARE(toViaType(onnx_engine::ElementType::UInt8),   via::DataType::INT16);  // 无符号→有符号16
-        QCOMPARE(toViaType(onnx_engine::ElementType::Bool),    via::DataType::INT8);   // bool→int8
-        QCOMPARE(fromViaType(via::DataType::FLOAT32), onnx_engine::ElementType::Float32);
-        QCOMPARE(fromViaType(via::DataType::INT16),   onnx_engine::ElementType::Int16);
+        QCOMPARE(toViaType(onnx_engine::ElementType::Float32), DataType::FLOAT32);
+        QCOMPARE(toViaType(onnx_engine::ElementType::Int64),   DataType::INT64);
+        QCOMPARE(toViaType(onnx_engine::ElementType::UInt8),   DataType::INT16);  // 无符号→有符号16
+        QCOMPARE(toViaType(onnx_engine::ElementType::Bool),    DataType::INT8);   // bool→int8
+        QCOMPARE(fromViaType(DataType::FLOAT32), onnx_engine::ElementType::Float32);
+        QCOMPARE(fromViaType(DataType::INT16),   onnx_engine::ElementType::Int16);
     }
 
     void imageToTensorNchwDiv255() {
@@ -103,15 +103,15 @@ QTEST_MAIN(TestOnnxConvert)
 ```cpp
 #pragma once
 #include <opencv2/imgproc.hpp>
-#include <tensorvia/core/tensor.h>
+#include <tensorvia.hpp>
 #include "engine/NodeData.hpp"
 #include "onnx_engine/types.hpp"
 
 namespace onnx_convert {
 
 // ONNX ElementType ↔ Tensorvia DataType（UInt8→INT16、Bool→INT8）
-inline via::DataType toViaType(onnx_engine::ElementType t);
-inline onnx_engine::ElementType fromViaType(via::DataType t);
+inline DataType toViaType(onnx_engine::ElementType t);
+inline onnx_engine::ElementType fromViaType(DataType t);
 
 // cv::Mat(BGR/灰度, 8U) → 模型输入张量（布局 NCHW/NHWC、通道 rgb/bgr/auto、归一化 none/div255、
 // 尺寸 resize: auto(按 targetShape 的空间维) / keep）。resize 插值用 INTER_LINEAR。
@@ -122,7 +122,7 @@ onnx_engine::TensorBuffer imageToTensor(const cv::Mat& img,
                                         const QVector<double>& std,
                                         const QString& channel, const QString& resize);
 
-// Tensorvia::Tensor → 中性张量
+// Tensor → 中性张量
 onnx_engine::TensorBuffer tensorToBuffer(const Tensor& t);
 
 // 中性张量 → NodeData：float/double/float16 → Tensor；Bool 标量 → bool；整型标量 → double；否则 Tensor
@@ -373,8 +373,8 @@ public:
         if (path.empty()) return {false, QStringLiteral("未选择模型"), {}};
         onnx_engine::SessionOptions o;
         const QString dev = params.value("device", "auto").toString();
-        o.device = dev == "cpu" ? onnx_engine::Device::CPU
-                 : dev == "cuda" ? onnx_engine::Device::CUDA : onnx_engine::Device::Auto;
+        o.device = dev == "cpu" ? onnx_engine::DeviceKind::CPU
+                 : dev == "cuda" ? onnx_engine::DeviceKind::CUDA : onnx_engine::DeviceKind::Auto;
         o.intraThreads = params.value("threads", 0).toInt();
         std::string err;
         auto s = onnx_engine::Runtime::instance().session(path, o, err);
@@ -399,7 +399,7 @@ public:
 
 - [ ] **Step 3: 测试**（`tests/test_onnx_nodes.cpp`）
   - `onnxNodePortsFromMetadata`：构造 `OnnxInferNode`，`setModelPath(add_dynamic.onnx)` → 断言 `getInPorts().size()==2`、`getOutPorts().size()==1`，端口名 `A/B/C`，类型 `Tensor`。
-  - `onnxExecutorRunsAdd`：直接构造执行器，params `{modelPath: add.onnx}`，inputs 两个 `Tensorvia::Tensor`（float32 [3,4]）→ 断言输出为 `Tensor` 且首值为 5。
+  - `onnxExecutorRunsAdd`：直接构造执行器，params `{modelPath: add.onnx}`，inputs 两个 `Tensor`（float32 [3,4]）→ 断言输出为 `Tensor` 且首值为 5。
 - [ ] **Step 4: 提交** `git add include/node/OnnxInfer.hpp include/engine/executors/OnnxInferExecutor.hpp tests/test_onnx_nodes.cpp tests/CMakeLists.txt && git commit -m "feat(onnx): inference node and executor"`
 
 ---

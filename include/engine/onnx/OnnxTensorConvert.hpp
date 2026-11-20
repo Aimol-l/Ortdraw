@@ -1,6 +1,6 @@
 #pragma once
 #include <opencv2/imgproc.hpp>
-#include <tensorvia/core/tensor.h>
+#include <tensorvia.hpp>
 #include <QString>
 #include <QVector>
 #include <cmath>
@@ -327,15 +327,15 @@ inline Tensor imageToTensor(const cv::Mat& img,
         }
     }
 
-    const via::DataType vdt = onnx_engine::toViaDataType(dtype);
+    const DataType vdt = onnx_engine::toViaDataType(dtype);
     std::vector<int64_t> outShape;
     if (nchw) outShape = {N, C, H, W};
     else if (rank == 4) outShape = {N, H, W, C};
     else outShape = {N, C, H, W};
 
     // Tensorvia 不接受空 shape；调用方（预处理任务）保证至少 4 维或图像非空。
-    Tensor out(outShape, vdt, via::Device::CPU);
-    const std::size_t dstSize = via::calc_dtype_size(vdt);
+    Tensor out(outShape, vdt, Device::CPU);
+    const std::size_t dstSize = calc_dtype_size(vdt);
     const onnx_engine::ElementType dstType = onnx_engine::fromViaDataType(vdt);
     std::uint8_t* dst = static_cast<std::uint8_t*>(out.data());
     for (std::size_t i = 0; i < total; ++i)
@@ -349,27 +349,27 @@ inline bool toHostTensor(const Tensor& t, Tensor& host) {
     if (t.numel() == 0) return false;
     host = t.contiguous();
     host.to_host();
-    return via::calc_dtype_size(host.dtype()) > 0;
+    return calc_dtype_size(host.dtype()) > 0;
 }
 
 // 从 host 张量读取第 idx 个元素为 float（按 dtype 解码）
 inline float tensorElement(const Tensor& host, std::size_t idx) {
-    const std::size_t esize = via::calc_dtype_size(host.dtype());
+    const std::size_t esize = calc_dtype_size(host.dtype());
     const auto* p = static_cast<const std::uint8_t*>(host.data()) + idx * esize;
     switch (host.dtype()) {
-    case via::DataType::FLOAT32:  { float v;    std::memcpy(&v, p, 4); return v; }
-    case via::DataType::FLOAT64:  { double v;   std::memcpy(&v, p, 8); return float(v); }
-    case via::DataType::FLOAT16:  { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::halfBitsToDouble(h)); }
-    case via::DataType::BFLOAT16: { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::bfloat16BitsToDouble(h)); }
-    case via::DataType::INT8:     { std::int8_t v;   std::memcpy(&v, p, 1); return float(v); }
-    case via::DataType::INT16:    { std::int16_t v;  std::memcpy(&v, p, 2); return float(v); }
-    case via::DataType::INT32:    { std::int32_t v;  std::memcpy(&v, p, 4); return float(v); }
-    case via::DataType::INT64:    { std::int64_t v;  std::memcpy(&v, p, 8); return float(v); }
+    case DataType::FLOAT32:  { float v;    std::memcpy(&v, p, 4); return v; }
+    case DataType::FLOAT64:  { double v;   std::memcpy(&v, p, 8); return float(v); }
+    case DataType::FLOAT16:  { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::halfBitsToDouble(h)); }
+    case DataType::BFLOAT16: { std::uint16_t h; std::memcpy(&h, p, 2); return float(detail::bfloat16BitsToDouble(h)); }
+    case DataType::INT8:     { std::int8_t v;   std::memcpy(&v, p, 1); return float(v); }
+    case DataType::INT16:    { std::int16_t v;  std::memcpy(&v, p, 2); return float(v); }
+    case DataType::INT32:    { std::int32_t v;  std::memcpy(&v, p, 4); return float(v); }
+    case DataType::INT64:    { std::int64_t v;  std::memcpy(&v, p, 8); return float(v); }
     default: return 0.0f;
     }
 }
 
-// Tensorvia::Tensor → NodeData。
+// TensorTensor → NodeData。
 inline NodeData tensorToNodeData(const Tensor& t, onnx_engine::ElementType declType) {
     if (t.numel() == 0) return NodeData{std::monostate{}};
 

@@ -24,8 +24,8 @@ public:
         m_name = "翻转/旋转";
 
         m_description = "水平/垂直翻转，或 90/180/270 度旋转。";
-        m_input_ports.push_back(new Port("图像", PortType::Input, DataType::Image, QPointF(0,0), this));
-        m_output_ports.push_back(new Port("图像", PortType::Output, DataType::Image, QPointF(0,0), this));
+        m_input_ports.push_back(new Port("图像", PortType::Input, PortDataType::Image, QPointF(0,0), this));
+        m_output_ports.push_back(new Port("图像", PortType::Output, PortDataType::Image, QPointF(0,0), this));
     }
     ~FlipRotateNode(){}
 

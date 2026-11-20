@@ -74,7 +74,7 @@ private slots:
             imageInputs(bgr));
         QVERIFY2(r.ok, qPrintable(r.error));
         const Tensor& t = std::get<Tensor>(r.outputs[0]);
-        QCOMPARE(int(t.dtype()), int(via::DataType::FLOAT16));
+        QCOMPARE(int(t.dtype()), int(DataType::FLOAT16));
         QCOMPARE(t.data() != nullptr, true);
     }
 

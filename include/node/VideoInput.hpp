@@ -72,7 +72,7 @@ public:
         m_description = QStringLiteral("读取视频文件的一帧，输出图像；可按帧率播放。");
         min_width = 240;
         m_output_ports.push_back(new Port(QStringLiteral("输出"), PortType::Output,
-                                          DataType::Image, QPointF(0, 0), this));
+                                          PortDataType::Image, QPointF(0, 0), this));
         refreshInfo();
     }
 

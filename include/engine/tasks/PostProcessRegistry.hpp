@@ -16,7 +16,7 @@
 #include <QStringList>
 #include <opencv2/dnn/dnn.hpp>
 #include <opencv2/imgproc.hpp>
-#include <tensorvia/core/ops.h>
+#include <tensorvia.hpp>
 #include "engine/NodeData.hpp"
 #include "engine/onnx/OnnxTensorConvert.hpp"
 #include "engine/tasks/TaskSpec.hpp"
@@ -375,13 +375,13 @@ struct ProtoView {
     }
 };
 
-// 原型整理为 [nm, mh*mw] 的 fp32 连续张量（ops::Mul 的右操作数）。
+// 原型整理为 [nm, mh*mw] 的 fp32 连续张量（ops::MatMul 的右操作数）。
 // 常规导出布局（[1,nm,mh,mw] 或 [nm,mh,mw]、fp32、channels-first）走 view
 // 零拷贝；channels-last 先转置，非 fp32 先转换。
 inline Tensor protoRows(const Tensor& protos, const ProtoView& pv) {
     Tensor t = protos;
-    if (t.dtype() != via::DataType::FLOAT32)
-        t = t.to_type(via::DataType::FLOAT32);   // 非就地：返回新张量
+    if (t.dtype() != DataType::FLOAT32)
+        t = t.to_type(DataType::FLOAT32);   // 非就地：返回新张量
     if (!pv.chFirst)                              // [1,mh,mw,nm] → [1,nm,mh,mw]
         t = t.permute({0, 3, 1, 2}).contiguous();
     else if (!t.is_contiguous())
@@ -402,10 +402,10 @@ inline void registerBuiltinPostProcessTasks() {
         TaskSpec s;
         s.id = "yolo_detect";
         s.name = QStringLiteral("YOLO 检测");
-        s.inputs = {{QStringLiteral("检测"), DataType::Tensor},
-                    {QStringLiteral("原图"), DataType::Image},
-                    {QStringLiteral("元信息"), DataType::Tensor}};
-        s.outputs = {{QStringLiteral("图像"), DataType::Image}};
+        s.inputs = {{QStringLiteral("检测"), PortDataType::Tensor},
+                    {QStringLiteral("原图"), PortDataType::Image},
+                    {QStringLiteral("元信息"), PortDataType::Tensor}};
+        s.outputs = {{QStringLiteral("图像"), PortDataType::Image}};
         s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45},
                                  {"maxBoxes", 300}, {"drawScore", true}, {"lineWidth", 2},
                                  {"classFile", ""}};
@@ -469,11 +469,11 @@ inline void registerBuiltinPostProcessTasks() {
         TaskSpec s;
         s.id = "yolo_segment";
         s.name = QStringLiteral("YOLO 分割");
-        s.inputs = {{QStringLiteral("检测"), DataType::Tensor},
-                    {QStringLiteral("原型"), DataType::Tensor},
-                    {QStringLiteral("原图"), DataType::Image},
-                    {QStringLiteral("元信息"), DataType::Tensor}};
-        s.outputs = {{QStringLiteral("图像"), DataType::Image}};
+        s.inputs = {{QStringLiteral("检测"), PortDataType::Tensor},
+                    {QStringLiteral("原型"), PortDataType::Tensor},
+                    {QStringLiteral("原图"), PortDataType::Image},
+                    {QStringLiteral("元信息"), PortDataType::Tensor}};
+        s.outputs = {{QStringLiteral("图像"), PortDataType::Image}};
         s.defaults = QVariantMap{{"conf", 0.25}, {"iou", 0.45}, {"maskThr", 0.5},
                                  {"alpha", 0.45}, {"maxBoxes", 300}, {"classFile", ""}};
         s.params = {
@@ -550,12 +550,12 @@ inline void registerBuiltinPostProcessTasks() {
                 const int kh = std::max(1, int(std::lround(double(canvas.rows) / double(pv.mh))));
 
                 // 批量概率：所有框系数一次矩阵乘 [N,nm] @ [nm, mh*mw]（tensorvia
-                // ops::Mul，亚毫秒级；cv::gemm 在大 N 下有 77ms 级病态表现），
+                // ops::MatMul，亚毫秒级；cv::gemm 在大 N 下有 77ms 级病态表现），
                 // 再整体 sigmoid
                 const Tensor protoMat = protoRows(protos, pv);
                 const int n = int(dets.size());
                 const int nm = int(pv.nm);
-                Tensor coeffs(std::vector<int64_t>{n, nm}, via::DataType::FLOAT32);
+                Tensor coeffs(std::vector<int64_t>{n, nm}, DataType::FLOAT32);
                 {
                     float* dst = static_cast<float*>(coeffs.data());
                     for (int i = 0; i < n; ++i) {
@@ -564,7 +564,7 @@ inline void registerBuiltinPostProcessTasks() {
                             *dst++ = (std::size_t(k) < c.size()) ? c[std::size_t(k)] : 0.0f;
                     }
                 }
-                Tensor probsT = ops::Sigmoid(ops::Mul(coeffs, protoMat));
+                Tensor probsT = ops::Sigmoid(ops::MatMul(coeffs, protoMat));
                 if (!probsT.is_contiguous())
                     probsT = probsT.contiguous();
                 // 零拷贝包装为 cv::Mat（[N, mh*mw] 行主序），后续走 OpenCV 管线
@@ -629,8 +629,8 @@ inline void registerBuiltinPostProcessTasks() {
         TaskSpec s;
         s.id = "classify";
         s.name = QStringLiteral("分类");
-        s.inputs = {{QStringLiteral("input0"), DataType::Tensor}};
-        s.outputs = {{QStringLiteral("类别 id"), DataType::Number}};
+        s.inputs = {{QStringLiteral("input0"), PortDataType::Tensor}};
+        s.outputs = {{QStringLiteral("类别 id"), PortDataType::Number}};
         s.defaults = QVariantMap{{"topk", 5}, {"classFile", ""}};
         s.params = {
             {"topk", QStringLiteral("Top-K"), "int", 5, {}},
@@ -649,8 +649,8 @@ inline void registerBuiltinPostProcessTasks() {
             if (n == 0) return {false, QStringLiteral("输入张量为空"), {}};
 
             // 取 host 原始值（fp32 连续）
-            if (buf.dtype() != via::DataType::FLOAT32)
-                buf = buf.to_type(via::DataType::FLOAT32);
+            if (buf.dtype() != DataType::FLOAT32)
+                buf = buf.to_type(DataType::FLOAT32);
             const Tensor flat = buf.is_contiguous()
                 ? buf.view({std::int64_t(n)}) : buf.contiguous().view({std::int64_t(n)});
             const auto* raw = static_cast<const float*>(flat.data());

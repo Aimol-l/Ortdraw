@@ -5,7 +5,7 @@
 
 static BaseNode* makeNode() { return new BaseNode(); }
 
-static Port* addPort(BaseNode* n, PortType t, DataType d) {
+static Port* addPort(BaseNode* n, PortType t, PortDataType d) {
     auto* p = new Port("p", t, d, QPointF(0, 0), n);
     if (t == PortType::Input) n->getInPorts().append(p);
     else n->getOutPorts().append(p);
@@ -26,8 +26,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(out, in));
         QVERIFY(out->isConnected());
         QVERIFY(in->isConnected());
@@ -38,10 +38,10 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* a_out = addPort(a, PortType::Output, DataType::Image);
-        auto* b_in = addPort(b, PortType::Input, DataType::Image);
-        auto* b_out = addPort(b, PortType::Output, DataType::Image);
-        auto* a_in = addPort(a, PortType::Input, DataType::Image);
+        auto* a_out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* b_in = addPort(b, PortType::Input, PortDataType::Image);
+        auto* b_out = addPort(b, PortType::Output, PortDataType::Image);
+        auto* a_in = addPort(a, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(a_out, b_in));
         QVERIFY(!g.addEdge(b_out, a_in));
         QCOMPARE(g.getAllEdges().size(), 1);
@@ -51,8 +51,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Image);
         QVERIFY(!g.addEdge(out, in));
         delete a; delete b;
     }
@@ -60,8 +60,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Tensor);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Tensor);
         QVERIFY(!g.addEdge(out, in));
         delete a; delete b;
     }
@@ -69,8 +69,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Number);
-        auto* in = addPort(b, PortType::Input, DataType::Number);
+        auto* out = addPort(a, PortType::Output, PortDataType::Number);
+        auto* in = addPort(b, PortType::Input, PortDataType::Number);
         QVERIFY(g.addEdge(out, in));
         QCOMPARE(g.getAllEdges().size(), 1);
         delete a; delete b;
@@ -79,8 +79,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Any);
-        auto* in = addPort(b, PortType::Input, DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Any);
+        auto* in = addPort(b, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(out, in));
         QCOMPARE(g.getAllEdges().size(), 1);
         delete a; delete b;
@@ -89,8 +89,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Tensor);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Tensor);
         QVERIFY(!g.addEdge(out, in));
         QCOMPARE(g.getAllEdges().size(), 0);
         delete a; delete b;
@@ -99,8 +99,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(out, in));
         QVERIFY(g.removeEdge(out, in));
         QVERIFY(!out->isConnected());
@@ -112,10 +112,10 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode(); auto* c = makeNode();
         g.addNode(a); g.addNode(b); g.addNode(c);
-        auto* a_out = addPort(a, PortType::Output, DataType::Image);
-        auto* b_in = addPort(b, PortType::Input, DataType::Image);
-        auto* b_out = addPort(b, PortType::Output, DataType::Image);
-        auto* c_in = addPort(c, PortType::Input, DataType::Image);
+        auto* a_out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* b_in = addPort(b, PortType::Input, PortDataType::Image);
+        auto* b_out = addPort(b, PortType::Output, PortDataType::Image);
+        auto* c_in = addPort(c, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(a_out, b_in));
         QVERIFY(g.addEdge(b_out, c_in));
         QVERIFY(g.removeNode(b));
@@ -133,8 +133,8 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in = addPort(b, PortType::Input, DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in = addPort(b, PortType::Input, PortDataType::Image);
         QVERIFY(!g.removeEdge(out, in));
         delete a; delete b;
     }
@@ -142,9 +142,9 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode(); auto* c = makeNode();
         g.addNode(a); g.addNode(b); g.addNode(c);
-        auto* a_out = addPort(a, PortType::Output, DataType::Image);
-        auto* b_in = addPort(b, PortType::Input, DataType::Image);
-        auto* c_in = addPort(c, PortType::Input, DataType::Image);
+        auto* a_out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* b_in = addPort(b, PortType::Input, PortDataType::Image);
+        auto* c_in = addPort(c, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(a_out, b_in));
         QVERIFY(g.addEdge(a_out, c_in));
         QVERIFY(a_out->isConnected());
@@ -159,10 +159,10 @@ private slots:
         DAGraph g;
         auto* a = makeNode(); auto* b = makeNode(); auto* c = makeNode();
         g.addNode(a); g.addNode(b); g.addNode(c);
-        auto* a_out = addPort(a, PortType::Output, DataType::Image);
-        auto* b_in = addPort(b, PortType::Input, DataType::Image);
-        auto* b_out = addPort(b, PortType::Output, DataType::Image);
-        auto* c_in = addPort(c, PortType::Input, DataType::Image);
+        auto* a_out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* b_in = addPort(b, PortType::Input, PortDataType::Image);
+        auto* b_out = addPort(b, PortType::Output, PortDataType::Image);
+        auto* c_in = addPort(c, PortType::Input, PortDataType::Image);
         QVERIFY(g.addEdge(a_out, b_in));
         QVERIFY(g.addEdge(b_out, c_in));
         QCOMPARE(g.edgesOf(b).size(), 2);

@@ -108,7 +108,7 @@ public:
         m_name = "张量";
 
         m_description = "输出 FLOAT32 二维卷积核（供卷积使用）。";
-        m_output_ports.push_back(new Port("张量", PortType::Output, DataType::Tensor, QPointF(0,0), this));
+        m_output_ports.push_back(new Port("张量", PortType::Output, PortDataType::Tensor, QPointF(0,0), this));
         presetIdentity();
     }
     ~TensorNode(){}

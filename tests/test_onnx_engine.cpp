@@ -32,9 +32,9 @@ private slots:
         QCOMPARE(QString::fromLatin1(elementTypeName(ElementType::Float32)), QString("float32"));
         QCOMPARE(elementTypeSize(ElementType::Float32), 4);
         // 设计 §4.1 映射：Bool→INT8，其余同名（UInt8 不受支持）
-        QCOMPARE(toViaDataType(ElementType::Bool),  via::DataType::INT8);
-        QCOMPARE(fromViaDataType(via::DataType::FLOAT32), ElementType::Float32);
-        QCOMPARE(fromViaDataType(via::DataType::INT16),   ElementType::Int16);
+        QCOMPARE(toViaDataType(ElementType::Bool),  DataType::INT8);
+        QCOMPARE(fromViaDataType(DataType::FLOAT32), ElementType::Float32);
+        QCOMPARE(fromViaDataType(DataType::INT16),   ElementType::Int16);
     }
 
     void modelInfoReadsTwoInputsOneOutput() {
@@ -113,7 +113,7 @@ private slots:
         const std::vector<Tensor>& outs = *r;
         QCOMPARE(outs.size(), std::size_t(1));
         // 同形状/连续/CPU 走零拷贝输入路径，结果不变
-        QCOMPARE(outs[0].dtype(), via::DataType::FLOAT32);
+        QCOMPARE(outs[0].dtype(), DataType::FLOAT32);
         QCOMPARE(shapeOf(outs[0]), (std::vector<int64_t>{3,4}));
         QCOMPARE(outs[0].numel(), std::size_t(12));
         float got = 0;
@@ -193,7 +193,7 @@ private slots:
     void cpuDeviceRunsAdd() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 1;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 1;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());
         std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 2.0f)};
@@ -206,7 +206,7 @@ private slots:
     void autoDeviceFallsBackOrRuns() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string err;
-        SessionOptions o; o.device = Device::Auto;
+        SessionOptions o; o.device = DeviceKind::Auto;
         auto s = Runtime::instance().session(fx, o, err);
         QVERIFY2(s, err.c_str());          // CUDA 不可用时回退 CPU 并成功
         std::vector<Tensor> ins{f32buf({3,4}, 1.0f), f32buf({3,4}, 1.0f)};
@@ -221,7 +221,7 @@ private slots:
     void sameKeySharesSession() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string e1, e2;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 2;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 2;
         auto a = Runtime::instance().session(fx, o, e1);
         auto b = Runtime::instance().session(fx, o, e2);
         QVERIFY(a && b);
@@ -231,8 +231,8 @@ private slots:
     void differentThreadsDifferentSession() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string e1, e2;
-        SessionOptions o1; o1.device = Device::CPU; o1.intraThreads = 1;
-        SessionOptions o2; o2.device = Device::CPU; o2.intraThreads = 3;
+        SessionOptions o1; o1.device = DeviceKind::CPU; o1.intraThreads = 1;
+        SessionOptions o2; o2.device = DeviceKind::CPU; o2.intraThreads = 3;
         auto a = Runtime::instance().session(fx, o1, e1);
         auto b = Runtime::instance().session(fx, o2, e2);
         QVERIFY(a && b);
@@ -242,7 +242,7 @@ private slots:
     void clearCacheReloads() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 5;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 5;
         auto a = Runtime::instance().session(fx, o, err);
         Runtime::instance().clearCache();
         auto b = Runtime::instance().session(fx, o, err);
@@ -253,7 +253,7 @@ private slots:
     void reloadInvalidates() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 6;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 6;
         auto a = Runtime::instance().session(fx, o, err);
         Runtime::instance().reload(fx);
         auto b = Runtime::instance().session(fx, o, err);
@@ -269,8 +269,8 @@ private slots:
         Runtime::instance().clearCache();
         Runtime::instance().setCacheLimits(1, std::size_t(1) << 30);
         std::string e1, e2;
-        SessionOptions o1; o1.device = Device::CPU; o1.intraThreads = 11;
-        SessionOptions o2; o2.device = Device::CPU; o2.intraThreads = 12;
+        SessionOptions o1; o1.device = DeviceKind::CPU; o1.intraThreads = 11;
+        SessionOptions o2; o2.device = DeviceKind::CPU; o2.intraThreads = 12;
         auto a = Runtime::instance().session(fx, o1, e1);
         QVERIFY2(a, e1.c_str());
         std::weak_ptr<Session> wa = a;
@@ -283,7 +283,7 @@ private slots:
 
     void concurrentSameKeyReturnsOneSession() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
-        SessionOptions opts; opts.device = Device::CPU; opts.intraThreads = 2;
+        SessionOptions opts; opts.device = DeviceKind::CPU; opts.intraThreads = 2;
         constexpr int N = 8;
         std::vector<std::shared_ptr<Session>> got(N);
         std::vector<std::string> errs(N);
@@ -303,7 +303,7 @@ private slots:
 
     void explicitCudaWithoutProviderFails() {
         const std::string fx = std::string(ORTDRAW_TEST_DATA_DIR) + "/add.onnx";
-        SessionOptions o; o.device = Device::CUDA;
+        SessionOptions o; o.device = DeviceKind::CUDA;
         std::string err;
         auto s = Runtime::instance().session(fx, o, err);
         if (!s) {

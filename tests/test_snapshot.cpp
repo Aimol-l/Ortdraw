@@ -4,7 +4,7 @@
 #include "node/BaseNode.hpp"
 #include "port/Port.hpp"
 
-static Port* addPort(BaseNode* n, PortType t, DataType d){
+static Port* addPort(BaseNode* n, PortType t, PortDataType d){
     auto* p = new Port("p", t, d, QPointF(0,0), n);
     (t == PortType::Input ? n->getInPorts() : n->getOutPorts()).append(p);
     return p;
@@ -29,8 +29,8 @@ private slots:
         DAGraph g;
         auto* a = new BaseNode(); auto* b = new BaseNode();
         g.addNode(a); g.addNode(b);
-        auto* out = addPort(a, PortType::Output, DataType::Image);
-        auto* in  = addPort(b, PortType::Input,  DataType::Image);
+        auto* out = addPort(a, PortType::Output, PortDataType::Image);
+        auto* in  = addPort(b, PortType::Input,  PortDataType::Image);
         out->setPosition(QPointF(100, 50));
         in->setPosition(QPointF(300, 80));
         QVERIFY(g.addEdge(out, in));

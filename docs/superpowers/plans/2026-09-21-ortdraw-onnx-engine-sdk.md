@@ -4,7 +4,7 @@
 
 **Goal:** 交付一个仅依赖 onnxruntime 的独立动态库 `onnx_engine`：读取 ONNX 模型元数据、按名称/顺序运行推理、进程级会话缓存（LRU + 引用计数 + mtime 失效 + 设备/线程键），对外隐藏 `Ort::*`。
 
-**Architecture:** 子目录 `onnx_engine/` 自带 CMake，产出 `SHARED` 目标 `onnx_engine`；公开头只含中性类型（`ElementType/Device/TensorInfo/ModelInfo/TensorBuffer/SessionOptions`），`Runtime`/`Session` 用 pimpl 封装 `Ort::Env`/`Ort::Session`/`Ort::Value`。onnxruntime 为硬依赖（找不到即 `FATAL_ERROR`）。
+**Architecture:** 子目录 `onnx_engine/` 自带 CMake，产出 `SHARED` 目标 `onnx_engine`；公开头只含中性类型（`ElementType/DeviceKind/TensorInfo/ModelInfo/TensorBuffer/SessionOptions`），`Runtime`/`Session` 用 pimpl 封装 `Ort::Env`/`Ort::Session`/`Ort::Value`。onnxruntime 为硬依赖（找不到即 `FATAL_ERROR`）。
 
 **Tech Stack:** C++23、CMake、onnxruntime 1.29（`/usr/lib/libonnxruntime.so`、`/usr/include/onnxruntime`）、Qt6 Test（测试在 `tests/`）。
 
@@ -78,7 +78,7 @@ enum class ElementType {
     Bool, Unknown
 };
 
-enum class Device { Auto, CPU, CUDA };
+enum class DeviceKind { Auto, CPU, CUDA };
 
 // 单个模型 IO
 struct TensorInfo {
@@ -102,7 +102,7 @@ struct TensorBuffer {
 };
 
 struct SessionOptions {
-    Device device = Device::Auto;   // Auto：有 CUDA 则用 CUDA，否则 CPU
+    DeviceKind device = DeviceKind::Auto;   // Auto：有 CUDA 则用 CUDA，否则 CPU
     int intraThreads = 0;           // 0 = onnxruntime 默认
 };
 
@@ -754,7 +754,7 @@ git commit -m "feat(onnx_engine): tensor run with dtype/shape validation"
 ```cpp
     void cpuDeviceRunsAdd() {
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 1;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 1;
         auto s = Runtime::instance().session(fixture(), o, err);
         QVERIFY2(s, err.c_str());
     }
@@ -772,8 +772,8 @@ git commit -m "feat(onnx_engine): tensor run with dtype/shape validation"
     Ort::SessionOptions so;
     so.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     if (opts.intraThreads > 0) so.SetIntraOpNumThreads(opts.intraThreads);
-    const bool wantCuda = (opts.device == Device::CUDA)
-                       || (opts.device == Device::Auto && Runtime::cudaAvailable());
+    const bool wantCuda = (opts.device == DeviceKind::CUDA)
+                       || (opts.device == DeviceKind::Auto && Runtime::cudaAvailable());
     if (wantCuda) {
         try {
             OrtCUDAProviderOptions cuda{};
@@ -785,7 +785,7 @@ git commit -m "feat(onnx_engine): tensor run with dtype/shape validation"
     so.AppendExecutionProvider_CPU(1);
 ```
 
-> `Device::CUDA` 显式请求但不可用时也要回退 CPU（记录 stderr 提示），不抛异常。
+> `DeviceKind::CUDA` 显式请求但不可用时也要回退 CPU（记录 stderr 提示），不抛异常。
 
 - [ ] **Step 3: 运行 + 提交**
 
@@ -810,7 +810,7 @@ git commit -m "feat(onnx_engine): device/provider and thread options"
 ```cpp
     void sameKeySharesSession() {
         std::string e1, e2;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 2;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 2;
         auto a = Runtime::instance().session(fixture(), o, e1);
         auto b = Runtime::instance().session(fixture(), o, e2);
         QVERIFY(a && b);
@@ -819,8 +819,8 @@ git commit -m "feat(onnx_engine): device/provider and thread options"
 
     void differentThreadsDifferentSession() {
         std::string e1, e2;
-        SessionOptions o1; o1.device = Device::CPU; o1.intraThreads = 1;
-        SessionOptions o2; o2.device = Device::CPU; o2.intraThreads = 3;
+        SessionOptions o1; o1.device = DeviceKind::CPU; o1.intraThreads = 1;
+        SessionOptions o2; o2.device = DeviceKind::CPU; o2.intraThreads = 3;
         auto a = Runtime::instance().session(fixture(), o1, e1);
         auto b = Runtime::instance().session(fixture(), o2, e2);
         QVERIFY(a && b);
@@ -829,7 +829,7 @@ git commit -m "feat(onnx_engine): device/provider and thread options"
 
     void clearCacheReloads() {
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 5;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 5;
         auto a = Runtime::instance().session(fixture(), o, err);
         Runtime::instance().clearCache();
         auto b = Runtime::instance().session(fixture(), o, err);
@@ -839,7 +839,7 @@ git commit -m "feat(onnx_engine): device/provider and thread options"
 
     void reloadInvalidates() {
         std::string err;
-        SessionOptions o; o.device = Device::CPU; o.intraThreads = 6;
+        SessionOptions o; o.device = DeviceKind::CPU; o.intraThreads = 6;
         auto a = Runtime::instance().session(fixture(), o, err);
         Runtime::instance().reload(fixture());
         auto b = Runtime::instance().session(fixture(), o, err);
@@ -892,5 +892,5 @@ git add -A && git commit -m "chore(onnx_engine): standalone build verification"
 
 - **Spec 覆盖**：§3.1 目录/构建/硬依赖（Task 1）；§3.2 API（Task 1/2/3/4）；§3.3 生命周期/LRU/mtime（Task 5）；§4.1 dtype 映射（Task 2/3 的 `mapElement`/`ortType`）；测试（Task 2-5）。
 - **占位符**：无 TBD；每步给出代码或明确命令。Task 2 的实现说明较长（`makeSession` 细节），但给出了关键代码与必测断言。
-- **类型一致性**：`ElementType/Device/TensorInfo/ModelInfo/TensorBuffer/SessionOptions` 在 Task 1 定义，后续任务复用；`Runtime::session` 返回 `shared_ptr<Session>`，`SessionImpl : Session`。**`SessionImpl` 的元数据成员名统一为 `info_`**（避免与 `info()` 方法同名）。
+- **类型一致性**：`ElementType/DeviceKind/TensorInfo/ModelInfo/TensorBuffer/SessionOptions` 在 Task 1 定义，后续任务复用；`Runtime::session` 返回 `shared_ptr<Session>`，`SessionImpl : Session`。**`SessionImpl` 的元数据成员名统一为 `info_`**（避免与 `info()` 方法同名）。
 - **注意**：Task 3 的 `Run` 重载必须同时传输入名与输出名数组（示例已是正确写法）。
